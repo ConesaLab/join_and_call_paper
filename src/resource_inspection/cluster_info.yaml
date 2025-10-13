@@ -1,0 +1,46 @@
+institution: "I2SysBio"
+cluster_name: "Garnatxa"
+carbon_intensity: 171.03 # CI in Spain; see https://github.com/GreenAlgorithms/green-algorithms-tool/blob/master/data/latest/CI_aggregated.csv
+pue: 1.2 # Power Usage Efficiency; estimate according to José Vicente
+memory_power_draw: 0.3725 # memory power draw in W/GB; see https://doi.org/10.1002/advs.202100707
+cpu_usage: 1 # CPU usage factor; by default, assume full usage
+nodes: # list of nodes and cpu models according to José Vicente
+  cn00:
+    cpu: "Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz" # model name of CPU for reference
+    tdp: 6.25 # Thermal Design Power in W/core; 125W / 20 cores; see https://www.intel.com/content/www/us/en/products/sku/192437/intel-xeon-gold-6230-processor-27-5m-cache-2-10-ghz/specifications.html
+  cn01:
+    cpu: "Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz"
+    tdp: 6.25
+  cn02:
+    cpu: "Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz"
+    tdp: 6.25
+  cn03:
+    cpu: "Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz"
+    tdp: 6.25
+  cn04:
+    cpu: "Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz"
+    tdp: 6.25
+  cn05:
+    cpu: "Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz"
+    tdp: 6.25
+  cn06:
+    cpu: "Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz"
+    tdp: 6.25
+  cn07:
+    cpu: "Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz"
+    tdp: 6.25
+  cn08:
+    cpu: "Intel(R) Xeon(R) Gold 6230 CPU @ 2.10GHz"
+    tdp: 6.25
+  cn09:
+    cpu: "Intel(R) Xeon(R) Silver 4314 CPU @ 2.40GHz"
+    tdp: 8.4375 # 135W / 16 cores; see https://www.intel.com/content/www/us/en/products/sku/215269/intel-xeon-silver-4314-processor-24m-cache-2-40-ghz/specifications.html
+  cn10:
+    cpu: "Intel(R) Xeon(R) Silver 4314 CPU @ 2.40GHz"
+    tdp: 8.4375
+  cn11:
+    cpu: "AMD EPYC 9354 32-Core Processor"
+    tdp: 8.75 # 280W / 32 cores; see https://www.amd.com/en/products/processors/server/epyc/4th-generation-9004-and-8004-series/amd-epyc-9354.html
+  cn12:
+    cpu: "AMD EPYC 9354 32-Core Processor"
+    tdp: 8.75

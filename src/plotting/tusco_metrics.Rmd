@@ -1,0 +1,660 @@
+---
+title: "tusco_radars"
+output: html_document
+date: "2025-06-10"
+---
+
+# TUSCO plotting of final radar plots
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+
+library(ggplot2)
+library(patchwork)
+library(cowplot)
+library(dplyr)
+library(tidyr)
+library(ggstats)  # for geom_stripped_rows()
+library(ggpubr)
+```
+
+
+
+```{r }
+# Corrected function to load all TUSCO results
+load_tusco_results <- function(base_dir = "tusco_results") {
+  # Find all .RData files recursively
+  rdata_files <- list.files(base_dir, pattern = "\\.RData$", 
+                            recursive = TRUE, full.names = TRUE)
+  
+  # Initialize the main results list
+  tusco_results <- list()
+  
+  for (file_path in rdata_files) {
+    # cat("Loading:", file_path, "\n")
+    
+    # Check if file exists and has size > 0
+    if (!file.exists(file_path) || file.info(file_path)$size == 0) {
+      cat("  ERROR: File does not exist or is empty\n")
+      next
+    }
+    
+    # Remove the base directory and .RData extension
+    rel_path <- gsub(paste0("^", base_dir, "/"), "", file_path)
+    rel_path <- gsub("\\_tusco.RData$", "", rel_path)
+    
+    # Split the path into components
+    path_parts <- strsplit(rel_path, "/")[[1]]
+    
+    # Load the .RData file
+    load_env <- new.env()
+    tryCatch({
+      load(file_path, envir = load_env)
+      
+      # Check what objects were loaded
+      loaded_objects <- ls(load_env)
+      cat("  Objects found:", paste(loaded_objects, collapse = ", "), "\n")
+      
+      if (length(loaded_objects) == 0) {
+        cat("  WARNING: No objects found in", file_path, "\n")
+        next
+      }
+      
+      # Get the loaded data
+      if ("data_list" %in% loaded_objects) {
+        loaded_data <- load_env$data_list
+        # cat("  Using 'data_list' object\n")
+      } else {
+        loaded_data <- get(loaded_objects[1], envir = load_env)
+        # cat("  Using object:", loaded_objects[1], "\n")
+      }
+      
+      # Build the nested structure using string evaluation
+      # Create the assignment expression
+      assignment_path <- paste("tusco_results", paste(paste0("[[\"", path_parts, "\"]]"), collapse = ""), sep = "")
+      assignment_expr <- paste(assignment_path, "<- loaded_data")
+      
+      # Create intermediate lists if they don't exist
+      for (i in 1:(length(path_parts) - 1)) {
+        partial_path <- paste("tusco_results", paste(paste0("[[\"", path_parts[1:i], "\"]]"), collapse = ""), sep = "")
+        check_expr <- paste("if(is.null(", partial_path, "))", partial_path, "<- list()")
+        eval(parse(text = check_expr))
+      }
+      
+      # Assign the loaded data
+      eval(parse(text = assignment_expr))
+      cat("  Successfully stored at:", paste(path_parts, collapse = "$"), "\n")
+      
+    }, error = function(e) {
+      cat("  ERROR loading file:", e$message, "\n")
+    })
+  }
+  
+  return(tusco_results)
+}
+
+# Load all results
+tusco_results <- load_tusco_results("tusco_results")
+
+# Check the structure
+str(tusco_results, max.level = 5)
+```
+
+
+```{r}
+collect_names_at_level <- function(x, target_level, current_level = 1) {
+  if (!is.list(x)) return(NULL)
+  
+  if (current_level == target_level) {
+    return(names(x))
+  }
+  
+  unlist(
+    lapply(x, function(e) collect_names_at_level(e, target_level, current_level + 1)),
+    use.names = FALSE
+  )
+}
+
+f_names <- collect_names_at_level(tusco_results, target_level = 5)
+table(f_names)
+
+```
+
+```{r}
+rename_names_at_level <- function(x, target_level, current_level = 1) {
+  if (!is.list(x)) return(x)
+
+  if (current_level == target_level) {
+    # Rename names at this level
+    old_names <- names(x)
+    new_names <- old_names
+
+    new_names[old_names %in% c("Bconcat", "B100K0", "B100K0.join")] <- "concat"
+    new_names[old_names %in% c("Kconcat", "B0K100", "B0K100.join")] <- "concat"
+
+    # Assign and return
+    names(x) <- new_names
+    return(x)
+  }
+
+  # Recurse deeper
+  lapply(x, function(e) rename_names_at_level(e, target_level, current_level + 1))
+}
+
+tusco_renamed <- rename_names_at_level(tusco_results, target_level = 5)
+
+f_names <- collect_names_at_level(tusco_renamed, target_level = 5)
+table(f_names)
+
+```
+
+```{r}
+tusco_renamed$tusco_full$isoseq$isoquant$B100K0$B31
+```
+
+
+```{r}
+tusco_renamed$tusco_full$isoseq$flair_ar_sr$B100K0$concat$radar_df[c("metrics_values_sirv", "metrics_values_tusco"),]
+```
+
+```{r}
+tusco_renamed$tusco_full$isoseq$flair_ar_sr$B100K0$concat$radar_df[c(3, 4),]
+```
+
+
+
+```{r}
+radar_df <- tusco_renamed$tusco_full$isoseq$flair_ar_sr$B100K0$concat$radar_df
+if (radar_df[[3, "Sn"]] > radar_df[[3, "PDR"]]) {
+    warning("sn>pdr, radar_df: Sensitivity is greater than positive detection rate in SIRV. This is not possible.")
+}
+if (radar_df[[4, "Sn"]] > radar_df[[4, "PDR"]]) {
+    warning("sn>pdr, radar_df: Sensitivity is greater than positive detection rate in TUSCO. This is not possible.")
+}
+```
+
+
+```{r}
+
+tusco_renamed$tusco_full$isoseq$flair_ar_sr$B100K0$concat$radar
+
+```
+
+
+```{r}
+
+assemble_radar_plots <- function(tusco_plot_list) {
+  
+  # Helper to apply consistent title styling
+  style_title <- function(p, title) {
+    p + ggtitle(title) +
+      theme(
+        plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        legend.position = "right"  # Ensure legend is enabled
+      )
+  }
+  
+  # Apply styling
+  radar_jc <- style_title(tusco_plot_list$concat$radar, "Join & Call")
+  radar_cj <- style_title(tusco_plot_list$TAMA$radar, "Call & Join")
+  radar_b1 <- style_title(tusco_plot_list$B31$radar, "Brain 1")
+  radar_b2 <- style_title(tusco_plot_list$B32$radar, "Brain 2")
+  radar_b3 <- style_title(tusco_plot_list$B33$radar, "Brain 3")
+  radar_b4 <- style_title(tusco_plot_list$B34$radar, "Brain 4")
+  radar_b5 <- style_title(tusco_plot_list$B35$radar, "Brain 5")
+  
+  # Combine and collect guides for a shared legend
+  radar_plot <- (
+    radar_jc | radar_cj | radar_b1 | radar_b2 | radar_b3 | radar_b4 | radar_b5
+  ) + plot_layout(guides = "collect") & theme(legend.position = "right")
+  
+  # Add global title
+  radar_plot <- radar_plot +
+    plot_annotation(
+      title = "TUSCO_mouse, isoseq, isoquant, brain",
+      theme = theme(
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+      )
+    )
+  
+  return(radar_plot)
+}
+
+
+```
+
+```{r}
+radar_plot <- assemble_radar_plots(tusco_renamed$tusco_full$isoseq$isoquant$B100K0)
+radar_plot
+
+ggsave("radar_plot.pdf", device = cairo_pdf, plot = radar_plot, height=4, width=20, unit="in")
+```
+
+```{r}
+
+
+# 2. Create a dummy ggplot JUST to generate the legend
+legend_df <- data.frame(
+  label = c("SIRVs", "TUSCO"),
+  x = c(1, 2), y = c(1, 1)  # dummy coords
+)
+
+legend_plot <- ggplot(legend_df, aes(x, y, color = label)) +
+  geom_point(size = 5) +
+  scale_color_manual(
+    name = NULL,
+    values = c("SIRVs" = "#cab2d6", "TUSCO" = "#1b9e77")
+  ) +
+  theme_void() +
+  theme(
+    legend.position   = "right",
+    legend.text       = element_text(size = 12),
+    legend.key.size   = unit(1, "lines")
+  )
+
+# 3. Extract the legend grob
+legend_grob <- cowplot::get_legend(legend_plot)
+
+# 4. Combine radar plot + legend side by side
+final_plot <- plot_grid(
+  radar_plot, 
+  legend_grob,
+  ncol        = 2,
+  rel_widths  = c(1, 0.05)   # tweak the 0.2 to make legend bigger/smaller
+)
+
+# 5. Draw the whole thing
+print(final_plot)
+ggsave("radar_plot.pdf", device = cairo_pdf, plot = final_plot, height=4, width=20, unit="in")
+
+```
+
+
+```{r}
+
+# Function 1: Preprocess two data frames (concat, tama) into long form
+preprocess_metrics <- function(concat_df, tama_df) {
+  # Ensure both dfs have exactly two rows (SIRV then TUSCO) 
+  # and the same set of metric columns
+  if (nrow(concat_df) != 2 || nrow(tama_df) != 2) {
+    stop("Each input df must have exactly two rows: first SIRV then TUSO")
+  }
+  if (!identical(colnames(concat_df), colnames(tama_df))) {
+    stop("concat_df and tama_df must have the same column names")
+  }
+  
+  metric_names <- colnames(concat_df)
+  
+  # Build long tables
+  concat_long <- tibble(
+    method_dataset = rep(c("concat_sirv", "concat_tusco"), each = length(metric_names)),
+    metric         = rep(metric_names, times = 2),
+    value          = c(as.numeric(concat_df[1, ]), as.numeric(concat_df[2, ]))
+  )
+  
+  tama_long <- tibble(
+    method_dataset = rep(c("tama_sirv", "tama_tusco"), each = length(metric_names)),
+    metric         = rep(metric_names, times = 2),
+    value          = c(as.numeric(tama_df[1, ]), as.numeric(tama_df[2, ]))
+  )
+  
+  # Combine
+  bind_rows(concat_long, tama_long)
+}
+
+
+
+build_dumbbell_plot <- function(metrics_long,
+                                title,
+                                metric_order = c("Sn", "PDR", "nrPre", "rPre", "1/red", "1-FDR")
+) {
+  # 0) make metric a factor in the desired order
+  metrics_long <- metrics_long %>%
+    mutate(metric = factor(metric, levels = rev(metric_order)))
+  
+  # 1) Pivot to wide for segments
+  metrics_wide <- metrics_long %>%
+    separate(method_dataset, into = c("method", "dataset"), sep = "_") %>%
+    pivot_wider(names_from = method, values_from = value)
+  
+  # 2) Prepare points data
+  points_df <- metrics_wide %>%
+    pivot_longer(
+      cols      = c(concat, tama),
+      names_to  = "method",
+      values_to = "value"
+    )
+  
+  # 3) Build plot
+  p <- ggplot() +
+    # striped rows
+    geom_stripped_rows(
+      data = metrics_wide,
+      aes(y = metric),
+      width   = 1,
+      nudge_y = 0
+    ) +
+    # segments
+    geom_segment(
+      data = metrics_wide,
+      aes(x     = concat, xend = tama,
+          y     = metric, yend = metric,
+          color = dataset),
+      size     = 1.2,
+      position = position_nudge(
+        y = ifelse(metrics_wide$dataset == "sirv",  0.15, -0.15)
+      )
+    ) +
+    # endpoints
+    geom_point(
+      data = points_df,
+      aes(x     = value,
+          y     = metric,
+          shape = method,
+          fill  = dataset,
+          color = dataset),
+      size     = 3,
+      stroke   = 0.8,
+      position = position_nudge(
+        y = ifelse(points_df$dataset == "sirv",  0.15, -0.15)
+      )
+    ) +
+    # scales and legends
+    scale_color_manual(
+      name   = "Evaluation",
+      values = c("sirv"  = "#cab2d6", "tusco" = "#1b9e77"),
+      labels = c("sirv"  = "SIRVs",    "tusco" = "TUSCO"),
+      guide  = guide_legend(
+        override.aes = list(linetype = 1, size = 2, shape = NA),
+        order = 1
+      )
+    ) +
+    scale_fill_manual(
+      values = c("sirv" = "#cab2d6", "tusco" = "#1b9e77"),
+      guide  = "none"
+    ) +
+    scale_shape_manual(
+      name   = "Strategy",
+      values = c("concat" = 16, "tama" = 17),
+      labels = c("concat" = "Join & Call", "tama" = "Call & Join"),
+      guide  = guide_legend(
+        override.aes = list(fill = "black", size = 3),
+        order = 2
+      )
+    ) +
+    # axes, padding, clipping & theme
+    scale_x_continuous(
+      limits = c(0, 100),
+      expand = expansion(mult = c(0.03, 0.03))
+    ) +
+    scale_y_discrete() +               # uses levels of metric factor
+    coord_cartesian(clip = "off") +
+    labs(x = "Metric value (%)", y = NULL, title = title) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title         = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.margin        = margin(t = 5, r = 20, b = 5, l = 20, unit = "pt"),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor   = element_blank(),
+      panel.background   = element_rect(fill = "white", color = NA),
+      axis.text.y        = element_text(face = "bold"),
+      legend.box      = "horizontal",
+      legend.position    = "right",
+      legend.title = element_text(size = 14, face = "bold"),
+      legend.text  = element_text(size = 12)
+    )
+  
+  return(p)
+}
+
+
+```
+
+
+```{r}
+check_metrics_sn_pdr <- function(concat_df, tama_df) {
+  # Ensure both dfs have exactly two rows (SIRV then TUSCO) 
+  # and the same set of metric columns
+  if (nrow(concat_df) != 2 || nrow(tama_df) != 2) {
+    stop("Each input df must have exactly two rows: first SIRV then TUSO")
+  }
+  if (!identical(colnames(concat_df), colnames(tama_df))) {
+    stop("concat_df and tama_df must have the same column names")
+  }
+  
+  metric_names <- colnames(concat_df)
+  
+
+  # Check for Sn < PDR in concat_df
+  if (concat_df["metrics_values_sirv", "Sn"] > concat_df["metrics_values_sirv", "PDR"]) {
+    warning(sprintf(
+      "concat_df SIRV: Sn (%.3f) > PDR (%.3f)",
+      concat_df["metrics_values_sirv", "Sn"], concat_df["metrics_values_sirv", "PDR"]
+    ))
+  }
+  if (concat_df["metrics_values_tusco", "Sn"] > concat_df["metrics_values_tusco", "PDR"]) {
+    warning(sprintf(
+      "concat_df TUSCO: Sn (%.3f) > PDR (%.3f)",
+      concat_df["metrics_values_tusco", "Sn"], concat_df["metrics_values_tusco", "PDR"]
+    ))
+  }
+
+  # Check for Sn < PDR in tama_df
+  if (tama_df["metrics_values_sirv", "Sn"] > tama_df["metrics_values_sirv", "PDR"]) {
+    warning(sprintf(
+      "tama_df SIRV: Sn (%.3f) > PDR (%.3f)",
+      tama_df["metrics_values_sirv", "Sn"], tama_df["metrics_values_sirv", "PDR"]
+    ))
+  }
+  if (tama_df["metrics_values_tusco", "Sn"] > tama_df["metrics_values_tusco", "PDR"]) {
+    warning(sprintf(
+      "tama_df TUSCO: Sn (%.3f) > PDR (%.3f)",
+      tama_df["metrics_values_tusco", "Sn"], tama_df["metrics_values_tusco", "PDR"]
+    ))
+  }
+}
+```
+
+
+
+```{r}
+
+tool_labels <- c(
+  isoquant     = "IsoQuant",
+  flair_ar_sr  = "FLAIR",
+  bambu        = "Bambu",
+  talon        = "TALON",
+  mandalorion  = "Mandalorion",
+  isoseq       = "IsoSeq + SQANTI3"
+)
+
+# - Top level: tusco_full and tusco-tissue
+for (tusco_type in c("tusco_full", "tusco_brain", "tusco_kidney")){
+  tusco_list <- tusco_renamed[[tusco_type]]
+  
+  # — Next level: data types
+  for (datatype in c("isoseq", "ont")) {
+    dt_list <- tusco_list[[datatype]]
+    if (is.null(dt_list)) next
+    
+    # — Next level: tools under each data type
+    for (tool in names(dt_list)) {
+      # skip any unexpected names
+      if (!tool %in% names(tool_labels)) next
+      pretty_tool <- tool_labels[[tool]]
+      
+      tissue_list <- dt_list[[tool]]
+      
+      # — For each combination within this tool
+      for (tissue in names(tissue_list)) {
+        branch <- tissue_list[[tissue]]
+        
+        print(paste(datatype, tool, tissue))
+        
+        # 1) extract the two radar data.frames
+        concat_df <- branch$concat$radar_df[
+          c("metrics_values_sirv", "metrics_values_tusco"), ]
+        tama_df   <- branch$TAMA$radar_df[
+          c("metrics_values_sirv", "metrics_values_tusco"), ]
+        
+        # 1.5) check Sn PDR metrics
+        check_metrics_sn_pdr(concat_df, tama_df)
+        
+        # 2) preprocess and build plot
+        metrics_long <- preprocess_metrics(concat_df, tama_df)
+        p            <- build_dumbbell_plot(metrics_long, pretty_tool)
+        
+        # 3) assign back into the list
+        tusco_renamed[[tusco_type]][[datatype]][[tool]][[tissue]]$dumbbell_plot <- p
+      }
+    }
+  }
+}
+
+```
+
+```{r}
+tusco_renamed$tusco_full$isoseq$isoseq$B100K0$dumbbell_plot
+```
+
+```{r}
+
+assemble_dumbbell_plots <- function(results, tissue, tusco_type) {
+  
+  if (tissue == "B100K0") {
+    tissue_name <- "Brain"
+  } else if (tissue == "B0K100") {
+    tissue_name <- "Kidney"
+  } else {
+    stop("Error: unknown tissue code '", tissue, "'")
+  }
+  
+  if (tusco_type == "tusco_full") {
+    tusco_type_name <- "TUSCO (mouse)"
+  } else if (tusco_type == "tusco_brain") {
+    tusco_type_name <- "TUSCO (mouse brain)"
+  } else if (tusco_type == "tusco_kidney") {
+    tusco_type_name <- "TUSCO (mouse kidney)"
+  } else {
+    stop("Error: unknown tusco_type code '", tusco_type, "'")
+  }
+  
+  raw_legend   <- get_legend(
+    results[[tusco_type]]$isoseq$isoquant[[tissue]]$dumbbell_plot
+  )
+  legend_panel <- as_ggplot(raw_legend)
+  
+  db_1_1 <- results[[tusco_type]]$isoseq$isoquant[[tissue]]$dumbbell_plot +
+    theme(legend.position = "none")
+  db_1_2 <- results[[tusco_type]]$isoseq$flair_ar_sr[[tissue]]$dumbbell_plot +
+    theme(legend.position = "none")
+  db_1_3 <- results[[tusco_type]]$isoseq$bambu[[tissue]]$dumbbell_plot +
+    theme(
+      legend.position = "none", 
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+      )
+  db_1_4 <- results[[tusco_type]]$isoseq$talon[[tissue]]$dumbbell_plot +
+    theme(
+      legend.position = "none", 
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+      )
+  db_2_1 <- results[[tusco_type]]$isoseq$mandalorion[[tissue]]$dumbbell_plot +
+    theme(legend.position = "none")
+  db_2_2 <- results[[tusco_type]]$isoseq$isoseq[[tissue]]$dumbbell_plot +
+    theme(legend.position = "none")
+  db_3_1 <- results[[tusco_type]]$ont$isoquant[[tissue]]$dumbbell_plot +
+    theme(legend.position = "none")
+  db_3_2 <- results[[tusco_type]]$ont$flair_ar_sr[[tissue]]$dumbbell_plot +
+    theme(legend.position = "none")
+  db_3_3 <- results[[tusco_type]]$ont$bambu[[tissue]]$dumbbell_plot +
+    theme(
+      legend.position = "none", 
+      axis.title.x = element_blank()
+      )
+  db_3_4 <- results[[tusco_type]]$ont$talon[[tissue]]$dumbbell_plot +
+    theme(
+      legend.position = "none", 
+      axis.title.x = element_blank()
+      )
+  
+  
+  db_plot <- (
+    db_1_1 + db_1_2 + db_1_3 + db_1_4 +
+    db_2_1 + db_2_2 + legend_panel +
+    plot_spacer() +
+    db_3_1 + db_3_2 + db_3_3 + db_3_4
+  ) +
+    plot_layout(
+      design = "
+        ABCD
+        EFGG
+        HHHH
+        IJKM
+      ",
+      heights = c(1, 1, 0.2, 1),
+      axes         = "collect"
+    ) +
+    plot_annotation(
+      title = paste0("SIRV and ", tusco_type_name, " evaluation", "; ", tissue_name),
+      theme = theme(
+        plot.title = element_text(size = 15, face = "bold", hjust = 0.5)
+      )
+    )
+  
+  
+  # add inset labels (a/b)
+  label_a <- ggplot() +
+    annotate("text", x = .5, y = .5, label = "a", size = 6, fontface = "bold") +
+    theme_void()
+  label_b <- ggplot() +
+    annotate("text", x = .5, y = .5, label = "b", size = 6, fontface = "bold") +
+    theme_void()
+  
+  final <- wrap_elements(db_plot) +
+    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
+    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.40)
+  
+  return(final)
+
+}
+
+
+```
+
+
+
+```{r}
+brain_db_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_full")
+brain_db_plot
+
+ggsave("brain_db_full_plot.pdf", device = cairo_pdf, plot = brain_db_plot, width = 12, height = 8, unit = "in")
+```
+
+```{r}
+kidney_db_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_full")
+kidney_db_plot
+
+ggsave("kidney_db_full_plot.pdf", device = cairo_pdf, plot = kidney_db_plot, width = 12, height = 8, unit = "in")
+```
+
+```{r}
+brain_db_tissue_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_brain")
+brain_db_tissue_plot
+
+ggsave("brain_db_tissue_plot.pdf", device = cairo_pdf, plot = brain_db_tissue_plot, width = 12, height = 8, unit = "in")
+```
+
+```{r}
+kidney_db_tissue_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_kidney")
+kidney_db_tissue_plot
+
+ggsave("kidney_db_tissue_plot.pdf", device = cairo_pdf, plot = kidney_db_tissue_plot, width = 12, height = 8, unit = "in")
+```
+

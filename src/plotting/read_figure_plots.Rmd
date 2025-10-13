@@ -1,0 +1,441 @@
+
+
+```{r load_libraries, echo=FALSE}
+# Load packages
+library(ggpubr)
+library(ggfortify)
+library(NOISeq)
+library(RColorConesa)
+library(grid)
+library(UpSetR)
+library(tidyverse)
+library(cowplot)
+library(ComplexUpset)
+library(ggplot2)
+library(gtools)
+library(scales)
+library(forcats)
+```
+
+```{r read_sqanti_stacked_bar, echo=FALSE, message=FALSE, warning=FALSE}
+# Read multiple classification files (helpers + reusable pipeline)
+base_dir <- "/mnt/c/data/nih/sqanti_reads"
+pacbio_dir <- paste0(base_dir, "/pacbio")
+ont_dir    <- paste0(base_dir, "/ont")
+
+# Define palette and label mapping consistent with all_plots.Rmd
+cat.palette <- c(
+  "FSM" = "#6BAED6",
+  "ISM" = "#FC8D59",
+  "NIC" = "#78C679",
+  "NNC" = "#EE6A50",
+  "Genic\nGenomic" = "#969696",
+  "Antisense" = "#66C2A4",
+  "Fusion" = "goldenrod1",
+  "Intergenic" = "darksalmon",
+  "Genic\nIntron" = "#41B6C4"
+)
+
+category_map <- c(
+  "full-splice_match" = "FSM",
+  "incomplete-splice_match" = "ISM",
+  "novel_in_catalog" = "NIC",
+  "novel_not_in_catalog" = "NNC",
+  "genic" = "Genic\nGenomic",
+  "antisense" = "Antisense",
+  "fusion" = "Fusion",
+  "intergenic" = "Intergenic",
+  "genic_intron" = "Genic\nIntron"
+)
+
+display_levels <- c("FSM","ISM","NIC","NNC","Genic\nGenomic","Antisense","Fusion","Intergenic","Genic\nIntron")
+
+# Helper: read one file, summarize, and discard raw data immediately
+summarize_sqanti <- function(dir_path, file_vec, label_vec, tech_value) {
+  purrr::map2_dfr(
+    file_vec,
+    label_vec,
+    ~ {
+      path <- file.path(dir_path, .x)
+      df <- readr::read_tsv(path, show_col_types = FALSE)
+      df %>%
+        dplyr::transmute(category_label = dplyr::recode(structural_category, !!!category_map)) %>%
+        dplyr::filter(!is.na(category_label)) %>%
+        dplyr::count(category_label, name = "num_reads") %>%
+        dplyr::mutate(sample = .y, technology = tech_value)
+    }
+  )
+}
+
+# Build aggregated table for a tissue (prefix 'B'/'K', label base 'Brain'/'Kidney')
+build_category_counts <- function(prefix, label_base) {
+  sample_labels <- paste(label_base, 1:5)
+  pacbio_files <- paste0(prefix, 31:35, "_reads_classification.txt")
+  ont_files    <- paste0(prefix, 31:35, "_classification.txt")
+
+  dplyr::bind_rows(
+    summarize_sqanti(pacbio_dir, pacbio_files, sample_labels, "pacbio"),
+    summarize_sqanti(ont_dir,    ont_files,    sample_labels, "ont")
+  ) %>%
+    dplyr::mutate(
+      category_label = factor(category_label, levels = display_levels),
+      sample = factor(sample, levels = sample_labels),
+      technology = factor(technology, levels = c("pacbio","ont"))
+    ) %>%
+    dplyr::arrange(dplyr::desc(num_reads))
+}
+
+# Plot helper: one-row, five boxes, two bars per box
+plot_sqanti_faceted <- function(counts_df, title = NULL) {
+  ggplot(
+    counts_df,
+    aes(x = technology, y = num_reads, fill = category_label)
+  ) +
+    geom_col(width = 0.8) +
+    scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
+    scale_fill_manual(
+      values = cat.palette,
+      breaks = display_levels,
+      labels = c(
+        "Full\nSplice Match",
+        "Incomplete\nSplice Match",
+        "Novel\nIn Catalog",
+        "Novel Not\nIn Catalog",
+        "Genic\nGenomic",
+        "Antisense",
+        "Fusion",
+        "Intergenic",
+        "Genic\nIntron"
+      )
+    ) +
+    facet_grid(. ~ sample, switch = "x") +
+    labs(x = NULL, y = "Number of reads", fill = "Structural category", title = title) +
+    theme(
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+      strip.placement = "outside",
+      strip.background = element_rect(color = "black", fill = NA, linewidth = 0.5),
+      strip.text = element_text(face = "bold"),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      legend.position = "right",
+      legend.box = "vertical"
+    )
+}
+
+```
+
+```{r build_category_counts, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Build both tissues
+category_counts_brain  <- build_category_counts("B", "Brain")
+category_counts_kidney <- build_category_counts("K", "Kidney")
+
+```
+
+
+```{r plot_sqanti_stacked_bar, echo=FALSE, message=FALSE, warning=FALSE}
+
+# # Back-compat for the earlier single-bar-by-sample plot: collapse across technology
+# category_counts <- category_counts_brain %>%
+#   dplyr::group_by(sample, category_label) %>%
+#   dplyr::summarise(num_reads = sum(num_reads), .groups = "drop")
+
+# # Single stacked barplot
+# ggplot(category_counts, aes(x = sample, y = num_reads, fill = category_label)) +
+#   geom_bar(stat = "identity", width = 0.8, color = "black") +
+#   scale_fill_manual(
+#     values = cat.palette,
+#     breaks = display_levels,
+#     labels = c(
+#       "Full\nSplice Match",
+#       "Incomplete\nSplice Match",
+#       "Novel\nIn Catalog",
+#       "Novel Not\nIn Catalog",
+#       "Genic\nGenomic",
+#       "Antisense",
+#       "Fusion",
+#       "Intergenic",
+#       "Genic\nIntron"
+#     )
+#   ) +
+#   labs(x = NULL, y = "Number of reads", fill = "Structural category") +
+#   theme(
+#     axis.text.x = element_text(angle = 45, hjust = 1),
+#     panel.grid.major.x = element_blank(),
+#     panel.grid.minor.x = element_blank()
+#   )
+
+```
+
+
+```{r plot_sqanti_faceted_line, echo=FALSE, message=FALSE, warning=FALSE}
+
+# One-row faceted plot: five boxes (Brain 1–5), two bars per box (PacBio, ONT)
+brain_sq_reads_plot <- plot_sqanti_faceted(category_counts_brain, title = "Brain")
+brain_sq_reads_plot
+ggsave("brain_sq_reads_plot.pdf", device = cairo_pdf, plot = brain_sq_reads_plot, width=6, height=4, unit="in")
+
+# Kidney plot using same functions
+kidney_sq_reads_plot <- plot_sqanti_faceted(category_counts_kidney, title = "Kidney")
+kidney_sq_reads_plot
+ggsave("kidney_sq_reads_plot.pdf", device = cairo_pdf, plot = kidney_sq_reads_plot, width=6, height=4, unit="in")
+
+```
+
+```{r plot_x, echo=FALSE, message=FALSE, warning=FALSE}
+
+read_number_file <- paste0(base_dir, "/read_numbers_joint.tsv")
+read_numbers <- read.table(read_number_file, header = TRUE, sep = "\t")
+
+read_numbers
+
+```
+
+
+```{r plot_read_numbers_faceted, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Utilities for read_numbers plotting
+
+# Infer sample label (Brain/Kidney 1..5) from sample code like B31..B35 or K31..K35
+infer_sample_label <- function(sample_code) {
+  idx <- as.integer(stringr::str_sub(sample_code, -1, -1))
+  tissue <- dplyr::case_when(
+    stringr::str_starts(sample_code, "B") ~ "Brain",
+    stringr::str_starts(sample_code, "K") ~ "Kidney",
+    TRUE ~ "Sample"
+  )
+  paste(tissue, idx)
+}
+
+# Build tidy counts for a tissue from read_numbers
+build_readnum_counts <- function(read_numbers, tissue = c("Brain", "Kidney")) {
+  tissue <- match.arg(tissue)
+
+  required_cols <- c("sample", "ont_fastq", "ont_prim_aln", "pb_fastq", "pb_prim_aln")
+  if (!all(required_cols %in% names(read_numbers))) {
+    stop(paste0(
+      "read_numbers must contain columns: ",
+      paste(required_cols, collapse = ", ")
+    ))
+  }
+
+  df <- read_numbers %>%
+    dplyr::filter(
+      (tissue == "Brain"  & stringr::str_starts(sample, "B")) |
+      (tissue == "Kidney" & stringr::str_starts(sample, "K"))
+    ) %>%
+    dplyr::mutate(
+      ont_unassigned = pmax(0, ont_fastq - ont_prim_aln),
+      pb_unassigned  = pmax(0, pb_fastq  - pb_prim_aln),
+      sample_label   = infer_sample_label(sample)
+    )
+
+  # Assemble per-technology rows
+  pacbio_df <- df %>%
+    dplyr::transmute(
+      sample_label,
+      technology    = "pacbio",
+      prim_aln      = pb_prim_aln,
+      unassigned    = pb_unassigned
+    )
+
+  ont_df <- df %>%
+    dplyr::transmute(
+      sample_label,
+      technology    = "ont",
+      prim_aln      = ont_prim_aln,
+      unassigned    = ont_unassigned
+    )
+
+  dplyr::bind_rows(pacbio_df, ont_df) %>%
+    tidyr::pivot_longer(
+      cols = c("prim_aln", "unassigned"),
+      names_to = "assign_category",
+      values_to = "num_reads"
+    ) %>%
+    dplyr::mutate(
+      assign_category = dplyr::recode(assign_category, prim_aln = "Aligned", unassigned = "Unaligned"),
+      sample_label    = factor(sample_label, levels = paste(tissue, 1:5)),
+      technology      = factor(technology, levels = c("pacbio", "ont")),
+      assign_category = forcats::fct_relevel(assign_category, "Aligned", "Unaligned")
+    )
+}
+
+plot_readnum_faceted <- function(read_numbers, tissue) {
+  tidy_counts <- build_readnum_counts(read_numbers, tissue)
+  # y-axis breaks every 2M up to nearest 2M above max
+  y_max <- tidy_counts %>%
+    dplyr::group_by(sample_label, technology) %>%
+    dplyr::summarise(total = sum(num_reads), .groups = "drop") %>%
+    dplyr::pull(total) %>%
+    max(na.rm = TRUE)
+  breaks_2m <- seq(0, ceiling(y_max / 2e6) * 2e6, by = 2e6)
+
+  assign_palette <- setNames(
+    RColorConesa::colorConesa(n = 2, palette = "complete"),
+    c("Aligned", "Unaligned")
+  )
+
+  ggplot(
+    tidy_counts,
+    aes(x = technology, y = num_reads, fill = assign_category,
+        order = as.numeric(assign_category == "Unaligned"))
+  ) +
+    geom_col(width = 0.7, position = position_stack(reverse = TRUE)) +
+    scale_y_continuous(breaks = breaks_2m, labels = scales::scientific) +
+    scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
+    scale_fill_manual(
+      values = assign_palette,
+      breaks = c("Unaligned", "Aligned"),
+      labels = c("Unaligned", "Aligned")
+    ) +
+    facet_grid(. ~ sample_label, switch = "x") +
+    labs(x = NULL, y = "Number of reads", fill = "Category", title = tissue) +
+    theme(
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+      strip.placement = "outside",
+      strip.background = element_rect(color = "black", fill = NA, linewidth = 0.5),
+      strip.text = element_text(face = "bold"),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank()
+    )
+}
+
+# Render Brain and Kidney plots
+brain_readnum_plot  <- plot_readnum_faceted(read_numbers, "Brain")
+brain_readnum_plot
+ggsave("brain_readnum_plot.pdf", device = cairo_pdf, plot = brain_readnum_plot, width=6, height=4, unit="in")
+
+kidney_readnum_plot <- plot_readnum_faceted(read_numbers, "Kidney")
+kidney_readnum_plot
+ggsave("kidney_readnum_plot.pdf", device = cairo_pdf, plot = kidney_readnum_plot, width=6, height=4, unit="in")
+
+```
+
+
+```{r read_length_files_once, echo=FALSE, message=FALSE, warning=FALSE}
+
+lengths_base_dir <- "/mnt/c/data/nih/sqanti_reads/lengths_seq_only"
+
+read_lengths_file <- function(file_path, sample_code, technology) {
+  if (!file.exists(file_path)) return(tibble())
+  vals <- readr::read_tsv(file_path, col_names = FALSE, show_col_types = FALSE)[[1]]
+  tibble(
+    length = as.numeric(vals),
+    sample = paste(
+      ifelse(substr(sample_code,1,1) == "B", "Brain", "Kidney"),
+      as.integer(substr(sample_code, nchar(sample_code), nchar(sample_code)))
+    ),
+    technology = technology
+  )
+}
+
+build_lengths_df <- function(dir_path) {
+  ont_dir <- file.path(dir_path, "ont")
+  pb_dir  <- file.path(dir_path, "pb")
+  codes <- c(paste0("B",31:35), paste0("K",31:35))
+  ont_files <- file.path(ont_dir, paste0(codes, ".bam.readlen.txt"))
+  pb_files  <- file.path(pb_dir,  paste0(codes, ".bam.readlen.txt"))
+
+  ont_df <- purrr::map2_dfr(ont_files, codes, ~ read_lengths_file(.x, .y, "ont"))
+  pb_df  <- purrr::map2_dfr(pb_files,  codes, ~ read_lengths_file(.x, .y, "pacbio"))
+
+  dplyr::bind_rows(ont_df, pb_df) %>%
+    dplyr::mutate(
+      sample = factor(sample, levels = c(paste("Brain",1:5), paste("Kidney",1:5))),
+      technology = factor(technology, levels = c("pacbio","ont"))
+    )
+}
+
+# Build once and reuse
+all_lengths_df <- build_lengths_df(lengths_base_dir)
+
+``` 
+
+
+```{r plot_read_length_violin_funcs, echo=FALSE, message=FALSE, warning=FALSE}
+
+plot_lengths_violin_from_df <- function(lengths_df_raw, tissue) {
+  df <- lengths_df_raw %>%
+    dplyr::filter(grepl(tissue, sample)) %>%
+    dplyr::group_by(sample, technology) %>%
+    dplyr::filter(length <= stats::quantile(length, 0.995, na.rm = TRUE)) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(sample = factor(sample, levels = paste(tissue, 1:5)))
+
+  violin_fill <- RColorConesa::colorConesa(n = 3, palette = "complete")[3]
+
+  y_max <- max(df$length, na.rm = TRUE)
+  breaks_1k <- seq(0, ceiling(y_max / 1000) * 1000, by = 1000)
+
+  ggplot(df, aes(x = technology, y = length, fill = technology)) +
+    geom_violin(scale = "width", trim = TRUE) +
+    geom_boxplot(width = 0.12, outlier.shape = NA, alpha = 0.6) +
+    facet_grid(. ~ sample, switch = "x") +
+    scale_y_continuous(breaks = breaks_1k) +
+    scale_fill_manual(values = c(pacbio = violin_fill, ont = violin_fill)) +
+    scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
+    labs(x = NULL, y = "Read length (nt)", fill = "Technology", title = tissue) +
+    theme(
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+      strip.placement = "outside",
+      strip.background = element_rect(color = "black", fill = NA, linewidth = 0.5),
+      strip.text = element_text(face = "bold"),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+      legend.position = "none"
+    )
+}
+
+```
+
+
+```{r plot_read_length_violin_brain, echo=FALSE, message=FALSE, warning=FALSE}
+
+brain_lengths_violin  <- plot_lengths_violin_from_df(all_lengths_df, "Brain")
+brain_lengths_violin
+ggsave("brain_lengths_violin.pdf", device = cairo_pdf, plot = brain_lengths_violin, width=6, height=4, unit="in")
+
+```
+
+
+```{r plot_read_length_violin_kidney, echo=FALSE, message=FALSE, warning=FALSE}
+
+kidney_lengths_violin <- plot_lengths_violin_from_df(all_lengths_df, "Kidney")
+kidney_lengths_violin
+ggsave("kidney_lengths_violin.pdf", device = cairo_pdf, plot = kidney_lengths_violin, width=6, height=4, unit="in")
+
+```
+
+
+```{r combine_brain_plots, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Arrange into 2x2 grid with violin spanning the right column
+brain_combined <- patchwork::wrap_plots(
+  L = brain_readnum_plot + theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12, b = 24)),
+  R = brain_lengths_violin + theme(plot.title = element_blank(), plot.margin = margin(l = 12, b = 24)),
+  B = brain_sq_reads_plot + theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12, t = 24)),
+  design = "LR\nBR"
+)
+
+brain_combined
+ggsave("brain_combined_plots.pdf", device = cairo_pdf, plot = brain_combined, width = 12, height = 8, units = "in")
+
+```
+
+
+```{r combine_kidney_plots, echo=FALSE, message=FALSE, warning=FALSE}
+
+kidney_combined <- patchwork::wrap_plots(
+  L = kidney_readnum_plot + theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12, b = 24)),
+  R = kidney_lengths_violin + theme(plot.title = element_blank(), plot.margin = margin(l = 12, b = 24)),
+  B = kidney_sq_reads_plot + theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12, t = 24)),
+  design = "LR\nBR"
+)
+
+kidney_combined
+ggsave("kidney_combined_plots.pdf", device = cairo_pdf, plot = kidney_combined, width = 12, height = 8, units = "in")
+
+```
+

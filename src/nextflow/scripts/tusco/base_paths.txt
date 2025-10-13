@@ -1,0 +1,10 @@
+/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/isoquant/run3_data/isoquant/isoform_detection
+/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse
+/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/bambu/run3_data/bambu/isoform_detection/bambu
+/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/talon/run3_data/talon/isoform_detection/talon
+/storage/gge/Alejandro/for_fabian/paper_stuff/mandalorion_isoseq_run1_data/mandalorion/isoform_detection
+/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq
+/home/fabianje/repos/documenting_NIH/fabian/data/output/ont/isoquant/run2_data/isoquant/isoform_detection
+/home/fabianje/repos/documenting_NIH/fabian/data/output/ont/flair_ar_sr/run2_data/flair/isoform_detection/flair_collapse
+/home/fabianje/repos/documenting_NIH/fabian/data/output/ont/bambu/run2_data/bambu/isoform_detection/bambu
+/home/fabianje/repos/documenting_NIH/fabian/data/output/ont/talon/run1_data/talon/isoform_detection/talon

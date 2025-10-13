@@ -1,0 +1,4033 @@
+---
+title: "NIH - Join & Call vs. Call & Join Plots"
+author: "Fabian Jetzinger"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+documentclass: article
+fontsize: 11pt
+papersize: a4paper
+urlcolor: blue
+geometry: "left=2.5cm,right=2.5cm,top=2cm,bottom=2cm"
+output: 
+  html_document:
+    code_download: false
+    toc: TRUE
+    toc_depth: 2
+    theme: spacelab
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+    fig_width: 9
+    fig_height: 6
+    fig_caption: true
+    df_print: kable
+  pdf_document:
+    toc: TRUE
+    toc_depth: 2
+    highlight: tango
+    fig_width: 9
+    fig_height: 6
+    fig_caption: true
+    df_print: kable
+---
+
+```{r setup, include=FALSE, echo = FALSE, warning = FALSE, fig.align="center"}
+# Setup
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, results='hide', fig.pos = "h", fig.align = "center")
+
+# Function to generate file paths
+get_paths <- function(src_dir) {
+  data_dir <- file.path(src_dir, "data")
+  list(
+    src_dir = src_dir,
+    data_dir = data_dir,
+    quant_cj_brain = file.path(src_dir, "B100K0_tama.counts.tsv"),
+    quant_cj_kidney = file.path(src_dir, "B0K100_tama.counts.tsv"),
+    Bclass_fofn = file.path(data_dir, "classification_brain.fofn"),
+    Kclass_fofn = file.path(data_dir, "classification_kidney.fofn"),
+    Bjunc_fofn = file.path(data_dir, "junctions_brain.fofn"),
+    Kjunc_fofn = file.path(data_dir, "junctions_kidney.fofn"),
+    quant_ind = file.path(data_dir, "ind_tama.counts.tsv"),
+    quant_concat = file.path(data_dir, "concat_tama.counts.tsv"),
+    class_ind = file.path(data_dir, "ind_TAMA_classification.txt"),
+    class_concat = file.path(data_dir, "concat_TAMA_classification.txt"),
+    ref_genome = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39_SIRV.fa",
+    annot_ind_quantification = file.path(data_dir, "ind_TAMA.gtf"),
+    annot_concat_quantification = file.path(data_dir, "concat_TAMA.gtf"),
+    class_ind_quantification = file.path(data_dir, "ind_TAMA_classification.txt"),
+    class_concat_quantification = file.path(data_dir, "concat_TAMA_classification.txt")
+  )
+}
+
+```
+
+```{r load_functions, echo=FALSE}
+# Load functions
+
+# fct_dir <- "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/helper_functions"
+
+# source(file.path(fct_dir, "gc_content_and_length.R")) # BioToyBox GitHub
+# source(file.path(fct_dir, "sqanti_generateUJC.R")) # BioToyBox GitHub
+```
+
+# Overview
+
+In this report, we present our work progress on the long-read quantification and bias detection of the NIH project. Our aim is to provide a clear understanding of how the choice of reference transcriptome influences both the expression matrix and the accurate mapping of reads to distinct transcript isoforms.
+
+Experimental Details:
+
+- Organism: Young mouse
+- Tissue: Brain and Kidney (no tissue mixtures were employed in this analysis)
+- Samples: 5 samples per condition
+- Sequencing Batches: Data collected in two distinct batches
+- Sequencing: PacBio IsoSeq method
+
+```{r load_libraries, echo=FALSE}
+# Load packages
+library(ggpubr)
+library(ggfortify)
+library(NOISeq)
+library(RColorConesa)
+library(grid)
+library(UpSetR)
+library(tidyverse)
+library(cowplot)
+library(ComplexUpset)
+library(ggplot2)
+library(gtools)
+```
+
+```{r themes_and_colors, echo=FALSE}
+# Themes and colors
+xaxislevelsF1 <- c("full-splice_match", "incomplete-splice_match", "novel_in_catalog", "novel_not_in_catalog", "genic", "antisense", "fusion", "intergenic", "genic_intron")
+xaxislabelsF1 <- c("FSM", "ISM", "NIC", "NNC", "Genic\nGenomic", "Antisense", "Fusion", "Intergenic", "Genic\nIntron")
+cat.palette <- c("FSM" = "#6BAED6", "ISM" = "#FC8D59", "NIC" = "#78C679", "NNC" = "#EE6A50", "Genic\nGenomic" = "#969696", "Antisense" = "#66C2A4", "Fusion" = "goldenrod1", "Intergenic" = "darksalmon", "Genic\nIntron" = "#41B6C4")
+theme_Publication <- function(base_size=14, base_family="sans") {
+      library(grid)
+      library(ggthemes)
+      (theme_foundation(base_size=base_size, base_family=base_family)
+       + theme(plot.title = element_text(face = "bold",
+                                         size = rel(1.2), hjust = 0.5, margin = margin(0,0,0,0)),
+               text = element_text(),
+               panel.background = element_rect(colour = NA),
+               plot.background = element_rect(colour = NA),
+               panel.border = element_rect(colour = NA),
+               axis.title = element_text(face = "bold",size = rel(1)),
+               axis.title.y = element_text(angle=90,vjust =2),
+               axis.title.x = element_text(vjust = -0.2),
+               axis.text = element_text(), 
+               axis.line.x = element_line(colour="black"),
+               axis.line.y = element_line(colour="black"),
+               axis.ticks = element_line(),
+               panel.grid.major = element_line(colour="#f0f0f0"),
+               panel.grid.minor = element_blank(),
+               legend.key = element_rect(colour = NA),
+               legend.position = "bottom",
+               legend.direction = "horizontal",
+               legend.box = "vertical",
+               legend.key.size= unit(0.5, "cm"),
+               #legend.margin = unit(0, "cm"),
+               legend.title = element_text(face="italic"),
+               plot.margin=unit(c(0,0,0,0),"mm"),
+               strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+               strip.text = element_text(face="bold"),
+       ))
+}
+
+```
+
+
+## Distribution of Structural Categories {.tabset .tabset-pills}
+
+Our observations reveal that when analyzing each sample independently, we identify very similar transcriptomes, although with a relatively smaller number of isoforms when compared to the other two approaches. Notably, concatenating all reads leads to a modest increase in known (FSM) transcripts and substantially augments the discovery of novel isoforms, particularly in the category of NIC.
+
+```{r Read-and-Process-Data}
+
+
+# Function to plot classification data
+plot_classification_data <- function(class_combined_df, sample_labels) {
+  p1 <- ggplot(class_combined_df, aes(x = sample, y = (..count..), fill = structural_category)) +
+    geom_bar() +
+    scale_fill_manual(values = cat.palette, labels = c("Full\nSplice Match", "Incomplete\nSplice Match", "Novel\nIn Catalog", "Novel Not\nIn Catalog", "Genic\nGenomic", "Antisense", "Fusion", "Intergenic", "Genic\nIntron")) +
+    scale_x_discrete(labels = sample_labels) +
+    theme_minimal() +
+    theme(legend.position = "none", axis.title.x = element_blank()) +
+    ylab("# isoforms") +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+    theme(axis.text = element_text(size = 10))
+
+  p2 <- ggplot(class_combined_df, aes(x = sample, y = (..count..), fill = structural_category)) +
+    geom_bar(position = "fill") +
+    scale_fill_manual(values = cat.palette, labels = c("Full\nSplice Match", "Incomplete\nSplice Match", "Novel\nIn Catalog", "Novel Not\nIn Catalog", "Genic\nGenomic", "Antisense", "Fusion", "Intergenic", "Genic\nIntron")) +
+    scale_x_discrete(labels = sample_labels) +
+    theme_minimal() +
+    theme(legend.position = "none", axis.title.x = element_blank()) +
+    ylab("% of isoforms") +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+    theme(axis.text = element_text(size = 10))
+
+  return(list(p1, p2))
+}
+
+plot_classification_expression_data <- function(class_combined_df,
+                                                     total_reads,
+                                                     sample_codes,
+                                                     sample_labels,
+                                                     unassigned_color = "white",
+                                                     border_color     = "black") {
+
+  # 1. Aggregate FL counts per sample + category
+  aggregated_df <- class_combined_df %>%
+    group_by(sample, structural_category) %>%
+    summarise(FL = sum(FL), .groups = "drop")
+
+  # 2. Compute assigned totals from aggregated data
+  assigned_df <- aggregated_df %>%
+    group_by(sample) %>%
+    summarise(assigned = sum(FL), .groups = "drop")
+
+  # 3. Compute unassigned counts
+  unassigned_df <- tibble(
+    sample = sample_codes,
+    total  = unname(total_reads[sample_codes])
+  ) %>%
+    left_join(assigned_df, by = "sample") %>%
+    mutate(
+      assigned = replace_na(assigned, 0),
+      FL = total - assigned,
+      structural_category = "Unassigned"
+    ) %>%
+    select(sample, structural_category, FL)
+
+  # 4. Combine and format for plotting
+  plot_df <- bind_rows(aggregated_df, unassigned_df) %>%
+    mutate(
+      sample = factor(sample, levels = sample_codes),
+      structural_category = factor(structural_category, levels = c("Unassigned", names(cat.palette))),
+      border_color = ifelse(structural_category == "Unassigned", "Unassigned", NA_character_)
+    )
+
+  # 5. Define color palettes
+  extended_fill   <- c(Unassigned = unassigned_color, cat.palette)
+  extended_border <- c(Unassigned = border_color,     cat.palette)
+
+  # 6. Shared theme
+  base_theme <- theme_minimal() +
+    theme(
+      legend.position = "none",
+      axis.title.x    = element_blank(),
+      axis.text.x     = element_text(angle = 90, vjust = 0.5, hjust = 1),
+      axis.text       = element_text(size = 10)
+    )
+
+  # 7. Absolute plot
+  p1 <- ggplot(plot_df, aes(x = sample, y = FL)) +
+    geom_bar(
+      aes(fill = structural_category, color = border_color),
+      stat = "identity", size = 0.3
+    ) +
+    scale_x_discrete(labels = sample_labels) +  # << ADDED HERE
+    scale_fill_manual(values = extended_fill, na.value = NA) +
+    scale_color_manual(values = extended_border, na.value = NA) +
+    base_theme +
+    ylab("# reads")
+  
+  # 8. Relative plot (percentage)
+  p2 <- ggplot(plot_df, aes(x = sample, y = FL)) +
+    geom_bar(
+      aes(fill = structural_category, color = border_color),
+      stat = "identity", position = "fill", size = 0.3
+    ) +
+    scale_x_discrete(labels = sample_labels) +  # << ADDED HERE
+    scale_fill_manual(values = extended_fill, na.value = NA) +
+    scale_color_manual(values = extended_border, na.value = NA) +
+    base_theme +
+    ylab("% of reads")
+
+
+  return(list(p1, p2))
+}
+
+
+# Helper functions for UpSet plots
+cpm <- function(counts) {
+  counts / sum(counts, na.rm = TRUE) * 1e6
+}
+
+UJC_count_matrix <- function(class_df_list, sample_labels) {
+  counts_list <- list()
+  i <- 1
+  for (class_df in class_df_list) {
+    class_df <- class_df[!grepl("NA", class_df$UJC), c("UJC", "FL")]
+    counts_list[[sample_labels[i]]] <- class_df %>% 
+      group_by(UJC) %>% 
+      summarise(counts = sum(FL))
+    i <- i + 1
+  }
+  counts <- counts_list[[1]]
+  for (i in 2:length(counts_list)) {
+    counts <- merge(counts, counts_list[[i]], by = "UJC", all = TRUE)
+  }
+  colnames(counts) <- c("UJC", sample_labels)
+  return(counts)
+}
+
+create_boxplot <- function(listUJC) {
+  # Max value to limit the y-axis
+  max_value <- max(log10(listUJC$counts)) + max(log10(listUJC$counts)) * 0.1
+  min_value <- min(log10(listUJC$counts)) - min(log10(listUJC$counts)) * 0.1
+
+  # Structural categories to plot
+  structural_categories <- c("FSM", "ISM", "NIC", "NNC")
+  l_plots <- list()
+  for (category in structural_categories) {
+    tmp <- listUJC[listUJC$structural_category == category, ]
+    p <- ggplot(tmp, aes(presence_code, log10(counts), color = structural_category)) +
+      geom_boxplot() + ylim(c(min_value, max_value)) +
+      scale_color_manual(values = cat.palette, name = "Structural Category") +
+      scale_x_discrete(drop = FALSE) + 
+      theme_Publication() + 
+      theme(
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+      )
+    l_plots[[category]] <- p
+  }
+  # Rest of structural categories
+  tmp <- listUJC[!listUJC$structural_category %in% structural_categories, ]
+  p <- ggplot(tmp, aes(presence_code, log10(counts), color = "a")) +
+    geom_boxplot() + ylim(c(min_value, max_value)) +
+    scale_color_manual(values = "#969696", name = "Structural Category") +
+    theme_Publication() + 
+    theme(
+      legend.position = "none",
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+    )
+  l_plots[["rest"]] <- p
+  return(l_plots)
+}
+
+```
+
+```{r create-upset}
+create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
+  
+  if (method == "isoseq_sqanti") {
+    method <- "IsoSeq + SQANTI3"
+  }
+  
+  listUJC <-do.call(rbind, lapply(class_df_list, function(class_df) class_df[!grepl("NA",class_df$UJC), c("structural_category", "UJC")]))
+  listUJC <- distinct(listUJC)
+  
+  for (i in 1:length(class_df_list)){
+    sample_id <- names(class_df_list)[[i]]
+    listUJC[, sample_id] <- ifelse(listUJC$UJC %in% class_df_list[[i]]$UJC, 1, 0)
+  }
+  colnames(listUJC) <- c("structural_category", "UJC", sample_labels)
+  
+  # Define structural categories and their colors
+  structural_categories <- unique(listUJC$structural_category)
+  category_colors <- c(
+    "FSM" = "#6BAED6",
+    "ISM" = "#FC8D59",
+    "NIC" = "#78C679",
+    "NNC" = "#EE6A50",
+    "Genic\nGenomic" = "#969696",
+    "Antisense" = "#66C2A4",
+    "Fusion" = "goldenrod1",
+    "Intergenic" = "darksalmon",
+    "Genic\nIntron" = "#41B6C4"
+  )
+  
+  ############################## 
+  ######### UPSET PLOT ######### 
+  ############################## 
+  
+  # Create the Intersection Size annotation with custom fill colors
+  intersection_size_annotation <- intersection_size(
+      counts = FALSE,
+      mapping = aes(fill = structural_category)
+    ) +
+    scale_fill_manual(
+      values = category_colors,
+      name = "Structural Category"
+    ) +
+    ggtitle(method) +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text.y = element_text(size = 10),
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+    )
+  
+  rev_sample_labels <- rev(sample_labels)
+  
+  upset_plot <- (
+    ComplexUpset::upset(
+      listUJC,
+      intersect = rev_sample_labels,
+      sort_sets = FALSE,
+      name = element_blank(),
+      base_annotations = list(
+        'Intersection size' = intersection_size_annotation
+      ),
+      n_intersections = n,
+      width_ratio=0.1,
+      set_sizes=FALSE
+    )
+  )
+  
+  #####################################
+  ######### COMBINATION PLOTs ######### 
+  ##################################### 
+  
+  # 0. Identify your sample columns (assumes exactly five columns ending in " 1"…" 5")
+  sample_cols <- names(listUJC)[str_detect(names(listUJC), " \\d+$")]
+  if (length(sample_cols) != 5) {
+    stop("Expected exactly 5 sample columns with names like 'Brain 1'…'Brain 5'")
+  }
+  
+  # 1. Extract the shared prefix (e.g. "Brain" or "Kidney")
+  prefix <- sample_cols %>% 
+    str_remove(" \\d+$") %>% 
+    unique()
+  if (length(prefix) != 1) {
+    stop("Failed to detect a single common prefix among the sample columns.")
+  }
+  
+  # 2. Build the combination counts
+  comb_counts <- listUJC %>%
+    # collapse the five sample columns into a single binary string
+    unite("pattern", all_of(sample_cols), sep = "") %>%
+    # drop UJCs absent in all samples
+    filter(pattern != str_dup("0", length(sample_cols))) %>%
+    # count how many UJCs per unique pattern
+    group_by(pattern) %>%
+    summarise(n_UJC = n(), .groups = "drop") %>%
+    # compute how many samples (1–5) each pattern covers
+    mutate(n_samples = str_count(pattern, "1")) %>%
+    mutate(percent_UJC = (n_UJC / sum(n_UJC)) * 100)
+  
+  # 3. Plot
+  
+  # Updated plot
+  comb_plot <- ggplot(comb_counts, aes(x = factor(n_samples), y = n_UJC)) +
+    # Boxplots for 1–4 samples
+    geom_boxplot(
+      data = comb_counts %>% filter(n_samples %in% 1:4),
+      aes(group = factor(n_samples)),
+      width = 0.25,
+      outlier.shape = NA
+    ) +
+    # Points for n_samples == 5 only
+    geom_point(
+      data = comb_counts %>% filter(n_samples == 5),
+      aes(group = pattern),
+      position = position_dodge(width = 0.8),
+      size = 2
+    ) +
+    scale_x_discrete(drop = FALSE) +
+    labs(
+      x     = "Number of samples present",
+      y     = "Percent of total UJCs",
+      title = paste0("Distribution of UJCs across ", prefix, " samples")
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+  comb_plot$full_data <- comb_counts
+  
+  # Percentage Updated plot
+  perc_comb_plot <- ggplot(comb_counts, aes(x = factor(n_samples), y = percent_UJC)) +
+    # Boxplots for 1–4 samples
+    geom_boxplot(
+      data = comb_counts %>% filter(n_samples %in% 1:4),
+      aes(group = factor(n_samples)),
+      width = 0.25,
+      outlier.shape = NA
+    ) +
+    # Points for n_samples == 5 only
+    geom_point(
+      data = comb_counts %>% filter(n_samples == 5),
+      aes(group = pattern),
+      position = position_dodge(width = 0.8),
+      size = 2
+    ) +
+    scale_x_discrete(drop = FALSE) +
+    labs(
+      x     = "Number of samples present",
+      y     = "Percent of total UJCs",
+      title = paste0("Distribution of UJCs across ", prefix, " samples")
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+  
+  
+  #########################################
+  ######### COMBINATION BAR PLOTs ######### 
+  ######################################### 
+  
+  # Calculate mean percent_UJC for each n_samples group
+  comb_bar_data <- comb_counts %>%
+    group_by(n_samples) %>%
+    summarise(
+      sum_n_UJC = sum(n_UJC, na.rm = TRUE),
+      sum_percent_UJC = sum(percent_UJC, na.rm = TRUE),
+      .groups = "drop"
+    )
+  
+  # Create the bar plot
+  comb_bar_plot <- ggplot(comb_bar_data, aes(x = factor(n_samples), y = sum_n_UJC)) +
+    geom_col(width = 0.6, fill = colorConesa(n = 1, palette = "complete")) +
+    labs(
+      x     = "Number of samples present",
+      y     = "Percent of total UJCs",
+      title = paste0("Average UJC distribution across ", prefix, " samples")
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+  
+  # Create the percentage bar plot
+  perc_comb_bar_plot <- ggplot(comb_bar_data, aes(x = factor(n_samples), y = sum_percent_UJC)) +
+    geom_col(width = 0.6, fill = colorConesa(n = 1, palette = "complete")) +
+    labs(
+      x     = "Number of samples present",
+      y     = "Percent of total UJCs",
+      title = paste0("Average UJC distribution across ", prefix, " samples")
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+  
+  ############################################
+  ######### COMBINATION BAR FL PLOTs ######### 
+  ############################################
+  
+  fl_sums <- bind_rows(class_df_list, .id = "sample") %>%
+    # 1) drop any "NA" UJCs
+    filter(!grepl("^NA", UJC)) %>%
+    # 2) sum FL per UJC *and* sample in one shot
+    group_by(UJC, sample) %>%
+    summarise(FL_sum = sum(FL, na.rm = TRUE), .groups = "drop") %>%
+    # 3) pivot to wide form, prefixing each sample column with "FL_"
+    pivot_wider(
+      names_from   = sample,
+      values_from  = FL_sum,
+      names_prefix = "FL_"
+    ) %>%
+    # 4) drop any unwanted columns in one go
+    select(-c("FL_Join&Call", "FL_Call&Join")) %>%
+    mutate(across(starts_with("FL_"), ~ replace_na(.x, 0)))
+  
+  sample_cols_fl <- grep("^FL", names(fl_sums), value = TRUE)
+  
+  fl_sums <- fl_sums %>%
+    mutate(
+      samples_present = rowSums(across(all_of(sample_cols_fl), ~ .x != 0))
+    )
+  
+  fl_comb <- fl_sums %>%
+    # drop UJCs with zero samples
+    filter(samples_present != 0) %>%
+    # compute a per-UJC total across all sample columns
+    mutate(
+      row_total = rowSums(across(all_of(sample_cols_fl)), na.rm = TRUE)
+    ) %>%
+    # now group by samples_present and sum those row-totals
+    group_by(samples_present) %>%
+    summarise(
+      FL_sum = sum(row_total, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    # add percentage column
+    mutate(
+      FL_percent = (FL_sum / sum(FL_sum)) * 100
+    )
+  
+  # 3) Barplot of absolute FL_sum
+  comb_fl_bar_plot <- ggplot(fl_comb, aes(x = factor(samples_present), y = FL_sum)) +
+    geom_col(width = 0.6, fill = colorConesa(n = 1, palette = "complete")) +
+    labs(
+      x     = "Number of samples present",
+      y     = "# reads supporting UJCs",
+      title = paste0("Total read distribution of UJCs across ", prefix, " samples")
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+  
+  # 4) Barplot of percentage
+  perc_comb_FL_bar_plot <- ggplot(fl_comb, aes(x = factor(samples_present), y = FL_percent)) +
+    geom_col(width = 0.6, fill = colorConesa(n = 1, palette = "complete")) +
+    labs(
+      x     = "Number of samples present",
+      y     = "Percent of total reads supporting UJCs",
+      title = paste0("Relative read distribution of UJCs across ", prefix, " samples")
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    )
+  
+  
+  #########################################
+  ######### DISCOVERY CURVE PLOTs ######### 
+  #########################################
+  
+  # For each n = 1 to 5
+  discovery_curve <- map_dfr(1:length(sample_cols), function(n) {
+    # All combinations of n samples
+    combos <- combn(sample_cols, n, simplify = FALSE)
+    
+    # For each combination, count UJCs present in at least one sample
+    ujc_counts <- map_int(combos, function(sample_set) {
+      listUJC %>%
+        select(all_of(sample_set)) %>%
+        transmute(present = rowSums(.) > 0) %>%
+        summarise(n_UJC = sum(present)) %>%
+        pull(n_UJC)
+    })
+    
+    tibble(
+      n_samples = n,
+      mean_UJCs = mean(ujc_counts),
+      min_UJCs  = min(ujc_counts),
+      max_UJCs  = max(ujc_counts)
+    )
+  })
+  
+  max_total <- discovery_curve %>% filter(n_samples == max(n_samples)) %>% pull(max_UJCs)
+
+  discovery_curve <- discovery_curve %>%
+    mutate(
+      mean_pct = 100 * mean_UJCs / max_total,
+      min_pct  = 100 * min_UJCs  / max_total,
+      max_pct  = 100 * max_UJCs  / max_total
+    )
+  
+  # Plot with min-max ribbon
+  cumul_ujc_curve_plot <- ggplot(discovery_curve, aes(x = n_samples, y = mean_UJCs)) +
+    geom_ribbon(aes(ymin = min_UJCs, ymax = max_UJCs), alpha = 0.2) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 2) +
+    scale_x_continuous(breaks = 1:length(sample_cols)) +
+    scale_y_continuous(limits = c(0, NA)) +
+    labs(
+      title = "Mean number of UJCs discovered across sample combinations",
+      x = "Number of samples included",
+      y = "Mean unique UJCs discovered"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  
+  # Percentage Plot with min-max ribbon
+  perc_cumul_ujc_curve_plot <- ggplot(discovery_curve, aes(x = n_samples, y = mean_pct)) +
+    geom_ribbon(aes(ymin = min_pct, ymax = max_pct), alpha = 0.2) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 2) +
+    scale_x_continuous(breaks = 1:length(sample_cols)) +
+    scale_y_continuous(limits = c(0, NA)) +
+    labs(
+      title = "Mean percentage of UJCs discovered across sample combinations",
+      x = "Number of samples included",
+      y = "Mean percentage UJCs discovered"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  
+  
+  #################################################
+  ######### COMBINATION STACKED BAR PLOTs ######### 
+  #################################################
+  
+  # Clean loop with non-conflicting variable name
+  stack_data <- map_dfr(1:length(sample_cols), function(k) {
+    combos <- combn(sample_cols, k, simplify = FALSE)
+  
+    bind_rows(lapply(combos, function(sample_set) {
+      ujc_data <- listUJC %>%
+        mutate(n_present = rowSums(across(all_of(sample_set)))) %>%
+        filter(n_present > 0) %>%
+        count(n_present) %>%
+        complete(n_present = 1:k, fill = list(n = 0)) %>%
+        mutate(n_samples = k)
+      
+      return(ujc_data)
+    }))
+  }) %>%
+    group_by(n_samples, n_present) %>%
+    summarise(
+      mean_count = mean(n),
+      sd_count = sd(n),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      percent = 100 * mean_count / max_total,
+      sd_percent = 100 * sd_count / max_total
+    )
+  
+  # Plot the stacked bar
+  cumul_ujc_stack_plot <- ggplot(stack_data, aes(x = factor(n_samples), y = mean_count, fill = factor(n_present))) +
+    geom_col(width = 0.8) +
+    scale_fill_conesa(palette = "complete", name = "Samples present in") +
+    labs(
+      title = "UJC reproducibility across sample combinations",
+      x = "Number of samples included",
+      y = "Mean number of UJCs",
+      fill = "Reproducibility"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  
+  perc_cumul_ujc_stack_plot <- ggplot(stack_data, aes(x = factor(n_samples), y = percent, fill = factor(n_present))) +
+    geom_col(width = 0.8) +
+    scale_fill_conesa(palette = "complete", name = "Samples present in") +
+    labs(
+      title = "UJC reproducibility across sample combinations",
+      x = "Number of samples included",
+      y = "Mean number of UJCs",
+      fill = "Reproducibility"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+  
+  
+  ####################################################
+  ######### COMBINATION FL STACKED BAR PLOTs ######### 
+  ####################################################
+  
+  
+  sample_combs_fl <- seq_along(sample_cols_fl) %>%
+    map(~ combn(sample_cols_fl, .x, simplify = FALSE)) %>%
+    flatten()
+  
+  combos_tbl <- tibble(
+    cols = sample_combs_fl
+  ) %>% 
+    rowwise() %>% 
+    mutate(
+      df = list(
+        fl_sums %>% 
+          select(all_of(cols)) %>%
+          mutate(
+            samples_present = rowSums(across(everything()) > 0)
+          ) %>%
+          group_by(samples_present) %>%
+          summarise(
+            across(
+              .cols = all_of(cols),
+              .fns  = ~sum(.x, na.rm = TRUE)
+            ),
+            .groups = "drop"
+          ) %>%
+          mutate(
+            FL_total = rowSums(across(all_of(cols)))
+          ) %>%
+          filter(samples_present > 0) %>%
+          select(samples_present, FL_total)
+      )
+    ) %>% 
+    ungroup()
+  
+  combos_fl <- combos_tbl %>%
+    # 1) add a column for the number of samples in each combo
+    mutate(nr_samples = map_int(cols, length)) %>%
+    
+    # 2) pull all the mini‐summaries into one flat table
+    unnest(df) %>%
+    
+    # 3) group by combo‐size and presence‐count, then average FL_total
+    group_by(nr_samples, samples_present) %>%
+    summarise(
+      min_FL_total = min(FL_total),
+      mean_FL_total = mean(FL_total),
+      sd_FL_total = sd(FL_total),
+      max_FL_total = max(FL_total),
+      .groups  = "drop"
+    ) %>%
+    
+    # (optional) arrange nicely
+    arrange(nr_samples, samples_present)
+  
+  fl_max <- combos_fl %>% 
+    filter(nr_samples == max(nr_samples)) %>% 
+    summarise(sum_FL_total = sum(max_FL_total)) %>% 
+    pull(sum_FL_total)
+  
+  combos_fl_pct <- combos_fl %>%
+    mutate(
+      mean_FL_pct = max_FL_total / fl_max * 100,
+      sd_FL_pct = sd_FL_total / fl_max * 100
+    )
+  
+  
+  cumul_ujc_fl_stack_plot <- ggplot(combos_fl, 
+                              aes(x = factor(nr_samples), 
+                                  y = mean_FL_total, 
+                                  fill = factor(samples_present))) +
+    geom_col(width = 0.8) +
+    scale_fill_conesa(palette = "complete", name = "Samples present in") +
+    labs(
+      title = "Mean FL total across sample combinations",
+      x     = "Number of samples included",
+      y     = "Mean # of reads supporting UJCs"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  
+  perc_cumul_ujc_fl_stack_plot <- ggplot(combos_fl_pct, 
+                               aes(x = factor(nr_samples), 
+                                   y = mean_FL_pct, 
+                                   fill = factor(samples_present))) +
+    geom_col(width = 0.8) +
+    scale_fill_conesa(palette = "complete", name = "Samples present in") +
+    labs(
+      title = "FL total as % of max across sample combinations",
+      x     = "Number of samples included",
+      y     = "Mean % of reads supporting UJCs"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+    
+  
+  ###################################
+  ######### RETURNING PLOTS ######### 
+  ###################################
+  
+  
+  upset_plots <- list()
+  upset_plots[["upset"]] <- upset_plot
+  upset_plots[["comb"]] <- comb_plot
+  upset_plots[["perc_comb"]] <- perc_comb_plot
+  upset_plots[["comb_bar"]] <- comb_bar_plot
+  upset_plots[["perc_comb_bar"]] <- perc_comb_bar_plot
+  upset_plots[["comb_fl_bar"]] <- comb_fl_bar_plot
+  upset_plots[["perc_comb_fl_bar"]] <- perc_comb_FL_bar_plot
+  upset_plots[["ujc_curve"]] <- cumul_ujc_curve_plot
+  upset_plots[["perc_ujc_curve"]] <- perc_cumul_ujc_curve_plot
+  upset_plots[["ujc_stack"]] <- cumul_ujc_stack_plot
+  upset_plots[["perc_ujc_stack"]] <- perc_cumul_ujc_stack_plot
+  upset_plots[["ujc_fl_stack"]] <- cumul_ujc_fl_stack_plot
+  upset_plots[["perc_ujc_fl_stack"]] <- perc_cumul_ujc_fl_stack_plot
+  
+  # Add dataframes for inspection
+  upset_plots[["ujc_stack_data"]] <- stack_data
+  upset_plots[["ujc_fl_stack_data"]] <- combos_fl
+  upset_plots[["ujc_fl_stack_pct_data"]] <- combos_fl_pct
+  
+  return(upset_plots)
+}
+
+
+```
+
+
+```{r}
+
+# class_df_list <- all_results$IsoSeq$IsoQuant$`1`$b_class_df_list
+# sample_labels <- sample_labels_Brain
+# 
+# listUJC <-do.call(rbind, lapply(class_df_list, function(class_df) class_df[!grepl("NA",class_df$UJC), c("structural_category", "UJC")]))
+# listUJC <- distinct(listUJC)
+#   
+# for (i in 1:length(class_df_list)){
+#   sample_id <- names(class_df_list)[[i]]
+#   listUJC[, sample_id] <- ifelse(listUJC$UJC %in% class_df_list[[i]]$UJC, 1, 0)
+# }
+# colnames(listUJC) <- c("structural_category", "UJC", sample_labels)
+#   
+#   
+
+
+```
+
+
+
+```{r isoform-comparison}
+
+compare_isoform_plots <- function(class_df_list) {
+
+  # 1. Combine list into single data.frame and filter
+  df <- bind_rows(class_df_list, .id = "source") %>%
+    # set the x‐axis order once and for all
+    mutate(source = factor(source, levels = c("Join&Call", "Call&Join"))) %>%
+    filter(!grepl("NA", UJC)) %>%
+    select(source, isoform, chrom, associated_gene,
+           associated_transcript, UJC, structural_category) %>%
+    filter(source %in% c("Join&Call", "Call&Join"))
+
+  # 2. Compute isoforms per associated_transcript (excluding "novel") and categorize
+  iso_per_transcript <- df %>%
+    filter(associated_transcript != "novel") %>%
+    group_by(source, associated_transcript) %>%
+    summarise(n_isoforms = n_distinct(isoform), .groups = "drop") %>%
+    mutate(
+      iso_cat = case_when(
+        n_isoforms == 1 ~ "1",
+        n_isoforms == 2 ~ "2",
+        n_isoforms == 3 ~ "3",
+        n_isoforms == 4 ~ "4",
+        n_isoforms >= 5 ~ "5+"
+      ),
+      iso_cat = factor(iso_cat, levels = c("1","2","3","4","5+"))
+    ) %>%
+      group_by(source, iso_cat) %>%
+      summarise(
+        n_assoc_transcript = n_distinct(associated_transcript),
+        sum_n_isoforms     = sum(n_isoforms),
+        .groups = "drop"
+      ) %>%
+        # 1. compute per‐source totals for each metric
+        group_by(source) %>%
+        mutate(
+          total_assoc = sum(n_assoc_transcript),
+          total_iso   = sum(sum_n_isoforms)
+        ) %>%
+        ungroup() %>%
+        # 2. find the overall max of each total and compute pct
+        mutate(
+          perc_assoc_transcript = n_assoc_transcript / max(total_assoc),
+          perc_n_isoforms       = sum_n_isoforms   / max(total_iso)
+        ) %>%
+        # 3. (optional) drop the helper columns if you don’t need them
+        select(-total_assoc, -total_iso)
+
+  # 3. Plot: count of transcripts by iso-cat
+  p_count_transcript <- iso_per_transcript %>%
+    ggplot(aes(x = source, y = n_assoc_transcript, fill = iso_cat)) +
+      geom_col() +
+      scale_fill_conesa(palette = "complete", name = "# of isoforms per transcript") +
+      labs(
+        title = "Redundancy of transcripts; brain",
+        x     = "Strategy",
+        y     = "# of associated transcripts"
+      ) +
+      theme_minimal()
+
+  # 3.5. Plot: % of transcripts by iso-cat
+  p_perc_transcript <- iso_per_transcript %>%
+    ggplot(aes(x = source, y = perc_assoc_transcript * 100, fill = iso_cat)) +
+      geom_col() +
+      scale_fill_conesa(palette = "complete", name = "# of isoforms per transcript") +
+      labs(
+        title = "Relative redundancy of transcripts; brain",
+        x     = "Strategy",
+        y     = "% of associated transcripts"
+      ) +
+      theme_minimal()
+
+  # 4. Plot: total isoforms by iso-cat (transcript)
+  p_iso_transcript <- iso_per_transcript %>%
+    ggplot(aes(x = source, y = sum_n_isoforms, fill = iso_cat)) +
+      geom_bar(stat = "identity") +
+      scale_fill_conesa(palette = "complete", name = "# of isoforms per transcript") +
+      labs(
+        title = "Redundancy of transcripts; brain",
+        x     = "Strategy",
+        y     = "# of isoforms"
+      ) +
+      theme_minimal()
+
+  # 4.5. Plot: % of isoforms by iso-cat (transcript)
+  p_perc_iso_transcript <- iso_per_transcript %>%
+    ggplot(aes(x = source, y = perc_n_isoforms * 100, fill = iso_cat)) +
+      geom_bar(stat = "identity") +
+      scale_fill_conesa(palette = "complete", name = "# of isoforms per transcript") +
+      labs(
+        title = "Relative redundancy of transcripts; brain",
+        x     = "Strategy",
+        y     = "% of isoforms"
+      ) +
+      theme_minimal()
+
+  # 5. Compute isoforms per UJC and categorize
+  iso_per_ujc <- df %>%
+    # 1. count isoforms per source×UJC
+    group_by(source, UJC) %>%
+    summarise(n_isoforms = n_distinct(isoform), .groups = "drop") %>%
+    # 2. bucket into iso_cat
+    mutate(
+      iso_cat = case_when(
+        n_isoforms == 1 ~ "1",
+        n_isoforms == 2 ~ "2",
+        n_isoforms == 3 ~ "3",
+        n_isoforms == 4 ~ "4",
+        n_isoforms >= 5 ~ "5+"
+      ),
+      iso_cat = factor(iso_cat, levels = c("1","2","3","4","5+"))
+    ) %>%
+    # 3. summarize into source×iso_cat
+    group_by(source, iso_cat) %>%
+    summarise(
+      n_UJC           = n_distinct(UJC),
+      sum_n_isoforms  = sum(n_isoforms),
+      .groups = "drop"
+    ) %>%
+    # 4. compute per-source totals
+    group_by(source) %>%
+    mutate(
+      total_UJC       = sum(n_UJC),
+      total_isoforms  = sum(sum_n_isoforms)
+    ) %>%
+    ungroup() %>%
+    # 5. scale by the overall max of each metric
+    mutate(
+      perc_UJC          = n_UJC          / max(total_UJC),
+      perc_n_isoforms   = sum_n_isoforms / max(total_isoforms)
+    ) %>%
+    # 6. drop helper totals if you don’t need them
+    select(-total_UJC, -total_isoforms)
+
+
+  # 6. Plot: count of UJCs by iso-cat
+  p_count_ujc <- iso_per_ujc %>%
+    ggplot(aes(x = source, y = n_UJC, fill = iso_cat)) +
+      scale_fill_conesa(palette = "complete", name = "# of isoforms per UJC") +
+      geom_bar(stat = "identity") +
+      labs(
+        title = "Redundancy of UJCs; brain",
+        x     = "Strategy",
+        y     = "# of UJCs"
+      ) +
+      theme_minimal()
+  
+  # 6.5. Plot: % of UJCs by iso-cat
+  p_perc_ujc <- iso_per_ujc %>%
+    ggplot(aes(x = source, y = perc_UJC * 100, fill = iso_cat)) +
+      scale_fill_conesa(palette = "complete", name = "# of isoforms per UJC") +
+      geom_bar(stat = "identity") +
+      labs(
+        title = "Redundancy of UJCs; brain",
+        x     = "Strategy",
+        y     = "% of UJCs"
+      ) +
+      theme_minimal()
+
+  # 7. Plot: total isoforms by iso-cat (UJC)
+  p_iso_ujc <- iso_per_ujc %>%
+    ggplot(aes(x = source, y = sum_n_isoforms, fill = iso_cat)) +
+      scale_fill_conesa(palette = "complete", name = "# of isoforms per UJC") +
+      geom_bar(stat = "identity") +
+      labs(
+        title = "Redundancy of UJCs; brain",
+        x     = "Strategy",
+        y     = "# of isoforms"
+      ) +
+      theme_minimal()
+
+  # 7.5. Plot: % isoforms by iso-cat (UJC)
+  p_perc_iso_ujc <- iso_per_ujc %>%
+    ggplot(aes(x = source, y = perc_n_isoforms * 100, fill = iso_cat)) +
+      scale_fill_conesa(palette = "complete", name = "# of isoforms per UJC") +
+      geom_bar(stat = "identity") +
+      labs(
+        title = "Redundancy of UJCs; brain",
+        x     = "Strategy",
+        y     = "% of isoforms"
+      ) +
+      theme_minimal()
+
+  # 8. Return named list of plots
+  list(
+    count_transcript = p_count_transcript,
+    perc_transcript = p_perc_transcript,
+    total_isoforms_transcript = p_iso_transcript,
+    perc_isoforms_transcript = p_perc_iso_transcript,
+    count_ujc = p_count_ujc,
+    perc_ujc = p_perc_ujc,
+    total_isoforms_ujc = p_iso_ujc,
+    perc_isoforms_ujc = p_perc_iso_ujc
+  )
+}
+
+
+```
+
+
+
+```{r setup-expression}
+
+sample_codes_brain <- paste0("B", 1:7)
+sample_codes_kidney <- paste0("K", 1:7)
+fastq_reads_pb_brain <- c(0, 0, 3687280, 3857138, 4415023, 3889091, 3915568)
+fastq_reads_pb_kidney <- c(0, 0, 4598058, 5138219, 3903934, 5437762, 5097532)
+
+# Create the named vector (dictionary)
+pacbio_read_numbers_brain <- setNames(fastq_reads_pb_brain, sample_codes_brain)
+pacbio_read_numbers_kidney <- setNames(fastq_reads_pb_kidney, sample_codes_kidney)
+
+# Calculate the sums
+pacbio_read_numbers_brain["B1"] <- sum(fastq_reads_pb_brain)
+pacbio_read_numbers_brain["B2"] <- sum(fastq_reads_pb_brain)
+
+pacbio_read_numbers_kidney["K1"] <- sum(fastq_reads_pb_kidney)
+pacbio_read_numbers_kidney["K2"] <- sum(fastq_reads_pb_kidney)
+
+
+# Define fastq_reads values
+fastq_reads_ont_brain <- c(0, 0, 11225327, 7712637, 9969075, 9282465, 5311045)
+fastq_reads_ont_kidney <- c(0, 0, 6433527, 8626753, 6705708, 4542656, 4857879)
+
+# Create the named vector (dictionary)
+ont_read_numbers_brain <- setNames(fastq_reads_ont_brain, sample_codes_brain)
+ont_read_numbers_kidney <- setNames(fastq_reads_ont_kidney, sample_codes_kidney)
+
+# Calculate the sums
+ont_read_numbers_brain["B1"] <- sum(fastq_reads_ont_brain)
+ont_read_numbers_brain["B2"] <- sum(fastq_reads_ont_brain)
+
+ont_read_numbers_kidney["K1"] <- sum(fastq_reads_ont_kidney)
+ont_read_numbers_kidney["K2"] <- sum(fastq_reads_ont_kidney)
+
+```
+
+
+```{r process-and-plot}
+sample_labels_Brain <- c('Join&Call',  'Call&Join', paste0("Brain ", 1:5))
+sample_labels_Kidney <- c('Join&Call',  'Call&Join', paste0("Kidney ", 1:5))
+
+load_df_lists <- function(paths) {
+  # Set root directory
+  knitr::opts_knit$set(root.dir = paths$src_dir)
+  
+  # Read and process data for Brain
+  load(paste0(paths$src_dir, "/Bclass_df_list.RData"))
+  
+  # Read and process data for Kidney
+  load(paste0(paths$src_dir, "/Kclass_df_list.RData"))
+  
+  names(Bclass_df_list) <- sample_labels_Brain
+  names(Kclass_df_list) <- sample_labels_Kidney
+  
+  # Include C&J FL counts
+  
+  if (all(!sapply(paste0("B3", 1:5), function(pattern) any(grepl(pattern, names(Bclass_df_list$`Call&Join`), ignore.case = TRUE))))) {
+    Bquant_cj <- read_tsv(paths$quant_cj_brain)
+    Bclass_df_list$`Call&Join` <- merge(x = Bclass_df_list$`Call&Join`, y = Bquant_cj, by.x = 1, by.y = 1, all.x = TRUE, suffixes = c("", "_FL"))
+  }
+  if (all(!sapply(paste0("K3", 1:5), function(pattern) any(grepl(pattern, names(Kclass_df_list$`Call&Join`), ignore.case = TRUE))))) {
+    Kquant_cj <- read_tsv(paths$quant_cj_kidney)
+    Kclass_df_list$`Call&Join` <- merge(x = Kclass_df_list$`Call&Join`, y = Kquant_cj, by.x = 1, by.y = 1, all.x = TRUE, suffixes = c("", "_FL"))
+  }
+  
+  # sum individual FL counts for Join&Call
+  if (!("FL" %in% names(Bclass_df_list$`Join&Call`)) || all(is.na(Bclass_df_list$`Join&Call`$FL))) {
+    b_columns <- grep("B3[1-5]", names(Bclass_df_list$`Join&Call`), value = TRUE, ignore.case = TRUE)
+    if (length(b_columns) != 5) {
+      stop("Error: The number of 'B31' to 'B35' columns in J&C is not exactly 5.")
+    }
+    Bclass_df_list$`Join&Call`$FL <- rowSums(Bclass_df_list$`Join&Call`[, b_columns], na.rm = TRUE)
+  }
+  if (!("FL" %in% names(Kclass_df_list$`Join&Call`)) || all(is.na(Kclass_df_list$`Join&Call`$FL))) {
+    k_columns <- grep("K3[1-5]", names(Kclass_df_list$`Join&Call`), value = TRUE, ignore.case = TRUE)
+    if (length(k_columns) != 5) {
+      stop("Error: The number of 'K31' to 'K35' columns in J&C is not exactly 5.")
+    }
+    Kclass_df_list$`Join&Call`$FL <- rowSums(Kclass_df_list$`Join&Call`[, k_columns], na.rm = TRUE)
+  }
+  
+  # sum individual FL counts for Call&Join
+  if (!("FL" %in% names(Bclass_df_list$`Call&Join`)) || all(is.na(Bclass_df_list$`Call&Join`$FL))) {
+    b_columns <- grep("B3[1-5]", names(Bclass_df_list$`Call&Join`), value = TRUE, ignore.case = TRUE)
+    if (length(b_columns) != 5) {
+      stop("Error: The number of 'B31' to 'B35' columns in C&J is not exactly 5.")
+    }
+    Bclass_df_list$`Call&Join`$FL <- rowSums(Bclass_df_list$`Call&Join`[, b_columns], na.rm = TRUE)
+  }
+  if (!("FL" %in% names(Kclass_df_list$`Call&Join`)) || all(is.na(Kclass_df_list$`Call&Join`$FL))) {
+    k_columns <- grep("K3[1-5]", names(Kclass_df_list$`Call&Join`), value = TRUE, ignore.case = TRUE)
+    if (length(k_columns) != 5) {
+      stop("Error: The number of 'K31' to 'K35' columns in C&J is not exactly 5.")
+    }
+    Kclass_df_list$`Call&Join`$FL <- rowSums(Kclass_df_list$`Call&Join`[, k_columns], na.rm = TRUE)
+  }
+  return(list(
+    Bclass_df_list = Bclass_df_list,
+    Kclass_df_list = Kclass_df_list
+  ))
+}
+
+
+process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, fl_threshold=0) {
+  
+  for (df_name in names(Bclass_df_list)) {
+    # Access the data frame by name
+    df <- Bclass_df_list[[df_name]]
+    
+    # Check if the "FL" column exists and has over 95% NA values
+    if ("FL" %in% names(df) && mean(is.na(df$FL)) > 0.95) {
+      stop(paste("Error: Data frame", df_name, "has over 95% NA values in the 'FL' column."))
+    }
+    
+    # apply filter
+    Bclass_df_list[[df_name]] <- df %>% 
+      filter(!is.na(FL) & FL >= fl_threshold)
+  }
+  
+  kidney_sample_mapping <- setNames(paste0("K", 1:7), paste0("B", 1:7))
+  
+  for (df_name in names(Kclass_df_list)) {
+    df <- Kclass_df_list[[df_name]]
+    
+    # Check for problematic FL column
+    if ("FL" %in% names(df) && mean(is.na(df$FL)) > 0.95) {
+      stop(paste("Error: K Data frame", df_name, "has over 95% NA values in the 'FL' column."))
+    }
+    
+    # Rename samples if necessary
+    if ("sample" %in% names(df)) {
+      df$sample <- recode(df$sample, !!!kidney_sample_mapping)
+    }
+    
+    # Apply filter
+    Kclass_df_list[[df_name]] <- df %>% 
+      filter(!is.na(FL) & FL >= fl_threshold)
+  }
+
+  # Combine and plot classification files for Brain samples
+  class_combined_df_Brain <- do.call(rbind, lapply(Bclass_df_list, function(class_df) class_df[, c("sample", "structural_category", "chrom", "FL")]))
+  plots_Brain <- plot_classification_data(class_combined_df_Brain, sample_labels_Brain)
+
+  # Combine and plot classification files for Kidney samples
+  class_combined_df_Kidney <- do.call(rbind, lapply(Kclass_df_list, function(class_df) class_df[, c("sample", "structural_category", "chrom", "FL")]))
+  plots_Kidney <- plot_classification_data(class_combined_df_Kidney, sample_labels_Kidney)
+
+  # Create combined plot for Total Transcripts
+  total_transcripts_plot <- ggarrange(
+    annotate_figure(ggarrange(plots_Brain[[1]], plots_Brain[[2]], nrow = 2), top = "Brain"),
+    annotate_figure(ggarrange(plots_Kidney[[1]], plots_Kidney[[2]], nrow = 2, common.legend = TRUE, legend = "right"), top = "Kidney"),
+    widths = c(2, 3)
+  )
+
+  # Exclude SIRVs and plot Mouse Transcripts
+  class_combined_df_Brain_Mouse <- class_combined_df_Brain[!grepl("SIRV", class_combined_df_Brain$chrom), ]
+  plots_Brain_Mouse <- plot_classification_data(class_combined_df_Brain_Mouse, sample_labels_Brain)
+
+  class_combined_df_Kidney_Mouse <- class_combined_df_Kidney[!grepl("SIRV", class_combined_df_Kidney$chrom), ]
+  plots_Kidney_Mouse <- plot_classification_data(class_combined_df_Kidney_Mouse, sample_labels_Kidney)
+
+  mouse_transcripts_plot <- ggarrange(
+    annotate_figure(ggarrange(plots_Brain_Mouse[[1]], plots_Brain_Mouse[[2]], nrow = 2), top = "Brain"),
+    annotate_figure(ggarrange(plots_Kidney_Mouse[[1]], plots_Kidney_Mouse[[2]], nrow = 2, common.legend = TRUE, legend = "right"), top = "Kidney"),
+    widths = c(2, 3)
+  )
+
+  # Include only SIRVs and plot SIRV Transcripts
+  class_combined_df_Brain_SIRVs <- class_combined_df_Brain[grepl("SIRV", class_combined_df_Brain$chrom), ]
+  plots_Brain_SIRVs <- plot_classification_data(class_combined_df_Brain_SIRVs, sample_labels_Brain)
+
+  class_combined_df_Kidney_SIRVs <- class_combined_df_Kidney[grepl("SIRV", class_combined_df_Kidney$chrom), ]
+  plots_Kidney_SIRVs <- plot_classification_data(class_combined_df_Kidney_SIRVs, sample_labels_Kidney)
+
+  sirv_transcripts_plot <- ggarrange(
+    annotate_figure(ggarrange(plots_Brain_SIRVs[[1]], plots_Brain_SIRVs[[2]], nrow = 2), top = "Brain"),
+    annotate_figure(ggarrange(plots_Kidney_SIRVs[[1]], plots_Kidney_SIRVs[[2]], nrow = 2, common.legend = TRUE, legend = "right"), top = "Kidney"),
+    widths = c(2, 3)
+  )
+  
+  # expression plots
+  
+  read_numbers_brain <- pacbio_read_numbers_brain
+  read_numbers_kidney <- pacbio_read_numbers_kidney
+  
+  if (technology == "ONT"){
+    read_numbers_brain <- ont_read_numbers_brain
+    read_numbers_kidney <- ont_read_numbers_kidney
+  }
+  
+  plots_Brain_Expression <- plot_classification_expression_data(class_combined_df_Brain, read_numbers_brain, sample_codes_brain, sample_labels_Brain)
+  plots_Kidney_Expression <- plot_classification_expression_data(class_combined_df_Kidney, read_numbers_kidney, sample_codes_kidney, sample_labels_Kidney)
+
+  # UpSet plots for Brain
+  UJC_counts_Brain <- UJC_count_matrix(Bclass_df_list, sample_labels_Brain)
+  UJC_counts_Brain[, sample_labels_Brain[1]] <- rowSums(UJC_counts_Brain[, 2:ncol(UJC_counts_Brain)], na.rm = TRUE) # Adjust as needed
+  UJC_counts_Brain[UJC_counts_Brain[, sample_labels_Brain[1]] == 0, sample_labels_Brain[1]] <- NA
+  UJC_counts_Brain[, 2:ncol(UJC_counts_Brain)] <- apply(UJC_counts_Brain[, 2:ncol(UJC_counts_Brain)], 2, cpm)
+  
+  brain_upset_plots <- create_upset_plot(Bclass_df_list, sample_labels_Brain, method)
+  # UpSet plot
+  
+  # Box plots
+  # box_arrange_brain <- cowplot::plot_grid(plotlist = l_plot_brain[[1]], nrow = 5)
+
+  # UpSet plots for Kidney
+  UJC_counts_Kidney <- UJC_count_matrix(Kclass_df_list, sample_labels_Kidney)
+  UJC_counts_Kidney[, sample_labels_Kidney[1]] <- rowSums(UJC_counts_Kidney[, 2:ncol(UJC_counts_Kidney)], na.rm = TRUE) # Adjust as needed
+  UJC_counts_Kidney[UJC_counts_Kidney[, sample_labels_Kidney[1]] == 0, sample_labels_Kidney[1]] <- NA
+  UJC_counts_Kidney[, 2:ncol(UJC_counts_Kidney)] <- apply(UJC_counts_Kidney[, 2:ncol(UJC_counts_Kidney)], 2, cpm)
+  
+  kidney_upset_plots <- create_upset_plot(Kclass_df_list, sample_labels_Kidney, method)
+  # UpSet plot
+  
+  # Box plots
+  # box_arrange_kidney <- cowplot::plot_grid(plotlist = l_plot_kidney[[1]], nrow = 5)
+  
+  # Compare isoform with ujc and assoc. transcript plots
+  brain_compare_plots <- compare_isoform_plots(Bclass_df_list)
+  kidney_compare_plots <- compare_isoform_plots(Kclass_df_list)
+
+  # Return all plots as a list
+  return(list(
+    total_transcripts_plot = total_transcripts_plot,
+    mouse_transcripts_plot = mouse_transcripts_plot,
+    sirv_transcripts_plot = sirv_transcripts_plot,
+    brain_plots = plots_Brain,
+    kidney_plots = plots_Kidney,
+    sirv_brain_plots = plots_Brain_SIRVs,
+    sirv_kidney_plots = plots_Kidney_SIRVs,
+    brain_upset_plot = brain_upset_plots[["upset"]],
+    brain_comb_plot = brain_upset_plots[["comb"]],
+    brain_perc_comb_plot = brain_upset_plots[["perc_comb"]],
+    brain_comb_bar_plot = brain_upset_plots[["comb_bar"]],
+    brain_perc_comb_bar_plot = brain_upset_plots[["perc_comb_bar"]],
+    brain_comb_fl_bar_plot = brain_upset_plots[["comb_fl_bar"]],
+    brain_perc_comb_fl_bar_plot = brain_upset_plots[["perc_comb_fl_bar"]],
+    brain_ujc_curve_plot = brain_upset_plots[["ujc_curve"]],
+    brain_perc_ujc_curve_plot = brain_upset_plots[["perc_ujc_curve"]],
+    brain_ujc_stack_plot = brain_upset_plots[["ujc_stack"]],
+    brain_perc_ujc_stack_plot = brain_upset_plots[["perc_ujc_stack"]],
+    brain_ujc_fl_stack_plot = brain_upset_plots[["ujc_fl_stack"]],
+    brain_perc_ujc_fl_stack_plot = brain_upset_plots[["perc_ujc_fl_stack"]],
+    brain_ujc_stack_data = brain_upset_plots[["ujc_stack_data"]],
+    brain_ujc_fl_stack_data = brain_upset_plots[["ujc_fl_stack_data"]],
+    brain_ujc_fl_stack_pct_data = brain_upset_plots[["ujc_fl_stack_pct_data"]],
+    kidney_upset_plot = kidney_upset_plots[["upset"]],
+    kidney_comb_plot = kidney_upset_plots[["comb"]],
+    kidney_perc_comb_plot = kidney_upset_plots[["perc_comb"]],
+    kidney_comb_bar_plot = kidney_upset_plots[["comb_bar"]],
+    kidney_perc_comb_bar_plot = kidney_upset_plots[["perc_comb_bar"]],
+    kidney_comb_fl_bar_plot = kidney_upset_plots[["comb_fl_bar"]],
+    kidney_perc_comb_fl_bar_plot = kidney_upset_plots[["perc_comb_fl_bar"]],
+    kidney_ujc_curve_plot = kidney_upset_plots[["ujc_curve"]],
+    kidney_perc_ujc_curve_plot = kidney_upset_plots[["perc_ujc_curve"]],
+    kidney_ujc_stack_plot = kidney_upset_plots[["ujc_stack"]],
+    kidney_perc_ujc_stack_plot = kidney_upset_plots[["perc_ujc_stack"]],
+    kidney_ujc_fl_stack_plot = kidney_upset_plots[["ujc_fl_stack"]],
+    kidney_perc_ujc_fl_stack_plot = kidney_upset_plots[["perc_ujc_fl_stack"]],
+    kidney_ujc_stack_data = kidney_upset_plots[["ujc_stack_data"]],
+    kidney_ujc_fl_stack_data = kidney_upset_plots[["ujc_fl_stack_data"]],
+    kidney_ujc_fl_stack_pct_data = kidney_upset_plots[["ujc_fl_stack_pct_data"]],
+    brain_expression_plot = plots_Brain_Expression,
+    kidney_expression_plot = plots_Kidney_Expression,
+    brain_compare_plots = brain_compare_plots,
+    kidney_compare_plots = kidney_compare_plots,
+    b_class_df_list = Bclass_df_list,
+    k_class_df_list = Kclass_df_list
+  ))
+}
+
+#box_arrange_brain = box_arrange_brain,
+#box_arrange_kidney = box_arrange_kidney,
+
+```
+
+
+
+```{r eval=FALSE}
+
+for (platform in names(all_results)) {
+  for (method in names(all_results[[platform]])) {
+    
+    bdflist <- all_results[[platform]][[method]]$`1`$b_class_df_list
+    
+    for (df in bdflist){
+      fl_na_ratio <- sum(is.na(df$FL)) / nrow(df)
+      if (fl_na_ratio > 0.9){
+        cat("FL is NA", platform, method, "\n")
+      }else{
+        cat("FL is fine; ratio: ", fl_na_ratio, platform, method, "\n")
+      }
+    }
+    
+  }
+}
+
+```
+
+
+```{r init-dirs}
+
+# Create nested src_dirs list
+
+src_dirs <- list(
+  IsoSeq = list(
+    IsoQuant = "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/isoquant/run3_report",
+    FLAIR = "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/flair_ar_sr/run7_report",
+    TALON = "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/talon/run3_report",
+    Mandalorion = "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/mandalorion/run1_report",
+    Bambu = "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/bambu/run3_report",
+    isoseq_sqanti = "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/isoseq_isoseq_new_filter_data/report"
+  ),
+  ONT = list(
+    IsoQuant = "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/ont/isoquant/run2_report",
+    FLAIR = "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/ont/flair_ar_sr/run2_report",
+    TALON = "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/ont/talon/run1_report",
+    Bambu = "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/ont/bambu/run2_report"
+  )
+)
+
+
+```
+
+
+```{r}
+# Function to recursively check paths and specific files
+check_paths <- function(dirs, parent = "") {
+  required_files <- c("Bclass_df_list.RData", "Kclass_df_list.RData")
+  
+  for (name in names(dirs)) {
+    path_or_sublist <- dirs[[name]]
+    current <- if (parent == "") name else paste(parent, name, sep = " -> ")
+
+    if (is.list(path_or_sublist)) {
+      check_paths(path_or_sublist, current)
+    } else {
+      if (!dir.exists(path_or_sublist)) {
+        cat(sprintf("Path does NOT exist: [%s] %s\n", current, path_or_sublist))
+      } else {
+        cat(sprintf("Path OK: [%s]\n", current))
+        for (file in required_files) {
+          file_path <- file.path(path_or_sublist, file)
+          if (!file.exists(file_path)) {
+            cat(sprintf("  Missing file: %s\n", file))
+          } else {
+            cat(sprintf("  Found file: %s\n", file))
+          }
+        }
+      }
+    }
+  }
+}
+
+# Run check on your directory structure
+check_paths(src_dirs)
+```
+
+
+```{r usage}
+
+# Initialize an empty nested list for all_results
+all_results <- list()
+
+fl_filter_levels <- list(1, 3, 5, 10)
+
+# Loop over the nested src_dirs structure
+for (platform in names(src_dirs)) {
+  all_results[[platform]] <- list()
+  for (method in names(src_dirs[[platform]])) {
+    all_results[[platform]][[method]] <- list()
+    cat(platform, method, "\n")
+    src_dir <- src_dirs[[platform]][[method]]
+    paths <- get_paths(src_dir)
+    
+    df_lists <- load_df_lists(paths)
+    
+    for (fl_filter_level in fl_filter_levels){
+      # Process and plot data using the loaded data
+      results <- process_and_plot(df_lists$Bclass_df_list, df_lists$Kclass_df_list, technology = platform, fl_threshold = fl_filter_level)
+      
+      # Store the results
+      all_results[[platform]][[method]][[as.character(fl_filter_level)]] <- results
+      
+    }
+  }
+}
+
+```
+
+
+# Create comprehensive summary tables for inspection
+```{r create-summary-tables}
+
+# Define the structure
+data_types <- c("IsoSeq", "ONT")
+tools <- c("IsoQuant", "FLAIR", "Bambu", "TALON", "Mandalorion", "isoseq_sqanti")
+tissues <- c("brain", "kidney")
+fl_filter_level <- "1"
+
+# Function to extract UJC stack data
+extract_ujc_data <- function(data_type, tool, tissue) {
+  tryCatch({
+    data <- all_results[[data_type]][[tool]][[fl_filter_level]][[paste0(tissue, "_ujc_stack_data")]]
+    if (!is.null(data)) {
+      data %>%
+        mutate(
+          data_type = data_type,
+          tool = tool,
+          tissue = tissue
+        )
+    } else {
+      NULL
+    }
+  }, error = function(e) {
+    NULL
+  })
+}
+
+# Function to extract FL stack data
+extract_fl_data <- function(data_type, tool, tissue) {
+  tryCatch({
+    fl_data <- all_results[[data_type]][[tool]][[fl_filter_level]][[paste0(tissue, "_ujc_fl_stack_data")]]
+    pct_data <- all_results[[data_type]][[tool]][[fl_filter_level]][[paste0(tissue, "_ujc_fl_stack_pct_data")]]
+    
+    if (!is.null(fl_data) && !is.null(pct_data)) {
+      fl_data %>%
+        left_join(pct_data %>% select(nr_samples, samples_present, mean_FL_pct, sd_FL_pct), 
+                  by = c("nr_samples", "samples_present")) %>%
+        mutate(
+          data_type = data_type,
+          tool = tool,
+          tissue = tissue
+        )
+    } else {
+      NULL
+    }
+  }, error = function(e) {
+    NULL
+  })
+}
+
+# Extract all UJC data
+all_ujc_data <- map_dfr(data_types, function(dt) {
+  map_dfr(tools, function(tool) {
+    map_dfr(tissues, function(tissue) {
+      extract_ujc_data(dt, tool, tissue)
+    })
+  })
+})
+
+# Extract all FL data
+all_fl_data <- map_dfr(data_types, function(dt) {
+  map_dfr(tools, function(tool) {
+    map_dfr(tissues, function(tissue) {
+      extract_fl_data(dt, tool, tissue)
+    })
+  })
+})
+
+# Create comprehensive summary tables
+brain_ujc_summary <- all_ujc_data %>%
+  filter(tissue == "brain") %>%
+  group_by(n_samples, n_present, data_type, tool) %>%
+  summarise(
+    mean_count = mean(mean_count, na.rm = TRUE),
+    sd_count = mean(sd_count, na.rm = TRUE),
+    percent = mean(percent, na.rm = TRUE),
+    sd_percent = mean(sd_percent, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(n_samples, n_present, data_type, tool) %>%
+  mutate(
+    across(c(mean_count, sd_count), ~round(., 2)),
+    across(c(percent, sd_percent), ~round(., 3))
+  )
+
+kidney_ujc_summary <- all_ujc_data %>%
+  filter(tissue == "kidney") %>%
+  group_by(n_samples, n_present, data_type, tool) %>%
+  summarise(
+    mean_count = mean(mean_count, na.rm = TRUE),
+    sd_count = mean(sd_count, na.rm = TRUE),
+    percent = mean(percent, na.rm = TRUE),
+    sd_percent = mean(sd_percent, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(n_samples, n_present, data_type, tool) %>%
+  mutate(
+    across(c(mean_count, sd_count), ~round(., 2)),
+    across(c(percent, sd_percent), ~round(., 3))
+  )
+
+brain_fl_summary <- all_fl_data %>%
+  filter(tissue == "brain") %>%
+  group_by(nr_samples, samples_present, data_type, tool) %>%
+  summarise(
+    mean_FL_total = mean(mean_FL_total, na.rm = TRUE),
+    sd_FL_total = mean(sd_FL_total, na.rm = TRUE),
+    mean_FL_pct = mean(mean_FL_pct, na.rm = TRUE),
+    sd_FL_pct = mean(sd_FL_pct, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(nr_samples, samples_present, data_type, tool) %>%
+  mutate(
+    across(c(mean_FL_total, sd_FL_total), ~round(., 2)),
+    across(c(mean_FL_pct, sd_FL_pct), ~round(., 3))
+  )
+
+kidney_fl_summary <- all_fl_data %>%
+  filter(tissue == "kidney") %>%
+  group_by(nr_samples, samples_present, data_type, tool) %>%
+  summarise(
+    mean_FL_total = mean(mean_FL_total, na.rm = TRUE),
+    sd_FL_total = mean(sd_FL_total, na.rm = TRUE),
+    mean_FL_pct = mean(mean_FL_pct, na.rm = TRUE),
+    sd_FL_pct = mean(sd_FL_pct, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(nr_samples, samples_present, data_type, tool) %>%
+  mutate(
+    across(c(mean_FL_total, sd_FL_total), ~round(., 2)),
+    across(c(mean_FL_pct, sd_FL_pct), ~round(., 3))
+  )
+
+# Display tables
+print("Brain UJC Summary (all tools and data types):")
+print(brain_ujc_summary)
+
+print("Kidney UJC Summary (all tools and data types):")
+print(kidney_ujc_summary)
+
+print("Brain FL Summary (all tools and data types):")
+print(brain_fl_summary)
+
+print("Kidney FL Summary (all tools and data types):")
+print(kidney_fl_summary)
+```
+
+
+```{r}
+
+class_df_list <- all_results$IsoSeq$IsoQuant$`1`$b_class_df_list
+
+listUJC <- do.call(rbind, Map(function(df, nm) {
+  sub <- df[!grepl("NA", df$UJC),
+            c("isoform", "chrom", "associated_gene",
+              "associated_transcript", "UJC", "structural_category")]
+  # add the source-name column
+  sub$source <- nm
+  sub
+}, class_df_list, names(class_df_list)))
+
+
+# 1. Filter to just the two sources you care about
+comparison_df <- listUJC %>%
+  filter(source %in% c("Join&Call", "Call&Join"))
+
+# 2. General “distinct counts” & row-counts per source
+general_summary <- comparison_df %>%
+  group_by(source) %>%
+  summarise(
+    total_rows                     = n(),
+    distinct_UJC                   = n_distinct(UJC),
+    distinct_isoform               = n_distinct(isoform),
+    distinct_associated_gene       = n_distinct(associated_gene),
+    distinct_associated_transcript = n_distinct(associated_transcript),
+    missing_UJC                    = sum(is.na(UJC)),
+    missing_isoform                = sum(is.na(isoform)),
+    novel_transcript_rows          = sum(associated_transcript == "novel"),
+    .groups = "drop"
+  )
+print(general_summary)
+
+# 3. Compute number of unique isoforms per UJC, for each source
+iso_per_ujc <- comparison_df %>%
+  group_by(source, UJC) %>%
+  summarise(
+    n_isoforms = n_distinct(isoform),
+    .groups = "drop"
+  )
+
+# 4. Summarise the distribution of isoforms-per-UJC by source
+iso_summary <- iso_per_ujc %>%
+  group_by(source) %>%
+  summarise(
+    n_UJC          = n(),              # how many distinct UJCs we saw
+    mean_iso       = mean(n_isoforms),
+    median_iso     = median(n_isoforms),
+    sd_iso         = sd(n_isoforms),
+    min_iso        = min(n_isoforms),
+    max_iso        = max(n_isoforms)
+  )
+print(iso_summary)
+
+# 5. Compute number of unique isoforms per associated_transcript, for each source
+iso_per_transcript <- comparison_df %>%
+  filter(associated_transcript != "novel") %>%
+  group_by(source, associated_transcript) %>%
+  summarise(
+    n_isoforms = n_distinct(isoform),
+    .groups = "drop"
+  )
+
+# 6. Summarise the distribution of isoforms-per-transcript by source
+transcript_summary <- iso_per_transcript %>%
+  group_by(source) %>%
+  summarise(
+    n_transcripts = n(),               # how many distinct transcripts (excluding "novel")
+    mean_iso      = mean(n_isoforms),
+    median_iso    = median(n_isoforms),
+    sd_iso        = sd(n_isoforms),
+    min_iso       = min(n_isoforms),
+    max_iso       = max(n_isoforms)
+  )
+print(transcript_summary)
+
+
+```
+
+
+
+```{r plotting-libs}
+
+library(ggplot2)
+library(patchwork)
+library(cowplot)
+
+```
+
+
+
+```{r bar-plot-themes}
+bar_theme <- function(plot, title, ylims) {
+  plot +
+    scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+    ggtitle(title) +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
+      axis.text = element_text(size = 8),
+      axis.title = element_text(size = 10)
+    ) +
+    coord_cartesian(ylim = ylims)
+}
+
+bar_theme_noaxis <- function(plot, title, ylims) {
+  bar_theme(plot, title, ylims) +
+    theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+    )
+}
+```
+
+
+```{r assemble-plots-brain}
+
+assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle,
+                               pb_ylims = c(0, 325000), ont_ylims = c(0, 125000), 
+                               plot_name_suffix = "_plots", use_scientific = FALSE) {
+  
+  fl_filter_level = as.character(fl_filter_level)
+  
+  plot_name = paste(tissue, plot_name_suffix, sep="")
+  
+  # create placeholder
+  # placeholder_plot <- all_results$IsoSeq$isoseq_sqanti[[fl_filter_level]]$brain_plots[[1]] + 
+  #   annotate("segment", x = -Inf, xend = Inf, y = -Inf, yend = Inf, color = "red", size = 1.5) +  # Diagonal line \
+  #   annotate("segment", x = -Inf, xend = Inf, y = Inf, yend = -Inf, color = "red", size = 1.5) # Diagonal line /
+  
+  # select and adjust plots
+  bar_1_1 <- bar_theme(
+    all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
+    "IsoQuant",
+    pb_ylims
+  )
+    
+  bar_1_2 <- bar_theme(
+    all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]][[1]],
+    "FLAIR",
+    pb_ylims
+  )
+  
+  bar_1_3 <- bar_theme_noaxis(
+    all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]][[1]],
+    "Bambu",
+    pb_ylims
+  )
+  
+  bar_1_4 <- bar_theme_noaxis(
+    all_results$IsoSeq$TALON[[fl_filter_level]][[plot_name]][[1]],
+    "TALON",
+    pb_ylims
+  )
+    
+  bar_2_1 <- bar_theme(
+    all_results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]][[1]],
+    "Mandalorion",
+    pb_ylims
+  )
+  
+  bar_2_2 <- bar_theme(
+    all_results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]][[1]],
+    "IsoSeq + SQANTI3",
+    pb_ylims
+  )
+  
+  bar_3_1 <- bar_theme(
+    all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
+    "IsoQuant",
+    ont_ylims
+  ) +
+    ylab(" # isoforms")
+  
+  bar_3_2 <- bar_theme(
+    all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]][[1]],
+    "FLAIR",
+    ont_ylims
+  ) +
+    ylab(" # isoforms")
+  
+  bar_3_3 <- bar_theme(
+    all_results$ONT$Bambu[[fl_filter_level]][[plot_name]][[1]],
+    "Bambu",
+    ont_ylims
+  ) +
+    ylab(" # isoforms")
+  
+  bar_3_4 <- bar_theme(
+    all_results$ONT$TALON[[fl_filter_level]][[plot_name]][[1]],
+    "TALON",
+    ont_ylims
+  ) +
+    ylab(" # isoforms")
+  
+  # If use_scientific is TRUE, add scientific notation for y axis ticks to each plot
+  if (use_scientific) {
+    sci_format <- scales::scientific_format()
+    bar_1_1 <- bar_1_1 + scale_y_continuous(labels = sci_format)
+    bar_1_2 <- bar_1_2 + scale_y_continuous(labels = sci_format)
+    bar_1_3 <- bar_1_3 + scale_y_continuous(labels = sci_format)
+    bar_1_4 <- bar_1_4 + scale_y_continuous(labels = sci_format)
+    bar_2_1 <- bar_2_1 + scale_y_continuous(labels = sci_format)
+    bar_2_2 <- bar_2_2 + scale_y_continuous(labels = sci_format)
+    bar_3_1 <- bar_3_1 + scale_y_continuous(labels = sci_format)
+    bar_3_2 <- bar_3_2 + scale_y_continuous(labels = sci_format)
+    bar_3_3 <- bar_3_3 + scale_y_continuous(labels = sci_format)
+    bar_3_4 <- bar_3_4 + scale_y_continuous(labels = sci_format)
+  }
+  
+  bar_plot <- (
+    bar_1_1 + bar_1_2 + bar_1_3 + bar_1_4 +
+    bar_2_1 + bar_2_2 + plot_spacer() +
+    plot_spacer() +
+    bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
+  ) +
+    plot_layout(
+      design = "
+        ABCD
+        EFGG
+        HHHH
+        IJKM
+      ",
+      heights = c(1, 1, 0.2, 1),
+      axes = "collect"
+    ) +
+    plot_annotation(
+      title = title,
+      subtitle = subtitle,
+      theme = theme(
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 10, hjust = 0.5)
+      )
+    )
+  
+  
+  # Define label plots
+  label_a <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
+             size = 5, fontface = "bold") +
+    theme_void()
+  
+  label_b <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
+             size = 5, fontface = "bold") +
+    theme_void()
+  
+  final_plot <- wrap_elements(full = bar_plot)
+  final_plot <- final_plot + 
+    inset_element(label_a, left = -0.02, bottom = 0.85, right = 0.05, top = 0.95) +
+    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.45)
+
+  
+  return(final_plot)
+}
+
+```
+
+```{r}
+
+pb_ylims = c(0, 160000)
+ont_ylims = c(0, 80000)
+
+brain_plot_1 <- assemble_bar_plots(all_results, "brain", 1, title="Transcripts per structural category; brain", subtitle="Filter: >=1 read", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+ggsave("brain_bar_filter1.pdf", device = cairo_pdf, plot = brain_plot_1, width=6, height=4, unit="in")
+brain_plot_3 <- assemble_bar_plots(all_results, "brain", 3, title="Transcripts per structural category; brain", subtitle="Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+ggsave("brain_bar_filter3.pdf", device = cairo_pdf, plot = brain_plot_3, width=6, height=4, unit="in")
+brain_plot_5 <- assemble_bar_plots(all_results, "brain", 5, title="Transcripts per structural category; brain", subtitle="Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+ggsave("brain_bar_filter5.pdf", device = cairo_pdf, plot = brain_plot_5, width=6, height=4, unit="in")
+brain_plot_10 <- assemble_bar_plots(all_results, "brain", 10, title="Transcripts per structural category; brain", subtitle="Filter: >=10 read", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+ggsave("brain_bar_filter10.pdf", device = cairo_pdf, plot = brain_plot_10, width=6, height=4, unit="in")
+
+brain_plot_1
+brain_plot_3
+brain_plot_5
+brain_plot_10
+
+```
+
+```{r}
+
+  
+results <- all_results
+tissue <- "brain"
+fl_filter_level = 1
+title <- ""
+subtitle <- ""
+pb_ylims = c(0, 125000)
+ont_ylims = c(0, 125000)
+plot_name_suffix = "_plots"
+use_scientific = FALSE
+  
+fl_filter_level = as.character(fl_filter_level)
+
+plot_name = paste(tissue, plot_name_suffix, sep="")
+
+# select and adjust plots
+bar_1_1 <- bar_theme(
+  all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
+  "IsoQuant",
+  pb_ylims
+)
+  
+bar_1_2 <- bar_theme(
+  all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]][[1]],
+  "FLAIR",
+  pb_ylims
+)
+  
+bar_1_3 <- bar_theme(
+  all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]][[1]],
+  "FLAIR",
+  pb_ylims
+)
+
+# select and adjust plots
+bar_2_1 <- bar_theme(
+  all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
+  "IsoQuant",
+  ont_ylims
+)
+  
+bar_2_2 <- bar_theme(
+  all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]][[1]],
+  "FLAIR",
+  ont_ylims
+)
+  
+bar_2_3 <- bar_theme(
+  all_results$ONT$Bambu[[fl_filter_level]][[plot_name]][[1]],
+  "FLAIR",
+  ont_ylims
+)
+
+# If use_scientific is TRUE, add scientific notation for y axis ticks to each plot
+if (use_scientific) {
+  sci_format <- scales::scientific_format()
+  bar_1_1 <- bar_1_1 + scale_y_continuous(labels = sci_format)
+  bar_1_2 <- bar_1_2 + scale_y_continuous(labels = sci_format)
+}
+
+bar_plot <- (
+  bar_1_1 + bar_1_2 + bar_1_3 +
+  bar_2_1 + bar_2_2 + bar_2_3
+) +
+  plot_layout(
+    design = "
+      ABC
+      XXX
+      DEF
+    ",
+    axes = "collect",
+    heights = c(1, 0.2, 1)
+  ) +
+  plot_annotation(
+    title = "Transcriptome diversity by isoforms",
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+    )
+  )
+
+bar_plot
+
+```
+
+```{r}
+
+results <- all_results
+tissue <- "brain"
+fl_filter_level <- 1
+title <- ""
+pb_ylims = c(0, 20000000)
+ont_ylims = c(0, 45000000) 
+plot_name_suffix = "_expression_plot"
+use_scientific = TRUE
+
+fl_filter_level = as.character(fl_filter_level)
+
+plot_name = paste(tissue, plot_name_suffix, sep="")
+
+# select and adjust plots
+bar_1_1 <- bar_theme(
+  all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
+  "IsoQuant",
+  pb_ylims
+)
+  
+bar_1_2 <- bar_theme(
+  all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]][[1]],
+  "FLAIR",
+  pb_ylims
+)
+  
+bar_1_3 <- bar_theme(
+  all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]][[1]],
+  "Bambu",
+  pb_ylims
+)
+
+# select and adjust plots
+bar_2_1 <- bar_theme(
+  all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
+  "IsoQuant",
+  ont_ylims
+)
+  
+bar_2_2 <- bar_theme(
+  all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]][[1]],
+  "FLAIR",
+  ont_ylims
+)
+  
+bar_2_3 <- bar_theme(
+  all_results$ONT$Bambu[[fl_filter_level]][[plot_name]][[1]],
+  "Bambu",
+  ont_ylims
+)
+
+
+# If use_scientific is TRUE, add scientific notation for y axis ticks to each plot
+if (use_scientific) {
+  millions_format <- function(x) {
+    paste0(x / 1e6, "M")
+  }
+  bar_1_1 <- bar_1_1 + scale_y_continuous(labels = millions_format)
+  bar_1_2 <- bar_1_2 + scale_y_continuous(labels = millions_format)
+  bar_1_3 <- bar_1_3 + scale_y_continuous(labels = millions_format)
+  bar_2_1 <- bar_2_1 + scale_y_continuous(labels = millions_format)
+  bar_2_2 <- bar_2_2 + scale_y_continuous(labels = millions_format)
+  bar_2_3 <- bar_2_3 + scale_y_continuous(labels = millions_format)
+}
+
+# assemble final plot
+
+bar_plot <- (
+  bar_1_1 + bar_1_2 + bar_1_3 +
+  bar_2_1 + bar_2_2 + bar_2_3
+) +
+  plot_layout(
+    design = "
+      ABC
+      XXX
+      DEF
+    ",
+    axes = "collect",
+    heights = c(1, 0.2, 1)
+  ) +
+  plot_annotation(
+    title = "Transcriptome diversity by reads",
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+    )
+  )
+
+bar_plot
+  
+```
+
+
+```{r assemble-plots-kidney}
+
+pb_ylims = c(0, 140000)
+ont_ylims = c(0, 70000)
+
+kidney_plot_1 <- assemble_bar_plots(all_results, "kidney", 1, title="Transcripts per structural category; kidney", subtitle="", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+ggsave("kidney_bar_filter1.pdf", device = cairo_pdf, plot = kidney_plot_1, width=6, height=4, unit="in")
+kidney_plot_3 <- assemble_bar_plots(all_results, "kidney", 3, title="Transcripts per structural category; kidney", subtitle="Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+ggsave("kidney_bar_filter3.pdf", device = cairo_pdf, plot = kidney_plot_3, width=6, height=4, unit="in")
+kidney_plot_5 <- assemble_bar_plots(all_results, "kidney", 5, title="Transcripts per structural category; kidney", subtitle="Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+ggsave("kidney_bar_filter5.pdf", device = cairo_pdf, plot = kidney_plot_5, width=6, height=4, unit="in")
+kidney_plot_10 <- assemble_bar_plots(all_results, "kidney", 10, title="Transcripts per structural category; kidney", subtitle="Filter: >=10 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+ggsave("kidney_bar_filter10.pdf", device = cairo_pdf, plot = kidney_plot_10, width=6, height=4, unit="in")
+
+kidney_plot_1
+kidney_plot_3
+kidney_plot_5
+kidney_plot_10
+
+```
+
+```{r read-numbers}
+# Define sample names and their fastq_reads values
+samples <- c("B31", "B32", "B33", "B34", "B35", "K31", "K32", "K33", "K34", "K35")
+fastq_reads_pb <- c(3687280, 3857138, 4415023, 3889091, 3915568, 4598058, 5138219, 3903934, 5437762, 5097532)
+
+# Create the named vector (dictionary)
+pacbio_read_numbers <- setNames(fastq_reads_pb, samples)
+
+# Calculate the sum for samples starting with "B" (e.g., brain)
+pacbio_read_numbers["brain"] <- sum(pacbio_read_numbers[startsWith(names(pacbio_read_numbers), "B")])
+
+# Calculate the sum for samples starting with "K" (e.g., kidney)
+pacbio_read_numbers["kidney"] <- sum(pacbio_read_numbers[startsWith(names(pacbio_read_numbers), "K")])
+
+# To view the updated vector:
+pacbio_read_numbers
+
+# Define fastq_reads values
+fastq_reads_ont <- c(11225327, 7712637, 9969075, 9282465, 5311045, 6433527, 8626753, 6705708, 4542656, 4857879)
+
+# Create the named vector (dictionary)
+ont_read_numbers <- setNames(fastq_reads_ont, samples)
+
+# Add the "brain" entry: sum of fastq_reads for samples starting with "B"
+ont_read_numbers["brain"] <- sum(ont_read_numbers[startsWith(names(ont_read_numbers), "B")])
+
+# Add the "kidney" entry: sum of fastq_reads for samples starting with "K"
+ont_read_numbers["kidney"] <- sum(ont_read_numbers[startsWith(names(ont_read_numbers), "K")])
+
+# View the complete vector with the new entries
+ont_read_numbers
+
+```
+
+
+```{r assemble-plots-brain-expression}
+
+assemble_expr_bar_plots <- function(results, tissue, fl_filter_level, title,
+                               pb_ylims = c(0, 25000000), ont_ylims = c(0, 45000000), 
+                               plot_name_suffix = "_plots", use_scientific = FALSE) {
+  
+  fl_filter_level = as.character(fl_filter_level)
+  
+  plot_name = paste(tissue, plot_name_suffix, sep="")
+  
+  # select and adjust plots
+  bar_1_1 <- bar_theme(
+    all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
+    "IsoQuant",
+    pb_ylims
+  )
+    
+  bar_1_2 <- bar_theme(
+    all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]][[1]],
+    "FLAIR",
+    pb_ylims
+  )
+  
+  bar_1_3 <- bar_theme_noaxis(
+    all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]][[1]],
+    "Bambu",
+    pb_ylims
+  )
+  
+  bar_1_4 <- bar_theme_noaxis(
+    all_results$IsoSeq$TALON[[fl_filter_level]][[plot_name]][[1]],
+    "TALON",
+    pb_ylims
+  )
+    
+  bar_2_1 <- bar_theme(
+    all_results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]][[1]],
+    "Mandalorion",
+    pb_ylims
+  )
+  
+  bar_2_2 <- bar_theme(
+    all_results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]][[1]],
+    "IsoSeq + SQANTI3",
+    pb_ylims
+  )
+  
+  bar_3_1 <- bar_theme(
+    all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
+    "IsoQuant",
+    ont_ylims
+  ) +
+    ylab(" # reads")
+  
+  bar_3_2 <- bar_theme(
+    all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]][[1]],
+    "FLAIR",
+    ont_ylims
+  ) +
+    ylab(" # reads")
+  
+  bar_3_3 <- bar_theme(
+    all_results$ONT$Bambu[[fl_filter_level]][[plot_name]][[1]],
+    "Bambu",
+    ont_ylims
+  ) +
+    ylab(" # reads")
+  
+  bar_3_4 <- bar_theme(
+    all_results$ONT$TALON[[fl_filter_level]][[plot_name]][[1]],
+    "TALON",
+    ont_ylims
+  ) +
+    ylab(" # reads")
+  
+  # If use_scientific is TRUE, add scientific notation for y axis ticks to each plot
+  if (use_scientific) {
+    millions_format <- function(x) {
+      paste0(x / 1e6, "M")
+    }
+    bar_1_1 <- bar_1_1 + scale_y_continuous(labels = millions_format)
+    bar_1_2 <- bar_1_2 + scale_y_continuous(labels = millions_format)
+    bar_1_3 <- bar_1_3 + scale_y_continuous(labels = millions_format)
+    bar_1_4 <- bar_1_4 + scale_y_continuous(labels = millions_format)
+    bar_2_1 <- bar_2_1 + scale_y_continuous(labels = millions_format)
+    bar_2_2 <- bar_2_2 + scale_y_continuous(labels = millions_format)
+    bar_3_1 <- bar_3_1 + scale_y_continuous(labels = millions_format)
+    bar_3_2 <- bar_3_2 + scale_y_continuous(labels = millions_format)
+    bar_3_3 <- bar_3_3 + scale_y_continuous(labels = millions_format)
+    bar_3_4 <- bar_3_4 + scale_y_continuous(labels = millions_format)
+  }
+  
+  # assemble final plot
+  
+  bar_plot <- (
+    bar_1_1 + bar_1_2 + bar_1_3 + bar_1_4 +
+    bar_2_1 + bar_2_2 + plot_spacer() +
+    plot_spacer() +
+    bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
+  ) +
+    plot_layout(
+      design = "
+        ABCD
+        EFGG
+        HHHH
+        IJKM
+      ",
+      heights = c(1, 1, 0.2, 1),
+      axes = "collect"
+    ) +
+    plot_annotation(
+      title = title,
+      theme = theme(
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+      )
+    )
+  
+  
+  # Define label plots
+  label_a <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
+             size = 5, fontface = "bold") +
+    theme_void()
+  
+  label_b <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
+             size = 5, fontface = "bold") +
+    theme_void()
+  
+  final_plot <- wrap_elements(full = bar_plot)
+  final_plot <- final_plot + 
+    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
+    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.45)
+
+  return(final_plot)
+  
+}
+
+```
+
+
+```{r}
+
+pb_ylims = c(0, 20000000)
+ont_ylims = c(0, 45000000)
+
+brain_expr_plot_1 <- assemble_expr_bar_plots(all_results, "brain", 1, "Transcript expression per structural category; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix="_expression_plot", use_scientific = TRUE)
+
+ggsave("brain_expr_bar_filter1.pdf", device = cairo_pdf, plot = brain_expr_plot_1, width=6, height=4, unit="in")
+
+brain_expr_plot_1
+```
+
+
+```{r assemble-plots-kidney-expression}
+
+pb_ylims = c(0, 25000000)
+ont_ylims = c(0, 35000000)
+
+kidney_expr_plot_1 <- assemble_expr_bar_plots(all_results, "kidney", 1, "Transcript expression per structural category; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix="_expression_plot", use_scientific = TRUE)
+
+ggsave("kidney_expr_bar_filter1.pdf", device = cairo_pdf, plot = kidney_expr_plot_1, width = 6, height = 4, units = "in")
+
+kidney_expr_plot_1
+
+```
+
+
+
+
+```{r collect-plots-bar-brain-sirv}
+
+assemble_bar_sirv_plots <- function(results, tissue, fl_filter_level, title, subtitle, pb_ylims, ont_ylims, pb_talon_ylims, pb_isoseq_ylims, ont_talon_ylims) {
+  
+  fl_filter_level = as.character(fl_filter_level)
+  
+  plot_name = paste(tissue, "_plots", sep="")
+
+  # select and adjust plots
+  bar_1_1 <- bar_theme(
+    all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
+    "IsoQuant",
+    pb_ylims
+  ) + geom_hline(yintercept = 69, color = "red")
+    
+  bar_1_2 <- bar_theme(
+    all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]][[1]],
+    "FLAIR",
+    pb_ylims
+  ) + geom_hline(yintercept = 69, color = "red")
+  
+  bar_1_3 <- bar_theme_noaxis(
+    all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]][[1]],
+    "Bambu",
+    pb_ylims
+  ) + geom_hline(yintercept = 69, color = "red")
+  
+  bar_1_4 <- bar_theme_noaxis(
+    all_results$IsoSeq$TALON[[fl_filter_level]][[plot_name]][[1]],
+    "TALON",
+    pb_talon_ylims
+  ) + geom_hline(yintercept = 69, color = "red")
+    
+  bar_2_1 <- bar_theme(
+    all_results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]][[1]],
+    "Mandalorion",
+    pb_ylims
+  ) + geom_hline(yintercept = 69, color = "red")
+  
+  bar_2_2 <- bar_theme(
+    all_results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]][[1]],
+    "IsoSeq + SQANTI3",
+    pb_isoseq_ylims
+  ) + geom_hline(yintercept = 69, color = "red")
+  
+  bar_3_1 <- bar_theme(
+    all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
+    "IsoQuant",
+    ont_ylims
+  ) + geom_hline(yintercept = 69, color = "red")
+  
+  bar_3_2 <- bar_theme(
+    all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]][[1]],
+    "FLAIR",
+    ont_ylims
+  ) + geom_hline(yintercept = 69, color = "red")
+  
+  bar_3_3 <- bar_theme(
+    all_results$ONT$Bambu[[fl_filter_level]][[plot_name]][[1]],
+    "Bambu",
+    ont_ylims
+  ) + geom_hline(yintercept = 69, color = "red")
+  
+  bar_3_4 <- bar_theme(
+    all_results$ONT$TALON[[fl_filter_level]][[plot_name]][[1]],
+    "TALON",
+    ont_talon_ylims
+  ) + geom_hline(yintercept = 69, color = "red")
+  
+  
+  # assemble final plot
+  
+  bar_plot <-   bar_1_1 + bar_1_2 + bar_1_3 + bar_1_4 +
+                bar_2_1 + bar_2_2 + plot_spacer() +
+                plot_spacer() +
+                bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4 +
+                plot_layout(design = "
+                ABCD
+                EFGG
+                HHHH
+                IJKL
+                ",
+                heights = c(1, 1, 0.1, 1),
+                axes = "collect") +
+    plot_annotation(
+      title = title,
+      subtitle = subtitle,
+      theme = theme(
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 10, hjust = 0.5)
+      )
+    )
+  
+  # Define label plots
+  label_a <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
+             size = 5, fontface = "bold") +
+    theme_void()
+  
+  label_b <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
+             size = 5, fontface = "bold") +
+    theme_void()
+  
+  final_plot <- wrap_elements(full = bar_plot)
+  final_plot <- final_plot + 
+    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
+    inset_element(label_b, left = -0.02, bottom = 0.35, right = 0.05, top = 0.45)
+  
+  return(final_plot)
+  
+}
+```
+
+```{r}
+
+pb_ylims = c(0, 300)
+ont_ylims = c(0, 300)
+pb_isoseq_ylims = c(0, 300)
+pb_talon_ylims = c(0, 300)
+ont_talon_ylims = c(0, 1200)
+
+sirv_brain_plot_1 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 1, title="SIRV transcripts; brain", subtitle = "", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+ggsave("sirv_brain_bar_filter1.pdf", device = cairo_pdf, plot = sirv_brain_plot_1, width = 6, height = 4, units = "in")
+sirv_brain_plot_3 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 3, title="SIRV transcripts; brain", subtitle = "Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+ggsave("sirv_brain_bar_filter3.pdf", device = cairo_pdf, plot = sirv_brain_plot_3, width = 6, height = 4, units = "in")
+sirv_brain_plot_5 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 5, title="SIRV transcripts; brain", subtitle = "Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+ggsave("sirv_brain_bar_filter5.pdf", device = cairo_pdf, plot = sirv_brain_plot_5, width = 6, height = 4, units = "in")
+sirv_brain_plot_10 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 10, title="SIRV transcripts; brain", subtitle = "Filter: >=10 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+ggsave("sirv_brain_bar_filter10.pdf", device = cairo_pdf, plot = sirv_brain_plot_10, width = 6, height = 4, units = "in")
+
+sirv_brain_plot_1
+sirv_brain_plot_3
+sirv_brain_plot_5
+sirv_brain_plot_10
+
+```
+
+
+```{r collect-plots-bar-kidney-sirv}
+
+pb_ylims = c(0, 350)
+ont_ylims = c(0, 350)
+pb_isoseq_ylims = c(0, 350)
+pb_talon_ylims = c(0, 350)
+ont_talon_ylims = c(0, 1000)
+
+sirv_kidney_plot_1 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 1, title="SIRV transcripts; kidney", subtitle = "", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+ggsave("sirv_kidney_bar_filter1.pdf", device = cairo_pdf, plot = sirv_kidney_plot_1, width = 6, height = 4, units = "in")
+sirv_kidney_plot_3 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 3, title="SIRV transcripts; kidney", subtitle = "Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+ggsave("sirv_kidney_bar_filter3.pdf", device = cairo_pdf, plot = sirv_kidney_plot_3, width = 6, height = 4, units = "in")
+sirv_kidney_plot_5 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 5, title="SIRV transcripts; kidney", subtitle = "Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+ggsave("sirv_kidney_bar_filter5.pdf", device = cairo_pdf, plot = sirv_kidney_plot_5, width = 6, height = 4, units = "in")
+sirv_kidney_plot_10 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 10, title="SIRV transcripts; kidney", subtitle = "Filter: >=10 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+ggsave("sirv_kidney_bar_filter10.pdf", device = cairo_pdf, plot = sirv_kidney_plot_10, width = 6, height = 4, units = "in")
+
+sirv_kidney_plot_1
+sirv_kidney_plot_3
+sirv_kidney_plot_5
+sirv_kidney_plot_10
+```
+
+
+```{r collect-plots-upset-brain}
+
+assemble_upset_plots <- function(results, tissue, fl_filter_level, title, plot_name_suffix = "_upset_plot") {
+  
+  fl_filter_level <- as.character(fl_filter_level)
+  plot_name <- paste(tissue, plot_name_suffix, sep = "")
+  
+  # Select individual upset plots
+  upset_1_1 <- wrap_elements(full = results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]])
+  upset_1_2 <- wrap_elements(full = results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]])
+  upset_1_3 <- wrap_elements(full = results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]])
+  upset_1_4 <- wrap_elements(full = results$IsoSeq$TALON[[fl_filter_level]][[plot_name]])
+  
+  upset_2_1 <- wrap_elements(full = results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]])
+  upset_2_2 <- wrap_elements(full = results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]])
+  
+  upset_3_1 <- wrap_elements(full = results$ONT$IsoQuant[[fl_filter_level]][[plot_name]])
+  upset_3_2 <- wrap_elements(full = results$ONT$FLAIR[[fl_filter_level]][[plot_name]])
+  upset_3_3 <- wrap_elements(full = results$ONT$Bambu[[fl_filter_level]][[plot_name]])
+  upset_3_4 <- wrap_elements(full = results$ONT$TALON[[fl_filter_level]][[plot_name]])
+  
+  # Assemble into patchwork layout
+  
+  upset_plot <- (
+    upset_1_1 + upset_1_2 + upset_1_3 + upset_1_4 +
+    upset_2_1 + upset_2_2 + plot_spacer() +
+    plot_spacer() +
+    upset_3_1 + upset_3_2 + upset_3_3 + upset_3_4
+  ) +
+    plot_layout(
+      design = "
+        ABCD
+        EFGG
+        HHHH
+        IJKM
+      ",
+      heights = c(1, 1, 0.1, 1)
+    ) +
+    plot_annotation(
+      title = title,
+      theme = theme(
+        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
+      )
+    )
+  
+  
+  # Define label plots
+  label_a <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
+             size = 10, fontface = "bold") +
+    theme_void()
+  
+  label_b <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
+             size = 10, fontface = "bold") +
+    theme_void()
+  
+  final_plot <- wrap_elements(full = upset_plot)
+  final_plot <- final_plot + 
+    inset_element(label_a, left = -0.02, bottom = 0.94, right = 0.05, top = 1) +
+    inset_element(label_b, left = -0.02, bottom = 0.25, right = 0.05, top = 0.40)
+  
+  return(final_plot)
+}
+
+```
+
+
+```{r}
+
+brain_upset_plot <- assemble_upset_plots(all_results, "brain", 1, "Unique Junction Chain overlap; brain")
+ggsave("brain_upset_filter1.pdf", device = cairo_pdf, plot = brain_upset_plot, width = 18, height = 12, units = "in")
+
+brain_upset_plot
+
+```
+
+```{r}
+
+kidney_upset_plot <- assemble_upset_plots(all_results, "kidney", 1, "Unique Junction Chain overlap; kidney")
+ggsave("kidney_upset_filter1.pdf", device = cairo_pdf, plot = kidney_upset_plot, width = 18, height = 12, units = "in")
+
+kidney_upset_plot
+
+```
+
+
+```{r collect-plots-comb-brain}
+
+assemble_comb_plots <- function(results, tissue, fl_filter_level, 
+                                title, pb_ylims = c(0, 50), ont_ylims = c(0, 50), 
+                                plot_name_suffix = "_comb_plot", y_label = NULL, x_label = NULL) {
+  
+  fl_filter_level <- as.character(fl_filter_level)
+  plot_name <- paste(tissue, plot_name_suffix, sep = "")
+  
+  comb_1_1 <- all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]] +
+    labs(title = "IsoQuant") +
+    scale_y_continuous(limits = pb_ylims)
+  
+  comb_1_2 <- all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]] +
+    labs(title = "FLAIR") +
+    scale_y_continuous(limits = pb_ylims)
+  
+  comb_1_3 <- all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]] +
+    labs(title = "Bambu") +
+    scale_y_continuous(limits = pb_ylims) +
+    theme(axis.text.x = element_blank())
+  
+  comb_1_4 <- all_results$IsoSeq$TALON[[fl_filter_level]][[plot_name]] +
+    labs(title = "TALON") +
+    scale_y_continuous(limits = pb_ylims) +
+    theme(axis.text.x = element_blank())
+  
+  comb_2_1 <- all_results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]] +
+    labs(title = "Mandalorion") +
+    scale_y_continuous(limits = pb_ylims)
+  
+  comb_2_2 <- all_results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]] +
+    labs(title = "IsoSeq + SQANTI3") +
+    scale_y_continuous(limits = pb_ylims)
+  
+  comb_3_1 <- all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]] +
+    labs(title = "IsoQuant") +
+    scale_y_continuous(limits = ont_ylims)
+  
+  comb_3_2 <- all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]] +
+    labs(title = "FLAIR") +
+    scale_y_continuous(limits = ont_ylims)
+  
+  comb_3_3 <- all_results$ONT$Bambu[[fl_filter_level]][[plot_name]] +
+    labs(title = "Bambu") +
+    scale_y_continuous(limits = ont_ylims)
+  
+  comb_3_4 <- all_results$ONT$TALON[[fl_filter_level]][[plot_name]] +
+    labs(title = "TALON") +
+    scale_y_continuous(limits = ont_ylims)
+  
+  # assemble final plot
+  comb_plot <- (
+    comb_1_1 + comb_1_2 + comb_1_3 + comb_1_4 +
+    comb_2_1 + comb_2_2 + plot_spacer() +
+    plot_spacer() +
+    comb_3_1 + comb_3_2 + comb_3_3 + comb_3_4
+  ) +
+    plot_layout(
+      design = "
+        ABCD
+        EFGG
+        HHHH
+        IJKM
+      ",
+      heights = c(1, 1, 0.2, 1),
+      axes = "collect"
+    ) +
+    plot_annotation(
+      title = title,
+      theme = theme(
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+      )
+    )
+  
+  # adjust axis labels
+  if (!is.null(y_label)) {
+    comb_plot <- comb_plot &
+      ylab(y_label)
+  }
+  if(!is.null(x_label)) {
+    comb_plot <- comb_plot &
+      xlab(x_label)
+  }
+  
+  
+  # Define label plots
+  label_a <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
+             size = 5, fontface = "bold") +
+    theme_void()
+  
+  label_b <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
+             size = 5, fontface = "bold") +
+    theme_void()
+  
+  final_plot <- wrap_elements(full = comb_plot)
+  final_plot <- final_plot + 
+    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
+    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.40)
+  
+  return(final_plot)
+}
+
+```
+
+
+
+```{r}
+
+# pb_ylims  <- c(0, 40000)
+# ont_ylims <- c(0, 25000)
+# brain_comb_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+# ggsave("brain_comb.pdf", device = cairo_pdf, plot = brain_comb_plot, width = 6, height = 4, units = "in")
+# brain_comb_plot
+
+```
+
+```{r}
+
+# pb_ylims  <- c(0, 50)
+# ont_ylims <- c(0, 50)
+# brain_perc_comb_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_plot")
+# ggsave("brain_perc_comb.pdf", device = cairo_pdf, plot = brain_perc_comb_plot, width = 6, height = 4, units = "in")
+# brain_perc_comb_plot
+
+```
+
+```{r }
+
+pb_ylims  <- c(0, 35000)
+ont_ylims <- c(0, 20000)
+brain_comb_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Unique Junction Chain occurrence across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_bar_plot", y_label = "# of UJCs")
+ggsave("brain_comb_bar.pdf", device = cairo_pdf, plot = brain_comb_bar_plot, width = 6, height = 4, units = "in")
+brain_comb_bar_plot
+
+```
+
+```{r }
+
+pb_ylims  <- c(0, 35000)
+ont_ylims <- c(0, 20000)
+kidney_comb_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Unique Junction Chain occurrence across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_bar_plot", y_label = "# of UJCs")
+ggsave("kidney_comb_bar.pdf", device = cairo_pdf, plot = kidney_comb_bar_plot, width = 6, height = 4, units = "in")
+kidney_comb_bar_plot
+
+```
+
+
+```{r }
+
+pb_ylims  <- c(0, 50)
+ont_ylims <- c(0, 50)
+brain_perc_comb_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Relative Unique Junction Chain occurrence across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_bar_plot", y_label = "% of UJCs")
+ggsave("brain_perc_comb_bar.pdf", device = cairo_pdf, plot = brain_perc_comb_bar_plot, width = 6, height = 4, units = "in")
+brain_perc_comb_bar_plot
+
+```
+
+```{r }
+
+pb_ylims  <- c(0, 50)
+ont_ylims <- c(0, 50)
+kidney_perc_comb_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Relative Unique Junction Chain occurrence across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_bar_plot", y_label = "% of UJCs")
+ggsave("kidney_perc_comb_bar.pdf", device = cairo_pdf, plot = kidney_perc_comb_bar_plot, width = 6, height = 4, units = "in")
+kidney_perc_comb_bar_plot
+
+```
+
+```{r }
+
+pb_ylims  <- c(0, 20000000)
+ont_ylims <- c(0, 20000000)
+brain_comb_fl_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Expression of UJCs across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_fl_bar_plot", y_label = "# of reads of UJCs")
+ggsave("brain_comb_fl_bar.pdf", device = cairo_pdf, plot = brain_comb_fl_bar_plot, width = 6, height = 4, units = "in")
+brain_comb_fl_bar_plot
+
+```
+```{r }
+
+pb_ylims  <- c(0, 25000000)
+ont_ylims <- c(0, 25000000)
+kidney_comb_fl_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Expression of UJCs across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_fl_bar_plot", y_label = "# of reads of UJCs")
+ggsave("kidney_comb_fl_bar.pdf", device = cairo_pdf, plot = kidney_comb_fl_bar_plot, width = 6, height = 4, units = "in")
+kidney_comb_fl_bar_plot
+
+```
+
+```{r }
+
+pb_ylims  <- c(0, 100)
+ont_ylims <- c(0, 100)
+brain_perc_comb_fl_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Relative expression of UJCs across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_fl_bar_plot", y_label = "% of reads of UJCs")
+ggsave("brain_perc_comb_fl_bar.pdf", device = cairo_pdf, plot = brain_perc_comb_fl_bar_plot, width = 6, height = 4, units = "in")
+brain_perc_comb_fl_bar_plot
+
+```
+```{r }
+
+pb_ylims  <- c(0, 100)
+ont_ylims <- c(0, 100)
+kidney_perc_comb_fl_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Relative expression of UJCs across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_fl_bar_plot", y_label = "% of reads of UJCs")
+ggsave("kidney_perc_comb_fl_bar.pdf", device = cairo_pdf, plot = kidney_perc_comb_fl_bar_plot, width = 6, height = 4, units = "in")
+kidney_perc_comb_fl_bar_plot
+
+```
+
+
+
+```{r }
+
+pb_ylims  <- c(0, 100000)
+ont_ylims <- c(0, 62500)
+brain_ujc_curve_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_curve_plot")
+ggsave("brain_ujc_curve_plot.pdf", device = cairo_pdf, plot = brain_ujc_curve_plot, width = 6, height = 4, units = "in")
+brain_ujc_curve_plot
+
+```
+
+
+```{r }
+
+pb_ylims  <- c(0, 100)
+ont_ylims <- c(0, 100)
+brain_perc_ujc_curve_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence by across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_curve_plot")
+ggsave("brain_perc_ujc_curve_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_curve_plot, width = 6, height = 4, units = "in")
+brain_perc_ujc_curve_plot
+
+```
+
+
+```{r}
+
+assemble_comb_stack_plots <- function(results, tissue, fl_filter_level, 
+                                title, pb_ylims = c(0, 50), ont_ylims = c(0, 50), 
+                                plot_name_suffix = "_comb_plot", y_label = NULL, x_label = NULL) {
+  
+  fl_filter_level <- as.character(fl_filter_level)
+  plot_name <- paste(tissue, plot_name_suffix, sep = "")
+  
+  comb_1_1 <- all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]] +
+    labs(title = "IsoQuant") +
+    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    scale_y_continuous(limits = pb_ylims)
+  
+  comb_1_2 <- all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]] +
+    labs(title = "FLAIR") +
+    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    scale_y_continuous(limits = pb_ylims)
+  
+  comb_1_3 <- all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]] +
+    labs(title = "Bambu") +
+    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    scale_y_continuous(limits = pb_ylims) +
+    theme(axis.text.x = element_blank())
+  
+  comb_1_4 <- all_results$IsoSeq$TALON[[fl_filter_level]][[plot_name]] +
+    labs(title = "TALON") +
+    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    scale_y_continuous(limits = pb_ylims) +
+    theme(axis.text.x = element_blank())
+  
+  comb_2_1 <- all_results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]] +
+    labs(title = "Mandalorion") +
+    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    scale_y_continuous(limits = pb_ylims)
+  
+  comb_2_2 <- all_results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]] +
+    labs(title = "IsoSeq + SQANTI3") +
+    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    scale_y_continuous(limits = pb_ylims)
+  
+  comb_3_1 <- all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]] +
+    labs(title = "IsoQuant") +
+    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    scale_y_continuous(limits = ont_ylims)
+  
+  comb_3_2 <- all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]] +
+    labs(title = "FLAIR") +
+    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    scale_y_continuous(limits = ont_ylims)
+  
+  comb_3_3 <- all_results$ONT$Bambu[[fl_filter_level]][[plot_name]] +
+    labs(title = "Bambu") +
+    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    scale_y_continuous(limits = ont_ylims)
+  
+  comb_3_4 <- all_results$ONT$TALON[[fl_filter_level]][[plot_name]] +
+    labs(title = "TALON") +
+    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    scale_y_continuous(limits = ont_ylims)
+  
+  # assemble final plot
+  comb_plot <- (
+    comb_1_1 + comb_1_2 + comb_1_3 + comb_1_4 +
+    comb_2_1 + comb_2_2 + plot_spacer() +
+    plot_spacer() +
+    comb_3_1 + comb_3_2 + comb_3_3 + comb_3_4
+  ) +
+    plot_layout(
+      design = "
+        ABCD
+        EFGG
+        HHHH
+        IJKL
+      ",
+      heights = c(1, 1, 0.2, 1),
+      axes = "collect",
+      guides = "collect"
+    ) +
+    plot_annotation(
+      title = title,
+      theme = theme(
+        plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+      )
+    ) &
+    theme(legend.position = "none") 
+  
+  # adjust axis labels
+  if (!is.null(y_label)) {
+    comb_plot <- comb_plot &
+      ylab(y_label)
+  }
+  if(!is.null(x_label)) {
+    comb_plot <- comb_plot &
+      xlab(x_label)
+  }
+  
+  
+  # Define label plots
+  label_a <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
+             size = 5, fontface = "bold") +
+    theme_void()
+  
+  label_b <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
+             size = 5, fontface = "bold") +
+    theme_void()
+  
+  final_plot <- wrap_elements(full = comb_plot)
+  final_plot <- final_plot + 
+    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
+    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.40)
+  
+  return(final_plot)
+}
+
+```
+
+
+
+```{r }
+
+pb_ylims  <- c(0, 100000)
+ont_ylims <- c(0, 62500)
+brain_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "UJC occurrence across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_stack_plot", y_label = "Mean # of UJCs")
+ggsave("brain_ujc_stack_plot.pdf", device = cairo_pdf, plot = brain_ujc_stack_plot, width = 6, height = 4, units = "in")
+brain_ujc_stack_plot
+
+```
+
+```{r }
+
+pb_ylims  <- c(0, 100000)
+ont_ylims <- c(0, 62500)
+kidney_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "UJC occurrence across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_stack_plot", y_label = "Mean # of UJCs")
+ggsave("kidney_ujc_stack_plot.pdf", device = cairo_pdf, plot = kidney_ujc_stack_plot, width = 6, height = 4, units = "in")
+kidney_ujc_stack_plot
+
+```
+
+```{r}
+
+pb_ylims  <- c(0, 100)
+ont_ylims <- c(0, 100)
+brain_perc_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "Relative UJC occurrence across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_stack_plot", y_label = "Mean % of UJCs")
+ggsave("brain_perc_ujc_stack_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_stack_plot, width = 6, height = 4, units = "in")
+brain_perc_ujc_stack_plot
+
+```
+
+```{r}
+
+pb_ylims  <- c(0, 100)
+ont_ylims <- c(0, 100)
+kidney_perc_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "Relative UJC occurrence across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_stack_plot", y_label = "Mean % of UJCs")
+ggsave("kidney_perc_ujc_stack_plot.pdf", device = cairo_pdf, plot = kidney_perc_ujc_stack_plot, width = 6, height = 4, units = "in")
+kidney_perc_ujc_stack_plot
+
+```
+
+
+```{r}
+pb_ylims  <- c(0, 100)
+ont_ylims <- c(0, 100)
+
+fl_filter_level <- 1
+tissue <- "brain"
+title <- "Relative UJC occurrence across combinations of samples; brain"
+plot_name_suffix <- "_perc_ujc_stack_plot"
+y_label <- "Mean % of UJCs"
+
+fl_filter_level <- as.character(fl_filter_level)
+plot_name <- paste(tissue, plot_name_suffix, sep = "")
+
+comb_1_1 <- all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]] +
+  labs(title = "IsoQuant") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = pb_ylims)
+
+comb_1_2 <- all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]] +
+  labs(title = "FLAIR") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = pb_ylims)
+
+comb_1_3 <- all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]] +
+  labs(title = "Bambu") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = pb_ylims) +
+  theme(axis.text.x = element_blank())
+
+comb_2_1 <- all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]] +
+  labs(title = "IsoQuant") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = ont_ylims)
+
+comb_2_2 <- all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]] +
+  labs(title = "FLAIR") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = ont_ylims)
+
+comb_2_3 <- all_results$ONT$Bambu[[fl_filter_level]][[plot_name]] +
+  labs(title = "Bambu") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = ont_ylims)
+
+# assemble final plot
+comb_plot <- (
+  comb_1_1 + comb_1_2 + comb_1_3 +
+  comb_2_1 + comb_2_2 + comb_2_3
+) +
+  plot_layout(
+    design = "
+      ABC
+      XXX
+      DEF
+    ",
+    heights = c(1, 0.2, 1),
+    axes = "collect",
+    guides = "collect"
+  ) +
+  plot_annotation(
+    title = title,
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+    )
+  ) &
+  theme(legend.position = "none") 
+
+# adjust axis labels
+if (!is.null(y_label)) {
+  comb_plot <- comb_plot &
+    ylab(y_label)
+}
+if(!is.null(x_label)) {
+  comb_plot <- comb_plot &
+    xlab(x_label)
+}
+
+comb_plot
+
+```
+
+```{r}
+pb_ylims  <- c(0, 100)
+ont_ylims <- c(0, 100)
+
+fl_filter_level <- 1
+tissue <- "brain"
+title <- "Relative expression of UJCs across combinations of samples; brain"
+plot_name_suffix <- "_perc_ujc_stack_plot"
+y_label <- "Mean % of UJCs"
+
+fl_filter_level <- as.character(fl_filter_level)
+plot_name <- paste(tissue, plot_name_suffix, sep = "")
+
+comb_1_1 <- all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]] +
+  labs(title = "IsoQuant") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = pb_ylims)
+
+comb_1_2 <- all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]] +
+  labs(title = "FLAIR") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = pb_ylims)
+
+comb_1_3 <- all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]] +
+  labs(title = "Bambu") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = pb_ylims) +
+  theme(axis.text.x = element_blank())
+
+comb_2_1 <- all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]] +
+  labs(title = "IsoQuant") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = ont_ylims)
+
+comb_2_2 <- all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]] +
+  labs(title = "FLAIR") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = ont_ylims)
+
+comb_2_3 <- all_results$ONT$Bambu[[fl_filter_level]][[plot_name]] +
+  labs(title = "Bambu") +
+  theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+  scale_y_continuous(limits = ont_ylims)
+
+# assemble final plot
+comb_plot <- (
+  comb_1_1 + comb_1_2 + comb_1_3 +
+  comb_2_1 + comb_2_2 + comb_2_3
+) +
+  plot_layout(
+    design = "
+      ABC
+      XXX
+      DEF
+    ",
+    heights = c(1, 0.2, 1),
+    axes = "collect",
+    guides = "collect"
+  ) +
+  plot_annotation(
+    title = title,
+    theme = theme(
+      plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+    )
+  ) &
+  theme(legend.position = "none") 
+
+# adjust axis labels
+if (!is.null(y_label)) {
+  comb_plot <- comb_plot &
+    ylab(y_label)
+}
+if(!is.null(x_label)) {
+  comb_plot <- comb_plot &
+    xlab(x_label)
+}
+
+comb_plot
+```
+
+
+
+```{r}
+
+# sanity check to see if percentages match
+
+all_results$ONT$Bambu$`1`[["brain_ujc_stack_plot"]]$data %>%
+  group_by(n_samples) %>%
+  mutate(percent = 100 * mean_count / sum(mean_count)) %>%
+  ungroup()
+
+all_results$ONT$Bambu$`1`$brain_comb_bar_plot$data 
+
+
+```
+
+```{r}
+
+# ONT + FLAIR number and percentage of monoexons per structural category
+
+all_results$ONT$FLAIR$`1`$b_class_df_list$`Join&Call` %>%
+  group_by(structural_category) %>%
+  summarise(
+    total = n(),
+    monoexons = sum(exons == 1),
+    percent_monoexons = round(100 * monoexons / total, 2)
+  )
+
+```
+
+```{r }
+
+pb_ylims  <- c(0, 20000000)
+ont_ylims <- c(0, 20000000)
+brain_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "Expression of UJCs across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_fl_stack_plot", y_label = "Mean # of reads of UJCs")
+ggsave("brain_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = brain_ujc_fl_stack_plot, width = 6, height = 4, units = "in")
+brain_ujc_fl_stack_plot
+
+```
+
+```{r }
+
+pb_ylims  <- c(0, 25000000)
+ont_ylims <- c(0, 25000000)
+kidney_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "Expression of UJCs across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_fl_stack_plot", y_label = "Mean # of reads of UJCs")
+ggsave("kidney_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = kidney_ujc_fl_stack_plot, width = 6, height = 4, units = "in")
+kidney_ujc_fl_stack_plot
+
+```
+
+```{r}
+
+pb_ylims  <- c(0, 100)
+ont_ylims <- c(0, 100)
+brain_perc_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "Relative expression of UJCs across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_fl_stack_plot", y_label = "Mean % of reads of UJCs")
+ggsave("brain_perc_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_fl_stack_plot, width = 6, height = 4, units = "in")
+brain_perc_ujc_fl_stack_plot
+
+```
+```{r}
+
+pb_ylims  <- c(0, 100)
+ont_ylims <- c(0, 100)
+kidney_perc_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "Relative expression of UJCs across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_fl_stack_plot", y_label = "Mean % of reads of UJCs")
+ggsave("kidney_perc_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = kidney_perc_ujc_fl_stack_plot, width = 6, height = 4, units = "in")
+kidney_perc_ujc_fl_stack_plot
+
+```
+
+
+```{r}
+compare_theme <- function(plot, title) {
+  plot +
+    ggtitle(title) +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
+      axis.text = element_text(size = 8),
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      axis.title = element_text(size = 10),
+      legend.position = "none"
+    ) +
+    labs(x = "Strategy")
+}
+
+compare_theme_noaxis <- function(plot, title) {
+  compare_theme(plot, title) +
+    theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank()
+    )
+}
+```
+
+
+
+```{r assemble-isoform-compare-plots }
+assemble_compare_plots <- function(results, tissue, fl_filter_level) {
+  
+  fl_filter_level = as.character(fl_filter_level)
+  plot_base_name = paste0(tissue, "_compare_plots")
+  
+  subplots = c(
+    "count_transcript", 
+    "perc_transcript", 
+    "total_isoforms_transcript", 
+    "perc_isoforms_transcript", 
+    "count_ujc", 
+    "perc_ujc", 
+    "total_isoforms_ujc", 
+    "perc_isoforms_ujc"
+  )
+  subplot_titles <- c(
+    paste0("Redundancy of transcripts (# of transcripts); ", tissue),
+    paste0("Relative redundancy of transcripts (% of transcripts); ", tissue),
+    paste0("Redundancy of transcripts (# of isoforms); ", tissue),
+    paste0("Relative redundancy of transcripts (% of isoforms); ", tissue),
+    paste0("Redundancy of UJCs (# of UJCs); ", tissue),
+    paste0("Relative redundancy of UJCs (% of UJCs); ", tissue),
+    paste0("Redundancy of UJCs (# of isoforms); ", tissue),
+    paste0("Relative redundancy of UJCs (% of isoforms); ", tissue)
+  )
+  names(subplot_titles) <- subplots
+
+  final_plots = list()
+
+  for (subplot_name in subplots) {
+    subplot_title <- subplot_titles[[subplot_name]]
+    
+    bar_1_1_base <- all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_base_name]][[subplot_name]]
+    
+    # create legend
+    legend_plot <- get_legend(
+      bar_1_1_base +
+        guides(fill = guide_legend(ncol = 3, nrow = 2))
+    )
+    legend <- wrap_elements(legend_plot)
+    
+    # select and adjust plots
+    bar_1_1 <- compare_theme(
+      bar_1_1_base,
+      "IsoQuant"
+    )
+      
+    bar_1_2 <- compare_theme(
+      all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_base_name]][[subplot_name]],
+      "FLAIR"
+    )
+    
+    bar_1_3 <- compare_theme_noaxis(
+      all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_base_name]][[subplot_name]],
+      "Bambu"
+    )
+    
+    bar_1_4 <- compare_theme_noaxis(
+      all_results$IsoSeq$TALON[[fl_filter_level]][[plot_base_name]][[subplot_name]],
+      "TALON"
+    )
+      
+    bar_2_1 <- compare_theme(
+      all_results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_base_name]][[subplot_name]],
+      "Mandalorion"
+    )
+    
+    bar_2_2 <- compare_theme(
+      all_results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_base_name]][[subplot_name]],
+      "IsoSeq + SQANTI3"
+    )
+    
+    bar_3_1 <- compare_theme(
+      all_results$ONT$IsoQuant[[fl_filter_level]][[plot_base_name]][[subplot_name]],
+      "IsoQuant"
+    )
+    
+    bar_3_2 <- compare_theme(
+      all_results$ONT$FLAIR[[fl_filter_level]][[plot_base_name]][[subplot_name]],
+      "FLAIR"
+    )
+    
+    bar_3_3 <- compare_theme(
+      all_results$ONT$Bambu[[fl_filter_level]][[plot_base_name]][[subplot_name]],
+      "Bambu"
+    )
+    
+    bar_3_4 <- compare_theme(
+      all_results$ONT$TALON[[fl_filter_level]][[plot_base_name]][[subplot_name]],
+      "TALON"
+    )
+    
+    bar_plot <- (
+      bar_1_1 + bar_1_2 + bar_1_3 + bar_1_4 +
+      bar_2_1 + bar_2_2 + free(legend) +
+      plot_spacer() +
+      bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
+    ) +
+      plot_layout(
+        design = "
+          ABCD
+          EFGG
+          HHHH
+          IJKM
+        ",
+        heights = c(1, 1, 0.2, 1),
+        axes = "collect_x",
+        axis_titles = "collect"
+      ) +
+      plot_annotation(
+        title = paste0(subplot_title, "; ", tissue),
+        theme = theme(
+          plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+        )
+      )
+    
+    
+    # Define label plots
+    label_a <- ggplot() +
+      annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
+               size = 5, fontface = "bold") +
+      theme_void()
+    
+    label_b <- ggplot() +
+      annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
+               size = 5, fontface = "bold") +
+      theme_void()
+    
+    final_plot <- wrap_elements(full = bar_plot)
+    final_plot <- final_plot + 
+      inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
+      inset_element(label_b, left = -0.02, bottom = 0.40, right = 0.05, top = 0.50)
+  
+    
+    final_plots[[subplot_name]] <- final_plot
+  }
+  
+  return(final_plots)
+}
+```
+
+```{r}
+
+brain_isoform_compare_figures <- assemble_compare_plots(all_results, "brain", 1)
+
+
+for (bicf_name in names(brain_isoform_compare_figures)) {
+  
+  bicf <- brain_isoform_compare_figures[[bicf_name]]
+  ggsave(paste0(bicf_name, "_brain.pdf"), device = cairo_pdf, plot = bicf, width = 6, height = 4, unit = "in")
+  
+}
+
+brain_isoform_compare_figures
+
+```
+
+```{r}
+
+kidney_isoform_compare_figures <- assemble_compare_plots(all_results, "kidney", 1)
+
+
+for (kicf_name in names(kidney_isoform_compare_figures)) {
+  
+  kicf <- kidney_isoform_compare_figures[[kicf_name]]
+  ggsave(paste0(kicf_name, "_kidney.pdf"), device = cairo_pdf, plot = kicf, width = 6, height = 4, unit = "in")
+  
+}
+
+kicf
+
+```
+
+
+
+```{r resource_data}
+
+job_details <- list()
+
+for (platform in names(src_dirs)) {
+  job_details[[platform]] <- list()
+  
+  for (method in names(src_dirs[[platform]])) {
+    src_dir <- src_dirs[[platform]][[method]]
+    job_details_file <- file.path(src_dir, "job_details.tsv")
+    
+    # Check if the file exists before attempting to read
+    if (file.exists(job_details_file)) {
+      df <- read.delim(job_details_file, header = TRUE, sep = "\t")
+      job_details[[platform]][[method]] <- df
+    } else {
+      warning(paste("File does not exist:", job_details_file))
+      job_details[[platform]][[method]] <- NULL
+    }
+  }
+}
+
+
+```
+
+
+```{r preformance-test, eval=FALSE}
+
+# Function to parse time strings into total seconds
+parse_time_to_seconds <- function(time_str) {
+  # Check if the time string contains a day component
+  if (grepl("-", time_str)) {
+    # Split into day and time components
+    parts <- unlist(strsplit(time_str, "-"))
+    days <- as.numeric(parts[1])
+    time_part <- parts[2]
+  } else {
+    days <- 0
+    time_part <- time_str
+  }
+  
+  # Split the time part into hours, minutes, and seconds
+  time_components <- unlist(strsplit(time_part, ":"))
+  
+  # Convert to numeric
+  hours <- as.numeric(time_components[1])
+  minutes <- as.numeric(time_components[2])
+  seconds <- as.numeric(time_components[3])
+  
+  # Calculate total seconds
+  total_seconds <- days * 86400 + hours * 3600 + minutes * 60 + seconds
+  return(total_seconds)
+}
+
+# Function to convert total seconds to HH:MM:SS format, allowing hours > 24
+seconds_to_hms <- function(total_seconds) {
+  hours <- floor(total_seconds / 3600)
+  remainder <- total_seconds %% 3600
+  minutes <- floor(remainder / 60)
+  seconds <- remainder %% 60
+  
+  # Convert to integers
+  hours <- as.integer(hours)
+  minutes <- as.integer(minutes)
+  seconds <- as.integer(seconds)
+  
+  sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+}
+
+
+# Initialize an empty nested list for average values
+avg_values <- list()
+
+# Loop over the nested src_dirs structure
+for (platform in names(src_dirs)) {
+  # Ensure the platform level exists in avg_values
+  avg_values[[platform]] <- list()
+  
+  for (method in names(src_dirs[[platform]])) {
+    src_dir <- src_dirs[[platform]][[method]]
+    job_details_file <- file.path(src_dir, "job_details.tsv")
+    
+    # Check if the file exists before attempting to read
+    if (file.exists(job_details_file)) {
+      # Read the job_details.tsv file into a dataframe
+      df <- read.delim(job_details_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+      
+      # Skip the first line
+      df <- df[-1, ]
+      
+      # Ensure there are enough rows to proceed
+      if (nrow(df) >= 13) {
+        # Convert 'totalcpu' to total seconds
+        df$totalcpu_sec <- sapply(df$totalcpu, parse_time_to_seconds)
+        
+        # Ensure 'maxrss' is numeric
+        df$maxrss <- as.numeric(df$maxrss)
+        
+        # Check for NAs in 'maxrss' and handle accordingly
+        if (any(is.na(df$maxrss))) {
+          warning(paste("Non-numeric 'maxrss' values detected in", platform, method))
+          df$maxrss[is.na(df$maxrss)] <- 0  # Replace NAs with 0 or handle as needed
+        }
+        
+        # Convert 'maxrss' from kilobytes to gigabytes and round to two decimal places
+        df$maxrss_gb <- round(df$maxrss / (1024^2), 2)
+        
+        # Process the next 5 lines (lines 2-6)
+        batch1 <- df[1:5, ]
+        totalcpu_sum1 <- sum(batch1$totalcpu_sec)
+        maxrss_max1 <- max(batch1$maxrss_gb)
+        
+        # Process the next 5 lines (lines 7-11)
+        batch2 <- df[6:10, ]
+        totalcpu_sum2 <- sum(batch2$totalcpu_sec)
+        maxrss_max2 <- max(batch2$maxrss_gb)
+        
+        # Calculate the average of the two batches
+        ind_cpu_sec <- mean(c(totalcpu_sum1, totalcpu_sum2))
+        ind_mem_gb <- mean(c(maxrss_max1, maxrss_max2))
+        
+        # Process the next 2 lines (lines 12-13)
+        batch3 <- df[11:12, ]
+        concat_cpu_sec <- mean(batch3$totalcpu_sec)
+        concat_mem_gb <- mean(batch3$maxrss_gb)
+        
+        # Convert CPU times to HH:MM:SS format
+        ind_cpu_hms <- seconds_to_hms(ind_cpu_sec)
+        concat_cpu_hms <- seconds_to_hms(concat_cpu_sec)
+        
+        # Store the results in avg_values
+        avg_values[[platform]][[method]] <- list(
+          ind_cpu = ind_cpu_hms,      # HH:MM:SS format
+          ind_mem = ind_mem_gb,       # In Gigabytes with two decimal places
+          concat_cpu = concat_cpu_hms,
+          concat_mem = concat_mem_gb
+        )
+      } else {
+        warning(paste("Dataframe does not have enough rows for", platform, method))
+        # Store NA values if insufficient data
+        avg_values[[platform]][[method]] <- list(
+          ind_cpu = NA,
+          ind_mem = NA,
+          concat_cpu = NA,
+          concat_mem = NA
+        )
+      }
+    } else {
+      warning(paste("File does not exist:", job_details_file))
+      # Store NA values if the file doesn't exist
+      avg_values[[platform]][[method]] <- list(
+        ind_cpu = NA,
+        ind_mem = NA,
+        concat_cpu = NA,
+        concat_mem = NA
+      )
+    }
+  }
+}
+
+
+```
+
+```{r print-table, eval=FALSE}
+# Initialize an empty list to store rows
+table_rows <- list()
+
+# Loop over platforms and methods to build the table
+for (platform in names(avg_values)) {
+  for (method in names(avg_values[[platform]])) {
+    results <- avg_values[[platform]][[method]]
+    
+    # Skip if results are NA (e.g., due to missing files or insufficient data)
+    if (is.na(results$ind_cpu) || is.na(results$concat_cpu)) {
+      next
+    }
+    
+    # Create rows for 'ind' strategy
+    ind_row <- data.frame(
+      platform = platform,
+      method = method,
+      strategy = "ind",
+      time = results$ind_cpu,
+      memory = results$ind_mem,
+      stringsAsFactors = FALSE
+    )
+    
+    # Create rows for 'concat' strategy
+    concat_row <- data.frame(
+      platform = platform,
+      method = method,
+      strategy = "concat",
+      time = results$concat_cpu,
+      memory = results$concat_mem,
+      stringsAsFactors = FALSE
+    )
+    
+    # Append the rows to the list
+    table_rows <- append(table_rows, list(ind_row, concat_row))
+  }
+}
+
+# Combine all rows into a single data frame
+results_table <- do.call(rbind, table_rows)
+
+# Optionally, format the memory column to show two decimal places
+results_table$memory <- sprintf("%.2f", as.numeric(results_table$memory))
+
+# Print the table using knitr::kable()
+knitr::kable(results_table, align = "l", caption = "Average Time and Memory Usage by Platform, Method, and Strategy")
+
+```
+
+```{r}
+all_results[["IsoSeq"]][["Bambu"]]$`1`$b_class_df_list$`Join&Call`
+
+grouped_test_df <- all_results$IsoSeq$Bambu$`1`$b_class_df_list$`Join&Call` %>%
+  group_by(structural_category) %>%
+  summarise(FL_sum = sum(FL, na.rm = TRUE)) %>%
+  ungroup()
+
+
+all_results$IsoSeq$FLAIR$`1`$b_class_df_list$`Join&Call`
+
+```
+
+
+
+```{r sirv_setup}
+
+real_sirvs = c("SIRV101","SIRV102","SIRV103","SIRV105","SIRV106","SIRV107","SIRV108","SIRV109","SIRV201","SIRV202","SIRV203","SIRV204","SIRV205","SIRV206","SIRV301","SIRV302","SIRV303","SIRV304","SIRV305","SIRV306","SIRV307","SIRV308","SIRV309","SIRV310","SIRV311","SIRV403","SIRV404","SIRV405","SIRV406","SIRV408","SIRV409","SIRV410","SIRV501","SIRV502","SIRV503","SIRV504","SIRV505","SIRV506","SIRV507","SIRV508","SIRV509","SIRV510","SIRV511","SIRV512","SIRV601","SIRV602","SIRV603","SIRV604","SIRV605","SIRV606","SIRV607","SIRV608","SIRV609","SIRV610","SIRV611","SIRV612","SIRV613","SIRV614","SIRV615","SIRV616","SIRV617","SIRV618","SIRV701","SIRV702","SIRV703","SIRV704","SIRV705","SIRV706","SIRV708")
+
+n_sirvs = length(real_sirvs)
+
+```
+
+
+```{r sirv_metrics}
+
+calculate_sirv_metrics <- function(df){
+  
+  sirv_df <- df[grepl("^SIRV", df$chrom), ]
+  
+  # metrics based on LRGASP and BUGSI, but adjusted to account for FSM mono-exons
+  
+  sirv_tp <- sirv_df[(sirv_df$associated_transcript %in% real_sirvs & 
+                       (sirv_df$subcategory == "reference_match" | 
+                          (sirv_df$subcategory == "mono-exon" & sirv_df$diff_to_TSS < 50 & sirv_df$diff_to_TTS < 50))), ]
+  
+  # remove duplicate TPs; keep only the ones that minimizes distance to TSS + TTS
+  sirv_tp <- sirv_tp %>%
+    group_by(associated_transcript) %>%
+    filter(diff_to_TSS + diff_to_TTS == min(diff_to_TSS + diff_to_TTS))
+  
+  sirv_ptp <- sirv_df %>%
+    filter(sirv_df$structural_category %in% c("FSM", "ISM")) %>%
+    dplyr::setdiff(sirv_tp)
+  
+  sirv_fn <- dplyr::setdiff(real_sirvs, sirv_df$associated_transcript)
+  
+  sirv_fp <- sirv_df %>%
+    filter(sirv_df$structural_category %in% c("NIC", "NNC", "Genic\nGenomic", "Fusion"))
+  
+  SIRV_fsm_ism <- sirv_df[sirv_df$structural_category %in% c("FSM", "ISM"), ]
+  
+  # Initialize variables to store metric values
+  non_redundant_precision <- NA
+  positive_detection_rate <- NA
+  false_discovery_rate <- NA
+  false_detection_rate <- NA
+  redundancy <- NA
+  tp_recall <- NA
+  ptp_recall <- NA
+  
+  # Calculate Non-redundant Precision: TP / SIRV transcripts
+  non_redundant_precision <- nrow(sirv_tp) / nrow(sirv_df)
+  
+  # Calculate Precision: (TP + PTP) / SIRV transcripts
+  redundant_precision <- (nrow(sirv_tp) + nrow(sirv_ptp)) / nrow(sirv_df)
+
+  # Calculate Sensitivity: TP / real SIRVs
+  sensitivity <- nrow(sirv_tp) / length(real_sirvs)
+  
+  # Calculate Positive Detection Rate: unique(TP + PTP) / real SIRVs
+  unique_detected_transcripts <- length(unique(c(sirv_tp$associated_transcript, sirv_ptp$associated_transcript)))
+  positive_detection_rate <- unique_detected_transcripts / length(real_sirvs)
+
+  # Calculate False Discovery Rate: (SIRV_transcripts - TP) / SIRV transcripts
+  false_discovery_rate <- (nrow(sirv_df) - nrow(sirv_tp)) / nrow(sirv_df)
+
+  # Calculate False Detection Rate: FP / SIRV transcripts
+  false_detection_rate <- nrow(sirv_fp) / nrow(sirv_df)
+
+  # Calculate Redundancy: (FSM + ISM) / unique(TP + PTP)
+  unique_tp_ptp_transcripts <- length(unique(c(sirv_tp$associated_transcript, sirv_ptp$associated_transcript)))
+  redundancy <- nrow(SIRV_fsm_ism) / unique_tp_ptp_transcripts
+  
+  # print(paste("NRP:", non_redundant_precision))
+  # print(paste("RP:", redundant_precision))
+  # 
+  # print(paste("   nrow(sirv_tp):", nrow(sirv_tp)))
+  # print(paste("   nrow(sirv_ptp):", nrow(sirv_ptp)))
+  # print(paste("   nrow(sirv_df):", nrow(sirv_df)))
+  # 
+  # print(paste("Se:", sensitivity))
+  # print(paste("PDR:", positive_detection_rate))
+  # print(paste("FDR:", false_discovery_rate))
+  # print(paste("FDeR:", false_detection_rate))
+  # print(paste("Red:", redundancy))
+  
+  metrics <- tibble(
+    Metric = c(
+      "Non-redundant Precision",
+      "Precision",
+      "Sensitivity",
+      "Positive Detection Rate",
+      "False Discovery Rate",
+      "False Detection Rate",
+      "Redundancy"
+    ),
+    Value = c(
+      non_redundant_precision,
+      redundant_precision,
+      sensitivity,
+      positive_detection_rate,
+      false_discovery_rate,
+      false_detection_rate,
+      redundancy
+    )
+  ) %>%
+    mutate(
+      Value = round(Value * 100, 2),
+      Value = paste0(Value, "%")
+    )
+  
+  
+  return(list(
+    sirv_df = sirv_df,
+    metrics = metrics,
+    sirv_fn = sirv_fn
+  ))
+}
+
+```
+
+
+```{r sirv-test}
+
+df <- all_results$ONT$IsoQuant$`1`$k_class_df_list$`Join&Call`
+
+df %>%
+  filter(chrom == "SIRV5") %>%
+  print()
+
+df[grepl("^SIRV", df$chrom), ]
+  
+
+sirv_df <- df[grepl("^SIRV", df$chrom), ]
+
+total_sirvs <- nrow(sirv_df)
+
+real_sirv_df <- sirv_df[sirv_df$isoform %in% real_sirvs, ]
+novel_sirv_df <- sirv_df[!sirv_df$isoform %in% real_sirvs, ]
+
+real_sirvs_found <- nrow(real_sirv_df)
+novel_sirvs_found <- nrow(novel_sirv_df)
+
+# Precision: Proportion of SIRVs in sirv_df that are real SIRVs
+precision <- real_sirvs_found / total_sirvs
+
+# Recall: Proportion of real SIRVs found in sirv_df
+recall <- real_sirvs_found / n_sirvs
+
+# F1 Score: Harmonic mean of precision and recall
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+missing_sirvs <- setdiff(real_sirvs, sirv_df$isoform)
+
+
+```
+
+
+
+```{r investigate_sirvs}
+tissue_df_lists <- list("b_class_df_list", "k_class_df_list")
+tissues_df_labels <- list(Brain=sample_labels_Brain, Kidney=sample_labels_Kidney)
+sirv_results <- list()
+
+missing_sirvs <- real_sirvs
+
+for (platform in names(all_results)) {
+  cat("\n\n\n\n####", platform, "####\n")
+  sirv_results[[platform]] <- list()
+  for (method in names(all_results[[platform]])) {
+    cat("\n\n\n###", method, "###\n")
+    sirv_results[[platform]][[method]] <- list()
+    results <- all_results[[platform]][[method]][["1"]]
+    for (i in seq_along(tissue_df_lists)) {
+      tissue_df_list <- tissue_df_lists[[i]]
+      tissue <- names(tissues_df_labels)[[i]]
+      cat("\n\n##", tissue, "##\n")
+      sirv_results[[platform]][[method]][[tissue]] <- list()
+      df_list <- results[[tissue_df_list]]
+      for (j in seq_along(df_list)){
+        df <- df_list[[j]]
+        df_name <- tissues_df_labels[[tissue]][[j]]
+        cat("\n#", df_name, "#\n")
+        sirv_result <- calculate_sirv_metrics(df)
+        sirv_results[[platform]][[method]][[tissue]][[df_name]] <- sirv_result
+        
+        sirv_result$metrics %>% format_tsv() %>% writeLines
+        
+        for (name in names(sirv_result)) {
+          value <- sirv_result[[name]]
+          if (!is.data.frame(value)) {
+            cat(name, ":", value, "\n")
+          }
+        }
+        
+        missing_sirvs <- intersect(missing_sirvs, sirv_result$sirv_fn)
+      }
+    }
+  }
+}
+
+cat("Missing SIRVs: ", missing_sirvs)
+```
+
+
+```{r missing_sirvs}
+
+missing_pb <- c("SIRV311", "SIRV512")
+
+print("Looking for missing IsoSeq SIRVs...")
+for (method in names(sirv_results$IsoSeq)) {
+  for (tissue in names(sirv_results$IsoSeq[[method]])) {
+    for (df_name in names(sirv_results$IsoSeq[[method]][[tissue]])) {
+      
+      # Grab the current SIRV data frame
+      current_df <- sirv_results$IsoSeq[[method]][[tissue]][[df_name]]$sirv_df
+      
+      # Look for rows where "isoform" is in missing_pb
+      hits <- current_df[current_df$isoform %in% missing_pb, ]
+      
+      # If any matching isoform was found, print details
+      if (nrow(hits) > 0) {
+        for (row_idx in seq_len(nrow(hits))) {
+          cat("Found missing SIRV isoform '",
+              hits$isoform[row_idx],
+              "' in:\n",
+              "  Method: ", method, "\n",
+              "  Tissue: ", tissue, "\n",
+              "  Data frame name: ", df_name, "\n\n", 
+              sep = ""
+          )
+        }
+      }
+    }
+  }
+}
+
+
+```
+
+```{r}
+
+ism_ont <- c("SIRV107", "SIRV304", "SIRV403", "SIRV408", "SIRV708")
+
+for (method in names(sirv_results$ONT)) {
+  for (tissue in names(sirv_results$ONT[[method]])) {
+    for (df_name in names(sirv_results$ONT[[method]][[tissue]])) {
+      
+      # Grab the current SIRV data frame
+      current_df <- sirv_results$ONT[[method]][[tissue]][[df_name]]$sirv_df
+      
+      # Look for rows where "isoform" is in ism_ont
+      hits <- current_df[current_df$isoform %in% ism_ont & current_df$structural_category == "FSM", ]
+      
+      # If any matching isoform was found, print details
+      if (nrow(hits) > 0) {
+        for (row_idx in seq_len(nrow(hits))) {
+          cat("Found ISM SIRV isoform '",
+              hits$isoform[row_idx],
+              "' in:\n",
+              "  Method: ", method, "\n",
+              "  Tissue: ", tissue, "\n",
+              "  Data frame name: ", df_name, "\n\n", 
+              sep = ""
+          )
+        }
+      }
+    }
+  }
+}
+```
+
+
+
+
+```{r sirv_results_df}
+
+library(purrr)
+library(dplyr)
+library(tidyr)
+
+# Function to flatten nested structure into a dataframe
+nested_to_dataframe <- function(results) {
+  imap_dfr(results, function(platform_data, platform) {
+    imap_dfr(platform_data, function(method_data, method) {
+      imap_dfr(method_data, function(tissue_data, tissue) {
+        imap_dfr(tissue_data, function(df, df_name) {
+          # Pivot metrics tibble to wide format
+          metrics_wide <- df$metrics %>%
+            pivot_wider(names_from = Metric, values_from = Value)
+          
+          # Combine with other columns
+          tibble(
+            platform = platform,
+            method = method,
+            tissue = tissue,
+            sample = df_name,
+            missing_sirvs = list(df$sirv_fn)
+          ) %>%
+            bind_cols(metrics_wide)
+        })
+      })
+    })
+  })
+}
+
+# Usage
+result_df <- nested_to_dataframe(sirv_results)
+
+result_df$missing_sirvs <- sapply(result_df$missing_sirvs, function(x) {
+  if (is.null(x)) 0 else length(x)
+})
+
+# Print the resulting dataframe
+print(result_df)
+
+write_csv(result_df, "full_sirv_table.csv")
+
+
+```
+
+
+
+```{r}
+
+sirv_results$IsoSeq$IsoQuant$Brain$`Join&Call`$sirv_fn
+sirv_results$IsoSeq$IsoQuant$Brain$`Call&Join`$sirv_fn
+
+result_df %>%
+  filter(sample %in% c("Join&Call", "Call&Join") & tissue == "Brain") %>%
+  print()
+
+all_results$IsoSeq$Mandalorion$`1`$b_class_df_list$`Call&Join` %>%
+  filter(isoform == "G13.6")
+
+all_results$IsoSeq$Mandalorion$`1`$b_class_df_list$`Join&Call` %>%
+  filter(isoform == "Isoform409_5")
+
+all_results$IsoSeq$Mandalorion$`1`$b_class_df_list$`Join&Call` %>%
+  filter(chrom == "SIRV6")
+
+```
+
+```{r}
+
+for (position in names(sirv_results$ONT$IsoQuant$Brain)) {
+  # Access the specific dataframe
+  sirv_df <- sirv_results$ONT$IsoQuant$Brain[[position]]$sirv_df
+  
+  # Filter for chrom == "SIRV5"
+  fl_sum <- sirv_df %>%
+    filter(chrom == "SIRV5") %>%
+    summarise(total_FL = sum(FL, na.rm = TRUE)) %>%
+    pull(total_FL)
+  
+  sirv506_fl <- sirv_df %>%
+    filter(associated_transcript == "SIRV506") %>%
+    pull(FL)
+  sirv511_fl <- sirv_df %>%
+    filter(associated_transcript == "SIRV511") %>%
+    pull(FL)
+  
+  # Print the result
+  cat("Position:", position, "FL Sum for SIRV5:", fl_sum, "\n")
+  cat("Position:", position, "SIRV506 ratio:", sirv506_fl / fl_sum, "\n")
+  cat("Position:", position, "SIRV511 ratio:", sirv511_fl / fl_sum, "\n----\n")
+}
+
+sirv5_df <- sirv_results$ONT$IsoQuant$Brain$`Brain 4`$sirv_df %>%
+  filter(chrom == "SIRV5")
+
+sirv5_fl <- sum(sirv5_df$FL, na.rm = TRUE)
+sirv506_fl <- sirv5_df %>%
+  filter(isoform == "SIRV506") %>%
+  pull(FL)
+sirv511_fl <- sirv5_df %>%
+  filter(isoform == "SIRV511") %>%
+  pull(FL)
+
+sirv506_ratio <- sirv506_fl / sirv5_fl
+sirv511_ratio <- sirv511_fl / sirv5_fl
+
+
+sirv_results$ONT$IsoQuant$Brain$`Join&Call`$sirv_df
+
+sirv_results$ONT$IsoQuant$Brain$`Join&Call`$sirv_fn
+sirv_results$ONT$IsoQuant$Brain$`Call&Join`$sirv_fn
+sirv_results$ONT$IsoQuant$Brain$`Brain 4`$sirv_fn
+
+
+sirv_results$ONT$TALON$Brain$`Join&Call`$sirv_fn
+sirv_results$ONT$TALON$Brain$`Call&Join`$sirv_fn
+
+
+setdiff(sirv_results$IsoSeq$FLAIR$Brain$`Join&Call`$sirv_fn, sirv_results$IsoSeq$FLAIR$Brain$`Call&Join`$sirv_fn)
+setdiff(sirv_results$IsoSeq$FLAIR$Brain$`Call&Join`$sirv_fn, sirv_results$IsoSeq$FLAIR$Brain$`Join&Call`$sirv_fn)
+
+setdiff(sirv_results$IsoSeq$IsoQuant$Brain$`Join&Call`$sirv_fn, sirv_results$IsoSeq$IsoQuant$Brain$`Call&Join`$sirv_fn)
+setdiff(sirv_results$IsoSeq$IsoQuant$Brain$`Call&Join`$sirv_fn, sirv_results$IsoSeq$IsoQuant$Brain$`Join&Call`$sirv_fn)
+
+setdiff(sirv_results$ONT$FLAIR$Brain$`Join&Call`$sirv_fn, sirv_results$ONT$FLAIR$Brain$`Call&Join`$sirv_fn)
+setdiff(sirv_results$ONT$FLAIR$Brain$`Call&Join`$sirv_fn, sirv_results$ONT$FLAIR$Brain$`Join&Call`$sirv_fn)
+
+setdiff(sirv_results$ONT$TALON$Kidney$`Join&Call`$sirv_fn, sirv_results$ONT$TALON$Kidney$`Call&Join`$sirv_fn)
+setdiff(sirv_results$ONT$TALON$Kidney$`Call&Join`$sirv_fn, sirv_results$ONT$TALON$Kidney$`Join&Call`$sirv_fn)
+
+setdiff(sirv_results$ONT$TALON$Brain$`Join&Call`$sirv_fn, sirv_results$ONT$TALON$Brain$`Call&Join`$sirv_fn)
+setdiff(sirv_results$ONT$TALON$Brain$`Call&Join`$sirv_fn, sirv_results$ONT$TALON$Brain$`Join&Call`$sirv_fn)
+
+setdiff(sirv_results$IsoSeq$Mandalorion$Brain$`Join&Call`$sirv_fn, sirv_results$IsoSeq$Mandalorion$Brain$`Call&Join`$sirv_fn)
+setdiff(sirv_results$IsoSeq$Mandalorion$Brain$`Call&Join`$sirv_fn, sirv_results$IsoSeq$Mandalorion$Brain$`Join&Call`$sirv_fn)
+
+sirv_results$ONT$IsoQuant$Brain$`Join&Call`$sirv_df %>%
+  filter(isoform == "SIRV403") %>%
+  print()
+
+sirv_results$ONT$TALON$Brain$`Join&Call`$sirv_df %>%
+  filter(chrom == "SIRV4" & exons == 4 & startsWith(UJC, "SIRV4_-_8373_8629_8991_13672")) %>%
+  print()
+
+
+
+# SIRV403 UJC: SIRV4_-_8373_8629_8991_13672_13829_15019_FSM
+
+```
+
+In ONT - IsoQuant - Brain, J&C fails to detect SIRV506, while C&J (specifically only B34) captures SIRV506.
+SIRV506 and SIRV511 are nearly identical - their only difference is, the first exon of SIRV506 ends at 1149, while that of SIRV511 ends at 1143. 
+
+```{r}
+
+
+sirv_results$IsoSeq$FLAIR$Brain$`Join&Call`$sirv_df %>%
+  filter(chrom == "SIRV3") %>%
+  select(isoform, chrom, length, structural_category, associated_transcript, UJC, starts_with("FL")) %>%
+  print()
+sirv_results$IsoSeq$FLAIR$Brain$`Call&Join`$sirv_df %>%
+  filter(chrom == "SIRV3") %>%
+  select(isoform, chrom, length, structural_category, associated_transcript, UJC, starts_with("FL")) %>%
+  print()
+
+
+
+
+```
+
+
+

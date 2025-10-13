@@ -1,0 +1,414 @@
+---
+title: "SQANTI3 QC Stacked Barplots by Tissue"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Load required libraries
+library(tidyverse)
+library(stringr)
+```
+
+---
+
+### Cell 2: Load Data
+
+This cell lists and loads all files from  
+`isoseq/isoseq_prefilter/isoseq_prefilter_sq3/*/*_classification.txt`,  
+extracts the sample name from the parent folder (removing the trailing `_sq3`), and stores each file as its own dataframe.
+
+```{r load-data}
+# List all matching classification files
+files <- Sys.glob("isoseq/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/*/*/collapse/*_sq3_orth/*_classification.txt")
+
+# Create an empty list to store each dataframe
+data_list <- list()
+
+# Loop over each file, extract sample name, and load the file
+for (file in files) {
+  # Get the name of the parent directory and remove the trailing "_sq3"
+  sample_name <- basename(dirname(file))
+  sample_name <- str_replace(sample_name, "_sq3_orth$", "")
+  
+  # Read the file as a dataframe (assuming tab-delimited with header)
+  df <- read.delim(file, header = TRUE, sep = "\t")
+  
+  # Add a column with the sample name for later plotting
+  df$sample <- sample_name
+  
+  # Store the dataframe in the list using the sample name as key
+  data_list[[sample_name]] <- df
+  
+}
+```
+
+
+---
+
+### Cell 3: Separate Tissues
+
+Separate the loaded data into brain and kidney based on sample name:
+- **Brain:** sample names starting with **B3** or **B1**  
+- **Kidney:** sample names starting with **K3** or **B0**
+
+
+```{r separate-tissues}
+# Get all sample names (keys from the data_list)
+all_samples <- names(data_list)
+
+# Classify based on starting letters:
+brain_samples <- all_samples[grepl("^(B3|B1)", all_samples)]
+kidney_samples <- all_samples[grepl("^(K3|B0)", all_samples)]
+
+# Combine the individual dataframes into one for each tissue group
+brain_data <- bind_rows(data_list[brain_samples])
+kidney_data <- bind_rows(data_list[kidney_samples])
+```
+
+
+---
+
+### Cell 4: Recode Structural Categories
+
+Recode the `structural_category` values so that they match your desired names in the legend:
+
+- `"full-splice_match"` → `"Full Splice-Match"`  
+- `"incomplete-splice_match"` → `"Incomplete Splice-Match"`  
+- `"novel_in_catalog"` → `"Novel In Catalog"`  
+- `"novel_not_in_catalog"` → `"Novel Not in Catalog"`  
+- `"genic"` → `"Genic\nGenomic"`  
+- `"genic_intron"` → `"Genic\nIntron"`  
+- `"antisense"` → `"Antisense"`  
+- `"fusion"` → `"Fusion"`  
+- `"intergenic"` → `"Intergenic"`
+
+
+```{r recode-structural-categories}
+# Define a mapping vector
+recode_mapping <- c(
+  "full-splice_match" = "Full Splice-Match",
+  "incomplete-splice_match" = "Incomplete Splice-Match",
+  "novel_in_catalog" = "Novel In Catalog",
+  "novel_not_in_catalog" = "Novel Not in Catalog",
+  "genic" = "Genic\nGenomic",
+  "genic_intron" = "Genic\nIntron",
+  "antisense" = "Antisense",
+  "fusion" = "Fusion",
+  "intergenic" = "Intergenic"
+)
+
+# Recode the structural_category in brain_data
+brain_data <- brain_data %>%
+  mutate(structural_category = recode(structural_category, !!!recode_mapping))
+
+# Recode the structural_category in kidney_data
+kidney_data <- kidney_data %>%
+  mutate(structural_category = recode(structural_category, !!!recode_mapping))
+```
+
+
+---
+
+### Cell 5: Global Color Palette
+
+Define the color palette to be used for each structural category.
+
+```{r global-colors}
+# Define the colors for the structural categories
+category_colors <- c(
+  "Full Splice-Match" = "#6BAED6",
+  "Incomplete Splice-Match" = "#FC8D59",
+  "Novel In Catalog" = "#78C679",
+  "Novel Not in Catalog" = "#EE6A50",
+  "Genic\nGenomic" = "#969696",
+  "Antisense" = "#66C2A4",
+  "Fusion" = "goldenrod1",
+  "Intergenic" = "darksalmon",
+  "Genic\nIntron" = "#41B6C4"
+)
+```
+
+
+---
+
+### Cell 6: Define the Plotting Function
+
+This function takes a tissue-specific dataframe, sample ordering, a plot title, and custom sample labels. It orders the data, aggregates counts, and creates a stacked barplot with the specified stacking order and custom x-axis labels.
+
+```{r plot-function}
+plot_tissue <- function(tissue_data, sample_order, tissue_title, sample_labels, exclude_call_join = TRUE) {
+  
+  # If exclude_call_join is TRUE, filter out samples whose custom label is "Call&Join"
+  if(exclude_call_join) {
+    remove_samples <- names(sample_labels)[sample_labels == "Call&Join"]
+    tissue_data <- tissue_data %>% filter(!(sample %in% remove_samples))
+    sample_order <- sample_order[!(sample_order %in% remove_samples)]
+    sample_labels <- sample_labels[!(names(sample_labels) %in% remove_samples)]
+  }
+  
+  # Ensure the sample factor is ordered as specified
+  tissue_data$sample <- factor(tissue_data$sample, levels = sample_order)
+  
+  # Summarize counts per sample and structural category
+  plot_data <- tissue_data %>%
+    group_by(sample, structural_category) %>%
+    summarise(count = n(), .groups = "drop")
+  
+  # Set factor levels for structural_category to force stacking order.
+  # The desired legend (top-to-bottom) order is given by category_colors.
+  # Since ggplot2 stacks from bottom to top (first level at the bottom),
+  # we keep the levels as the desired_order here and reverse the legend order.
+  desired_order <- names(category_colors)
+  plot_data$structural_category <- factor(plot_data$structural_category, levels = desired_order)
+  
+  # Create the plot
+  p <- ggplot(plot_data, aes(x = sample, y = count, fill = structural_category)) +
+    geom_bar(stat = "identity") +
+    scale_fill_manual(
+      values = category_colors
+    ) +
+    labs(
+      x = "Transcriptome",
+      y = "Transcript Count", 
+      fill = "Structural Category",
+      title = tissue_title
+    ) +
+    scale_x_discrete(labels = sample_labels) +
+    theme_minimal() +
+    ylim(c(0, 500000))
+  
+  return(p)
+}
+
+```
+
+
+
+---
+
+### Cell 7: Define Sample Order and Custom Labels
+
+For each tissue, set the desired left-to-right order for the samples and replace:
+- For **brain**:  
+  `"B100K0"` → `"Join&Call"`  
+  `"B100K0_TAMA"` → `"Call&Join"`  
+- For **kidney** (using analogous names):  
+  `"B0K100"` → `"Join&Call"`  
+  `"B0K100_TAMA"` → `"Call&Join"`
+
+```{r sample-order-labels}
+## Brain definitions
+brain_order <- c("B100K0", "B100K0_TAMA", "B31", "B32", "B33", "B34", "B35")
+brain_sample_labels <- c(
+  "B100K0" = "Join&Call",
+  "B100K0_TAMA" = "Call&Join",
+  "B31" = "Brain 1",
+  "B32" = "Brain 2",
+  "B33" = "Brain 3",
+  "B34" = "Brain 4",
+  "B35" = "Brain 5"
+)
+
+## Kidney definitions
+kidney_order <- c("B0K100", "B0K100_TAMA", "K31", "K32", "K33", "K34", "K35")
+kidney_sample_labels <- c(
+  "B0K100" = "Join&Call",
+  "B0K100_TAMA" = "Call&Join",
+  "K31" = "Kidney 1",
+  "K32" = "Kidney 2",
+  "K33" = "Kidney 3",
+  "K34" = "Kidney 4",
+  "K35" = "Kidney 5"
+)
+```
+
+
+---
+
+### Cell 8: Create the Plots
+
+Call the plotting function once for brain and once for kidney. The resulting plots will use the custom sample labels and have the stacking order (from top to bottom) corresponding to the order defined in your `category_colors`.
+
+```{r plot-tissues, fig.height=6, fig.width=8}
+# Plot for Brain Tissue
+p_brain <- plot_tissue(brain_data, brain_order, "IsoSeq Pre-Filter Brain Tissue", brain_sample_labels)
+print(p_brain)
+
+# Plot for Kidney Tissue
+p_kidney <- plot_tissue(kidney_data, kidney_order, "IsoSeq Pre-Filter Kidney Tissue", kidney_sample_labels)
+print(p_kidney)
+```
+
+
+```{r}
+library(ggplot2)
+library(cowplot)
+
+# Create the left plot with title "Pre-Filter"
+p1_brain <- p_brain + 
+  ggtitle("Pre-Filter") +
+  ylim(0, 500000) + 
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    axis.title = element_blank(),
+    legend.position = "right"  # Keep legend for extraction
+  )
+
+# Create the right plot with title "Post-Filter" and remove y-axis text/ticks
+p2_brain <- all_results$IsoSeq$isoseq_sqanti$`1`$brain_plots[[1]] +
+  ggtitle("Post-Filter") +
+  ylim(0, 500000) +
+  theme(
+    axis.title = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+# Extract the legend from p1 (the left plot)
+legend <- get_legend(p1_brain)
+
+# Remove the legend from p1 so that both plots have consistent space
+p1_brain_no_legend <- p1_brain + theme(legend.position = "none")
+
+# Arrange the two plots side by side (left and right)
+combined_plots_brain <- plot_grid(p1_brain_no_legend, p2_brain, ncol = 2, align = "h")
+
+# Combine the plots with the legend on the right.
+final_plot_brain <- plot_grid(combined_plots_brain, legend, ncol = 2, rel_widths = c(1, 0.3))
+
+# Add an overall title "IsoSeq + SQ3 Filter" above the combined plot
+final_plot_with_title_brain <- plot_grid(
+  ggdraw() + draw_label("IsoSeq + SQ3 Filter: Brain", fontface = 'bold', size = 14),
+  final_plot_brain,
+  ncol = 1,
+  rel_heights = c(0.1, 1)
+)
+
+# Display the final plot with the overall title
+print(final_plot_with_title_brain)
+
+
+```
+
+
+```{r}
+# Create the left plot with title "Pre-Filter"
+p1_kidney <- p_kidney + 
+  ggtitle("Pre-Filter") +
+  ylim(0, 500000) + 
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    axis.title = element_blank(),
+    legend.position = "right"  # Keep legend for extraction
+  )
+
+# Create the right plot with title "Post-Filter" and remove y-axis text/ticks
+p2_kidney <- all_results$IsoSeq$isoseq_sqanti$`1`$kidney_plots[[1]] +
+  ggtitle("Post-Filter") +
+  ylim(0, 500000) +
+  theme(
+    axis.title = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+# Extract the legend from p1 (the left plot)
+legend <- get_legend(p1_kidney)
+
+# Remove the legend from p1 so that both plots have consistent space
+p1_kidney_no_legend <- p1_kidney + theme(legend.position = "none")
+
+# Arrange the two plots side by side (left and right)
+combined_plots_kidney <- plot_grid(p1_kidney_no_legend, p2_kidney, ncol = 2, align = "h")
+
+# Combine the plots with the legend on the right.
+final_plot_kidney <- plot_grid(combined_plots_kidney, legend, ncol = 2, rel_widths = c(1, 0.2))
+
+# Add an overall title "IsoSeq + SQ3 Filter" above the combined plot
+final_plot_with_title_kidney <- plot_grid(
+  ggdraw() + draw_label("IsoSeq + SQ3 Filter: Kidney", fontface = 'bold', size = 14),
+  final_plot_kidney,
+  ncol = 1,
+  rel_heights = c(0.1, 1)
+)
+
+# Display the final plot with the overall title
+print(final_plot_with_title_kidney)
+
+
+```
+
+```{r}
+ggsave("isoseq_pre_post_filter_brain.pdf", device = cairo_pdf, plot = final_plot_with_title_brain, width = 9, height = 6, unit = "in")
+ggsave("isoseq_pre_post_filter_kidney.pdf", device = cairo_pdf, plot = final_plot_with_title_kidney, width = 9, height = 6, unit = "in")
+```
+
+
+
+```{r}
+
+p1 <- p1_brain
+p2 <- p2_brain
+p3 <- p1_kidney
+p4 <- p2_kidney
+
+# Remove axes
+p1 <- p1 + ylab("# transcripts") + theme(
+  plot.title = element_text(hjust = 0.5),
+  axis.title.y = element_text(size = 10),  
+  axis.title.x = element_blank(),
+  axis.text.x = element_blank(),
+  axis.ticks.x = element_blank()
+)
+
+p2 <- p2 + theme(
+  plot.title = element_text(hjust = 0.5),
+  axis.title.x = element_blank(),
+  axis.text.x = element_blank(),
+  axis.ticks.x = element_blank(),
+  axis.title.y = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks.y = element_blank()
+)
+
+p3 <- p3 + ylab("# transcripts") + xlab("Sample") + theme(
+  plot.title = element_text(hjust = 0.5),
+  axis.title.y = element_text(size = 10),
+  axis.title.x = element_text(size = 10)
+)
+
+p4 <- p4 + xlab("Sample") + theme(
+  plot.title = element_text(hjust = 0.5),
+  axis.title.x = element_text(size = 10),
+  axis.title.y = element_blank(),
+  axis.text.y = element_blank(),
+  axis.ticks.y = element_blank()
+)
+
+
+# Row title grobs
+row0_title <- wrap_elements(full = grid::textGrob("IsoSeq and SQANTI3 Filter", x = 0.45, vjust = 0.25,
+                                                  gp = grid::gpar(fontsize = 16, fontface = "bold")))
+row1_title <- wrap_elements(full = grid::textGrob("Brain", x = 0.45,
+                                                  gp = grid::gpar(fontsize = 14, fontface = "bold")))
+row2_title <- wrap_elements(full = grid::textGrob("Kidney", x = 0.45,
+                                                  gp = grid::gpar(fontsize = 14, fontface = "bold")))
+
+# Extract rows from the grid using patchwork::area() is complex, so we recreate them manually:
+row1 <- (p1 + p2) + plot_layout(ncol = 2)
+row2 <- (p3 + p4) + plot_layout(ncol = 2)
+
+# Final layout with row titles
+final <- (row0_title / row1_title / row1 / row2_title / row2) + 
+  plot_layout(ncol = 1, heights = c(0.10, 0.05, 1, 0.05, 1), guides = "collect") + 
+  theme(legend.position = "right")
+
+final
+
+```
+
+```{r}
+
+ggsave("isoseq_pre_post_filter_full.pdf", device = cairo_pdf, plot = final, width = 9, height = 6, unit = "in")
+```
+

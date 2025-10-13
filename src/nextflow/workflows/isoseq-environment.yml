@@ -1,0 +1,8 @@
+name: isoseq
+channels:
+  - bioconda
+  - defaults
+dependencies:
+  - isoseq=4.0.0=h9ee0642_0
+  - pbmm2=1.13.1=h9ee0642_0
+prefix: /home/fabianje/.conda/envs/isoseq

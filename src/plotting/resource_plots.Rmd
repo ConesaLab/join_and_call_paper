@@ -1,0 +1,537 @@
+---
+title: "Resource Usage Plots"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(patchwork)
+library(cowplot)
+library(grid)
+library(RColorConesa)
+library(ggpattern)
+library(ggtext)
+library(sysfonts)
+library(showtext)
+```
+
+```{r load-data}
+# Read the resource summary data
+resource_data <- read_tsv("resource_summary.tsv", 
+                         col_names = c("data_type", "tissue", "tool", "strategy", 
+                                     "summary", "elapsed_time", "cpus", "cpu_time", 
+                                     "memory", "memory_GB"))
+
+# Normalize tool names early so prints and plots use corrected labels
+resource_data <- resource_data %>%
+  mutate(tool = if_else(tool == "bambu", "Bambu", tool))
+
+# Display the data
+print("Resource Summary Data:")
+print(resource_data)
+```
+
+```{r data-structure}
+# Check data structure and summary
+str(resource_data)
+summary(resource_data)
+```
+
+```{r clean-data}
+# Drop unnecessary columns and parse memory_GB
+resource_data <- resource_data %>%
+  select(-summary, -cpus, -memory) %>%
+  mutate(memory_GB = as.numeric(str_sub(memory_GB, 1, -3)))  # Remove "GB" suffix
+
+# Display cleaned data
+print("Cleaned Resource Data:")
+print(resource_data)
+```
+
+```{r font-setup}
+# pick a clean sans; Inter works well at tiny sizes
+font_add_google("Inter", "Inter")
+showtext_auto()           # turn on for all devices, incl. cairo_pdf
+# optional: nudge resolution for better hinting of outlines
+showtext_opts(dpi = 300)
+```
+
+```{r helper-functions}
+# Parse time format like "0-05:40:51" (days-hours:minutes:seconds)
+parse_time_to_hours <- function(time_str) {
+  parts <- str_split(time_str, "-")[[1]]
+  if (length(parts) == 2) {
+    days <- as.numeric(parts[1])
+    time_part <- parts[2]
+    time_parts <- str_split(time_part, ":")[[1]]
+    hours <- as.numeric(time_parts[1])
+    minutes <- as.numeric(time_parts[2])
+    seconds <- as.numeric(time_parts[3])
+    return(days * 24 + hours + minutes/60 + seconds/3600)
+  }
+  return(0)
+}
+# Function to create resource usage plots for a given data_type, tissue, and tool
+create_resource_plots <- function(data_type, tissue, tool, data, cpu_ymax, ram_ymax, show_x_labels = FALSE) {
+  # Filter data for the specific combination
+  subset_data <- data %>%
+    filter(data_type == !!data_type, tissue == !!tissue, tool == !!tool)
+  
+  # Check if data exists for this combination
+  if (nrow(subset_data) == 0) {
+    cat("No data found for", data_type, tissue, tool, "\n")
+    return(NULL)
+  }
+  
+  cat("Creating plots for:", data_type, tissue, tool, "\n")
+  
+  # Apply time parsing to both elapsed_time and cpu_time
+  subset_data <- subset_data %>%
+    mutate(
+      elapsed_hours = map_dbl(elapsed_time, parse_time_to_hours),
+      cpu_hours = map_dbl(cpu_time, parse_time_to_hours)
+    )
+  
+  # Create the three bar plots
+#   p1 <- ggplot(subset_data, aes(x = strategy, y = elapsed_hours, fill = strategy)) +
+#     geom_bar(stat = "identity", position = "dodge") +
+#     labs(title = "Elapsed Time (hours)", 
+#          x = "Strategy", y = "Hours") +
+#     theme_minimal() +
+#     theme(legend.position = "none")
+  
+  # Ensure deterministic ordering of strategies for color mapping
+  subset_data <- subset_data %>% mutate(strategy = factor(strategy, levels = sort(unique(strategy))))
+  # Fixed two-color palette per request
+  num_strats <- nlevels(subset_data$strategy)
+  base_cols <- c("#15918a", "#f9a856")
+  conesa_cols <- rep(base_cols, length.out = num_strats)
+  
+  p2 <- ggplot(subset_data, aes(x = strategy, y = cpu_hours, fill = strategy)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = "CPU", 
+         x = "Strategy", y = "Hours") +
+    scale_y_continuous(limits = c(0, cpu_ymax), breaks = seq(0, min(250, cpu_ymax), by = 50)) +
+    scale_fill_manual(values = conesa_cols) +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      plot.title.position = "plot",
+      plot.title = element_text(hjust = 0.5),
+      axis.title.x = element_blank()
+    )
+  if (!show_x_labels) {
+    p2 <- p2 + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+  } else {
+    p2 <- p2 + theme(axis.text.x = element_text(angle = 20, vjust = 1, hjust = 1))
+  }
+  
+  p3 <- ggplot(subset_data, aes(x = strategy, y = memory_GB, fill = strategy)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = "Max. RAM", 
+         x = "Strategy", y = "GB") +
+    scale_y_continuous(limits = c(0, ram_ymax), breaks = seq(0, min(200, ram_ymax), by = 50)) +
+    scale_fill_manual(values = conesa_cols) +
+    theme_minimal() +
+    theme(
+      legend.position = "none",
+      plot.title.position = "plot",
+      plot.title = element_text(hjust = 0.5),
+      axis.title.x = element_blank()
+    )
+  if (!show_x_labels) {
+    p3 <- p3 + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+  } else {
+    p3 <- p3 + theme(axis.text.x = element_text(angle = 20, vjust = 1, hjust = 1))
+  }
+  
+  # Combine plots using patchwork
+#   combined_plot <- p1 + p2 + p3
+  combined_plot <- p2 + p3
+  
+  # Add a persistent title using patchwork-native wrapper so it survives nesting
+  title_grob <- grid::textGrob(
+    label = tool,
+    x = 0.5, hjust = 0.5,
+    gp = grid::gpar(fontsize = 16, fontface = "bold")
+  )
+  title_el <- wrap_elements(full = title_grob)
+
+  titled_patchwork <- title_el / combined_plot + plot_layout(heights = c(0.08, 1))
+
+  return(titled_patchwork)
+}
+# Create ranking plot by metric ("cpu"|"ram"), data_type ("ont"|"isoseq"), and tissue ("brain"|"kidney")
+create_ranking_plot <- function(metric = c("cpu", "ram"),
+                                data_type = c("ONT", "PacBio"),
+                                tissue = c("brain", "kidney"),
+                                data = resource_data,
+                                include_context = FALSE) {
+  metric <- match.arg(metric)
+  data_type <- match.arg(data_type)
+  tissue <- match.arg(tissue)
+
+  data_type_map <- c("PacBio" = "IsoSeq", "ONT" = "ONT")
+  dt <- data_type_map[[data_type]]
+  ti <- tissue
+
+  df <- data %>%
+    filter(tissue == !!ti, data_type == !!dt) %>%
+    mutate(cpu_hours = map_dbl(cpu_time, parse_time_to_hours))
+
+  if (nrow(df) == 0) {
+    cat("No data for", dt, ti, "to build ranking plot\n")
+    return(NULL)
+  }
+
+  y_col <- if (metric == "cpu") "cpu_hours" else "memory_GB"
+  y_lab <- if (metric == "cpu") "Hours" else "GB"
+  plot_title_base <- if (metric == "cpu") "CPU Time" else "Max. RAM"
+  plot_title <- if (isTRUE(include_context)) paste(plot_title_base, data_type, tissue, sep = "; ") else plot_title_base
+
+  df <- df %>%
+    arrange(desc(.data[[y_col]])) %>%
+    mutate(x_pos = row_number())
+
+  sc <- RColorConesa::scale_fill_conesa(palette = "complete")
+  base5 <- sc$palette(5)
+  my6 <- c(base5, "#FDC659")
+  desired_tools <- c("FLAIR", "IsoQuant", "Bambu", "TALON", "Mandalorion", "IsoSeq")
+  tool_cols <- setNames(my6[seq_along(desired_tools)], desired_tools)
+
+  p <- ggplot(df, aes(x = x_pos, y = .data[[y_col]])) +
+    geom_col(aes(fill = tool), width = 0.9, color = NA, show.legend = TRUE) +
+    ggpattern::geom_col_pattern(
+      data = df,
+      aes(fill = tool, pattern = factor(strategy, levels = c("Join&Call", "Call&Join"))),
+      width = 0.9,
+      pattern_colour = NA,
+      pattern_fill = "white",
+      pattern_alpha = 0.25,
+      pattern_angle = 45,
+      pattern_spacing = 0.04,
+      pattern_density = 0.4,
+      pattern_key_scale_factor = 0.6,
+      show.legend = c(fill = FALSE, pattern = TRUE)
+    ) +
+    labs(title = plot_title, y = y_lab, x = NULL) +
+    scale_fill_manual(values = tool_cols, name = "Tool", breaks = desired_tools) +
+    ggpattern::scale_pattern_manual(name = "Strategy", values = c("Join&Call" = "none", "Call&Join" = "stripe"), breaks = c("Join&Call", "Call&Join")) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0))) +
+    theme(
+      plot.title.position = "plot",
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 10),
+      axis.title.y = element_text(size = 8),
+      axis.text.y = element_text(size = 8),
+      axis.title.x = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      legend.position = "right",
+      legend.title = element_text(face = "bold", size = 8),
+      legend.text = element_text(size = 8),
+      panel.grid.minor = element_blank(),
+      panel.grid.major.x = element_blank(),
+      plot.margin = margin(t = 0, r = 5, b = 0, l = 5)
+    ) +
+    guides(
+      fill = guide_legend(order = 1),
+      pattern = guide_legend(override.aes = list(fill = my6[1], pattern_fill = "white", pattern_alpha = 0.25))
+    ) +
+    scale_x_continuous(
+      limits = c(0.5, max(df$x_pos) + 0.5),
+      expand = expansion(mult = c(0, 0)),
+      breaks = df$x_pos,
+      labels = function(x) {
+        i <- match(x, df$x_pos)
+        paste(df$tool[i], df$strategy[i], sep = "\n")
+      }
+    ) +
+    theme(
+      axis.text.x = element_text(
+        family = "Inter",
+        size = 2.2, lineheight = 0.9, margin = margin(t = 4)
+      )
+    )
+
+  return(p)
+}
+```
+
+```{r create-all-plots}
+# Get unique combinations of data_type, tissue, and tool for brain tissue only
+# unique_combinations <- resource_data %>%
+#   filter(tissue == "brain") %>%
+#   select(data_type, tissue, tool) %>%
+#   distinct()
+
+# print("Unique combinations for brain tissue:")
+# print(unique_combinations)
+
+# # Create plots for each combination
+# all_plots <- list()
+
+# for (i in 1:nrow(unique_combinations)) {
+#   combo <- unique_combinations[i, ]
+
+#   # Set per-platform y-axis maxima
+#   if (combo$data_type == "IsoSeq") {
+#     cpu_ymax <- 260
+#     ram_ymax <- 220
+#   } else if (combo$data_type == "ONT") {
+#     cpu_ymax <- 100
+#     ram_ymax <- 100
+#   } else {
+#     cpu_ymax <- 250
+#     ram_ymax <- 200
+#   }
+
+#   # Only show x labels on the last row (row 3 in the custom layout)
+#   # data_type mapping by rows: rows 1-2: IsoSeq; row 3: ONT
+#   show_x <- combo$data_type == "ONT"
+
+#   plot <- create_resource_plots(combo$data_type, combo$tissue, combo$tool, resource_data, cpu_ymax, ram_ymax, show_x_labels = show_x)
+  
+#   if (!is.null(plot)) {
+#     all_plots[[paste(combo$data_type, combo$tissue, combo$tool, sep = "_")]] <- plot
+#     # print(plot)
+#   }
+# }
+
+# cat("Created", length(all_plots), "plot combinations\n")
+
+
+# brain_resource_1_1 <- wrap_elements(all_plots$IsoSeq_brain_IsoQuant)
+# brain_resource_1_2 <- wrap_elements(all_plots$IsoSeq_brain_FLAIR)
+# brain_resource_1_3 <- wrap_elements(all_plots$IsoSeq_brain_Bambu)
+# brain_resource_1_4 <- wrap_elements(all_plots$IsoSeq_brain_TALON)
+# brain_resource_2_1 <- wrap_elements(all_plots$IsoSeq_brain_Mandalorion)
+# brain_resource_2_3 <- wrap_elements(all_plots$IsoSeq_brain_IsoSeq)
+# brain_resource_3_1 <- wrap_elements(all_plots$ONT_brain_IsoQuant)
+# brain_resource_3_2 <- wrap_elements(all_plots$ONT_brain_FLAIR)
+# brain_resource_3_3 <- wrap_elements(all_plots$ONT_brain_Bambu)
+# brain_resource_3_4 <- wrap_elements(all_plots$ONT_brain_TALON)
+
+
+# brain_resource_plot <- 
+#   brain_resource_1_1 + brain_resource_1_2 + brain_resource_1_3 + brain_resource_1_4 +
+#   brain_resource_2_1 + brain_resource_2_3 + plot_spacer() +
+#   plot_spacer() +
+#   brain_resource_3_1 + brain_resource_3_2 + brain_resource_3_3 + brain_resource_3_4 +
+#   plot_layout(design = "
+#                 1234
+#                 5677
+#                 8888
+#                 9ABC
+#             ", heights = c(1, 1, 0.1, 1), axes = "collect", guides = "collect")
+
+# brain_resource_plot <- brain_resource_plot + 
+#     plot_annotation(title = "Comparison of Resource Usage",
+#                     theme = theme(plot.title = element_text(hjust = 0.5),
+#                                   plot.title.position = "plot"))
+
+# # Add a single centered x label on the entire last row
+# bottom_xlabel <- wrap_elements(full = grid::textGrob(
+#   label = "Strategy",
+#   x = 0.5, hjust = 0.5,
+#   gp = grid::gpar(fontsize = 14, fontface = "bold")
+# ))
+# brain_resource_plot <- brain_resource_plot / bottom_xlabel +
+#   plot_layout(heights = c(1, 0.02))
+
+# brain_resource_plot
+
+
+```
+
+```{r create-all-plots-kidney}
+# ---------------------------------
+# Build the same composite plot for kidney
+# ---------------------------------
+
+# Get unique combinations for kidney tissue
+# unique_combinations_kidney <- resource_data %>%
+#   filter(tissue == "kidney") %>%
+#   select(data_type, tissue, tool) %>%
+#   distinct()
+
+# print("Unique combinations for kidney tissue:")
+# print(unique_combinations_kidney)
+
+# # Create plots for each combination (kidney)
+# all_plots_kidney <- list()
+
+# for (i in 1:nrow(unique_combinations_kidney)) {
+#   combo <- unique_combinations_kidney[i, ]
+
+#   # Set per-platform y-axis maxima
+#   if (combo$data_type == "IsoSeq") {
+#     cpu_ymax <- 260
+#     ram_ymax <- 220
+#   } else if (combo$data_type == "ONT") {
+#     cpu_ymax <- 130
+#     ram_ymax <- 100
+#   } else {
+#     cpu_ymax <- 250
+#     ram_ymax <- 200
+#   }
+
+#   # Only show x labels on the last row (ONT)
+#   show_x <- combo$data_type == "ONT"
+
+#   plot <- create_resource_plots(combo$data_type, combo$tissue, combo$tool, resource_data, cpu_ymax, ram_ymax, show_x_labels = show_x)
+  
+#   if (!is.null(plot)) {
+#     all_plots_kidney[[paste(combo$data_type, combo$tissue, combo$tool, sep = "_")]] <- plot
+#   }
+# }
+
+# cat("Created", length(all_plots_kidney), "kidney plot combinations\n")
+
+# # Assemble kidney grid using the same layout
+# kidney_resource_1_1 <- wrap_elements(all_plots_kidney$IsoSeq_kidney_IsoQuant)
+# kidney_resource_1_2 <- wrap_elements(all_plots_kidney$IsoSeq_kidney_FLAIR)
+# kidney_resource_1_3 <- wrap_elements(all_plots_kidney$IsoSeq_kidney_Bambu)
+# kidney_resource_1_4 <- wrap_elements(all_plots_kidney$IsoSeq_kidney_TALON)
+# kidney_resource_2_1 <- wrap_elements(all_plots_kidney$IsoSeq_kidney_Mandalorion)
+# kidney_resource_2_3 <- wrap_elements(all_plots_kidney$IsoSeq_kidney_IsoSeq)
+# kidney_resource_3_1 <- wrap_elements(all_plots_kidney$ONT_kidney_IsoQuant)
+# kidney_resource_3_2 <- wrap_elements(all_plots_kidney$ONT_kidney_FLAIR)
+# kidney_resource_3_3 <- wrap_elements(all_plots_kidney$ONT_kidney_Bambu)
+# kidney_resource_3_4 <- wrap_elements(all_plots_kidney$ONT_kidney_TALON)
+
+# kidney_resource_plot <- 
+#   kidney_resource_1_1 + kidney_resource_1_2 + kidney_resource_1_3 + kidney_resource_1_4 +
+#   kidney_resource_2_1 + kidney_resource_2_3 + plot_spacer() +
+#   plot_spacer() +
+#   kidney_resource_3_1 + kidney_resource_3_2 + kidney_resource_3_3 + kidney_resource_3_4 +
+#   plot_layout(design = "
+#                 1234
+#                 5677
+#                 8888
+#                 9ABC
+#             ", heights = c(1, 1, 0.1, 1), axes = "collect", guides = "collect")
+
+# kidney_resource_plot <- kidney_resource_plot + 
+#     plot_annotation(title = "Comparison of Resource Usage",
+#                     theme = theme(plot.title = element_text(hjust = 0.5),
+#                                   plot.title.position = "plot"))
+
+# # Add a single centered x label on the entire last row
+# bottom_xlabel_kidney <- wrap_elements(full = grid::textGrob(
+#   label = "Strategy",
+#   x = 0.5, hjust = 0.5,
+#   gp = grid::gpar(fontsize = 14, fontface = "bold")
+# ))
+# kidney_resource_plot <- kidney_resource_plot / bottom_xlabel_kidney +
+#   plot_layout(heights = c(1, 0.02))
+
+# kidney_resource_plot
+
+```
+
+```{r pb-brain-cpu-rank-plot}
+
+pb_brain_cpu_desc_plot <- create_ranking_plot(metric = "cpu", data_type = "PacBio", tissue = "brain")
+pb_brain_cpu_desc_plot
+
+```
+
+```{r pb-brain-ram-rank-plot}
+
+pb_brain_ram_desc_plot <- create_ranking_plot(metric = "ram", data_type = "PacBio", tissue = "brain")
+pb_brain_ram_desc_plot
+
+```
+
+```{r ont-brain-cpu-rank-plot}
+
+ont_brain_cpu_desc_plot <- create_ranking_plot(metric = "cpu", data_type = "ONT", tissue = "brain")
+ont_brain_cpu_desc_plot
+
+```
+
+```{r ont-brain-ram-rank-plot}
+
+ont_brain_ram_desc_plot <- create_ranking_plot(metric = "ram", data_type = "ONT", tissue = "brain")
+ont_brain_ram_desc_plot
+
+```
+
+
+```{r brain-ranking-grid}
+
+brain_ranking_grid <- 
+  (pb_brain_cpu_desc_plot | pb_brain_ram_desc_plot) /
+  plot_spacer() /
+  ((ont_brain_cpu_desc_plot + guides(fill = "none")) | (ont_brain_ram_desc_plot + guides(fill = "none")))
+
+brain_ranking_grid <- brain_ranking_grid + plot_layout(guides = "collect", heights = c(1, 0.08, 1))
+brain_ranking_grid <- brain_ranking_grid & theme(legend.position = "right")
+brain_ranking_grid <- brain_ranking_grid + plot_annotation(
+  title = "Ranking of Computational Resource Usage",
+  theme = theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.title.position = "plot"
+  )
+)
+
+brain_ranking_grid
+ggsave("brain_ranking_grid.pdf", device = cairo_pdf, plot = brain_ranking_grid, width=6, height=4, unit="in")
+
+```
+
+```{r pb-kidney-cpu-rank-plot}
+
+pb_kidney_cpu_desc_plot <- create_ranking_plot(metric = "cpu", data_type = "PacBio", tissue = "kidney")
+pb_kidney_cpu_desc_plot
+
+```
+
+```{r pb-kidney-ram-rank-plot}
+
+pb_kidney_ram_desc_plot <- create_ranking_plot(metric = "ram", data_type = "PacBio", tissue = "kidney")
+pb_kidney_ram_desc_plot
+
+```
+
+```{r ont-kidney-cpu-rank-plot}
+
+ont_kidney_cpu_desc_plot <- create_ranking_plot(metric = "cpu", data_type = "ONT", tissue = "kidney")
+ont_kidney_cpu_desc_plot
+
+```
+
+```{r ont-kidney-ram-rank-plot}
+
+ont_kidney_ram_desc_plot <- create_ranking_plot(metric = "ram", data_type = "ONT", tissue = "kidney")
+ont_kidney_ram_desc_plot
+
+```
+
+```{r kidney-ranking-grid}
+
+kidney_ranking_grid <- 
+  (pb_kidney_cpu_desc_plot | pb_kidney_ram_desc_plot) /
+  plot_spacer() /
+  ((ont_kidney_cpu_desc_plot + guides(fill = "none")) | (ont_kidney_ram_desc_plot + guides(fill = "none")))
+
+kidney_ranking_grid <- kidney_ranking_grid + plot_layout(guides = "collect", heights = c(1, 0.08, 1))
+kidney_ranking_grid <- kidney_ranking_grid & theme(legend.position = "right")
+kidney_ranking_grid <- kidney_ranking_grid + plot_annotation(
+  title = "Ranking of Computational Resource Usage",
+  theme = theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    plot.title.position = "plot"
+  )
+)
+
+kidney_ranking_grid
+ggsave("kidney_ranking_grid.pdf", device = cairo_pdf, plot = kidney_ranking_grid, width=6, height=4, unit="in")
+
+```
+
+

@@ -1,0 +1,16 @@
+{
+    "data": "isoseq",
+    "algorithm": "isoseq",
+    "tama_location": "/home/apadepe/lr_pipelines/tama",
+    "sqanti_location": "/home/apadepe/lr_pipelines/SQANTI3",
+    "sqanti_filter": false,
+    "pigeon_filter": false,
+    "report_dir" : "/home/apadepe/documenting_NIH/fabian/reports",
+    "empty_report" : "/storage/gge/Fabian/nih/empty_report",
+    "src_dir" : "/home/apadepe/documenting_NIH/fabian/src/nextflow/scripts",
+    "data_dir" : "/home/apadepe/documenting_NIH/fabian/data/output",
+    "result_name" : "isoseq",
+    "joblog" : "joblog_isoseq.tsv",
+    "annotation": "/storage/gge/Alejandro/nih/ref_annotation/ref_mouse.gtf",
+    "projectDir": "/home/apadepe/documenting_NIH/fabian/src/nextflow/workflows"
+}
