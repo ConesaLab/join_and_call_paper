@@ -1,0 +1,11 @@
+file_acc,sampleID,condition,classification_file,junction_file
+B31,B31,B3,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/B31/B31_reads_classification.txt,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/B31/B31_junctions.txt
+B32,B32,B3,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/B32/B32_reads_classification.txt,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/B32/B32_junctions.txt
+B33,B33,B3,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/B33/B33_reads_classification.txt,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/B33/B33_junctions.txt
+B34,B34,B3,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/B34/B34_reads_classification.txt,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/B34/B34_junctions.txt
+B35,B35,B3,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/B35/B35_reads_classification.txt,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/B35/B35_junctions.txt
+K31,K31,K3,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/K31/K31_reads_classification.txt,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/K31/K31_junctions.txt
+K32,K32,K3,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/K32/K32_reads_classification.txt,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/K32/K32_junctions.txt
+K33,K33,K3,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/K33/K33_reads_classification.txt,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/K33/K33_junctions.txt
+K34,K34,K3,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/K34/K34_reads_classification.txt,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/K34/K34_junctions.txt
+K35,K35,K3,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/K35/K35_reads_classification.txt,/storage/gge/Alejandro/nih/iso_seq/SQANTI_reads/K35/K35_junctions.txt
