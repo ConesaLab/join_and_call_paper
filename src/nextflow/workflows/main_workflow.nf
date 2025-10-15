@@ -102,7 +102,7 @@ params.sr_junctions_jfs_concat="/storage/gge/Fabian/nih/data/metadata/flair/jfs/
 
 params.data_dir = "${projectDir}/../../../data/output"
 params.report_dir = "${projectDir}/../../../reports"
-params.empty_report = "/storage/gge/Fabian/nih/empty_report"
+params.empty_report = "${projectDir}/../../../reports/empty_report"
 params.src_dir = "${projectDir}/../scripts"
 // params.report_dir = "/home/apadepe/documenting_NIH/fabian/reports"
 // params.empty_report = "/storage/gge/Fabian/nih/empty_report"
