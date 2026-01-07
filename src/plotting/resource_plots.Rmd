@@ -5,6 +5,29 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# List of required packages
+required_packages <- c(
+  "tidyverse",
+  "ggplot2",
+  "dplyr",
+  "readr",
+  "patchwork",
+  "cowplot",
+  "RColorConesa",
+  "ggpattern",
+  "ggtext",
+  "sysfonts",
+  "showtext"
+)
+
+# Install missing packages
+missing_packages <- required_packages[!required_packages %in% installed.packages()[, "Package"]]
+if (length(missing_packages) > 0) {
+  message("Installing missing packages: ", paste(missing_packages, collapse = ", "))
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
+
 library(tidyverse)
 library(ggplot2)
 library(dplyr)
@@ -17,6 +40,11 @@ library(ggpattern)
 library(ggtext)
 library(sysfonts)
 library(showtext)
+
+# Create output directory if it doesn't exist
+if (!dir.exists("plot_creation")) {
+  dir.create("plot_creation")
+}
 ```
 
 ```{r load-data}
@@ -121,7 +149,9 @@ create_resource_plots <- function(data_type, tissue, tool, data, cpu_ymax, ram_y
     theme(
       legend.position = "none",
       plot.title.position = "plot",
-      plot.title = element_text(hjust = 0.5),
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 10),
+      axis.title = element_text(size = 12),
       axis.title.x = element_blank()
     )
   if (!show_x_labels) {
@@ -140,7 +170,9 @@ create_resource_plots <- function(data_type, tissue, tool, data, cpu_ymax, ram_y
     theme(
       legend.position = "none",
       plot.title.position = "plot",
-      plot.title = element_text(hjust = 0.5),
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 10),
+      axis.title = element_text(size = 12),
       axis.title.x = element_blank()
     )
   if (!show_x_labels) {
@@ -224,22 +256,22 @@ create_ranking_plot <- function(metric = c("cpu", "ram"),
     scale_y_continuous(expand = expansion(mult = c(0, 0))) +
     theme(
       plot.title.position = "plot",
-      plot.title = element_text(hjust = 0.5, face = "bold", size = 10),
-      axis.title.y = element_text(size = 8),
-      axis.text.y = element_text(size = 8),
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+      axis.title.y = element_text(size = 12),
+      axis.text.y = element_text(size = 10),
       axis.title.x = element_blank(),
       axis.text.x = element_blank(),
       axis.ticks.x = element_blank(),
       legend.position = "right",
-      legend.title = element_text(face = "bold", size = 8),
-      legend.text = element_text(size = 8),
+      legend.title = element_text(face = "bold", size = 14),
+      legend.text = element_text(size = 12),
       panel.grid.minor = element_blank(),
       panel.grid.major.x = element_blank(),
       plot.margin = margin(t = 0, r = 5, b = 0, l = 5)
     ) +
     guides(
       fill = guide_legend(order = 1),
-      pattern = guide_legend(override.aes = list(fill = my6[1], pattern_fill = "white", pattern_alpha = 0.25))
+      pattern = guide_legend(override.aes = list(fill = "grey50", pattern_fill = "white", pattern_alpha = 0.25))
     ) +
     scale_x_continuous(
       limits = c(0.5, max(df$x_pos) + 0.5),
@@ -249,13 +281,14 @@ create_ranking_plot <- function(metric = c("cpu", "ram"),
         i <- match(x, df$x_pos)
         paste(df$tool[i], df$strategy[i], sep = "\n")
       }
-    ) +
-    theme(
-      axis.text.x = element_text(
-        family = "Inter",
-        size = 2.2, lineheight = 0.9, margin = margin(t = 4)
-      )
     )
+    #  +
+    # theme(
+    #   axis.text.x = element_text(
+    #     family = "Inter",
+    #     size = 2.2, lineheight = 0.9, margin = margin(t = 4)
+    #   )
+    # )
 
   return(p)
 }
@@ -474,13 +507,13 @@ brain_ranking_grid <- brain_ranking_grid & theme(legend.position = "right")
 brain_ranking_grid <- brain_ranking_grid + plot_annotation(
   title = "Ranking of Computational Resource Usage",
   theme = theme(
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
     plot.title.position = "plot"
   )
 )
 
 brain_ranking_grid
-ggsave("brain_ranking_grid.pdf", device = cairo_pdf, plot = brain_ranking_grid, width=6, height=4, unit="in")
+ggsave("plot_creation/brain_ranking_grid.pdf", device = cairo_pdf, plot = brain_ranking_grid, width=18, height=12, unit="in")
 
 ```
 
@@ -524,13 +557,13 @@ kidney_ranking_grid <- kidney_ranking_grid & theme(legend.position = "right")
 kidney_ranking_grid <- kidney_ranking_grid + plot_annotation(
   title = "Ranking of Computational Resource Usage",
   theme = theme(
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 22),
     plot.title.position = "plot"
   )
 )
 
 kidney_ranking_grid
-ggsave("kidney_ranking_grid.pdf", device = cairo_pdf, plot = kidney_ranking_grid, width=6, height=4, unit="in")
+ggsave("plot_creation/kidney_ranking_grid.pdf", device = cairo_pdf, plot = kidney_ranking_grid, width=18, height=12, unit="in")
 
 ```
 

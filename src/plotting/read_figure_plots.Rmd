@@ -1,4 +1,37 @@
 
+```{r install_packages, echo=FALSE, include=FALSE}
+# List of required CRAN packages
+required_cran <- c(
+  "ggpubr",
+  "ggfortify",
+  "RColorConesa",
+  "UpSetR",
+  "tidyverse",
+  "cowplot",
+  "ComplexUpset",
+  "ggplot2",
+  "gtools",
+  "scales",
+  "forcats",
+  "patchwork"
+)
+
+# Install missing CRAN packages
+missing_cran <- required_cran[!required_cran %in% installed.packages()[, "Package"]]
+if (length(missing_cran) > 0) {
+  message("Installing missing CRAN packages: ", paste(missing_cran, collapse = ", "))
+  install.packages(missing_cran, repos = "https://cloud.r-project.org")
+}
+
+# Bioconductor packages (NOISeq)
+if (!"NOISeq" %in% installed.packages()[, "Package"]) {
+  message("Installing NOISeq from Bioconductor...")
+  if (!requireNamespace("BiocManager", quietly = TRUE)) {
+    install.packages("BiocManager", repos = "https://cloud.r-project.org")
+  }
+  BiocManager::install("NOISeq", ask = FALSE)
+}
+```
 
 ```{r load_libraries, echo=FALSE}
 # Load packages
@@ -15,11 +48,18 @@ library(ggplot2)
 library(gtools)
 library(scales)
 library(forcats)
+library(patchwork)
+
+# Create output directory if it doesn't exist
+if (!dir.exists("plot_creation")) {
+  dir.create("plot_creation")
+}
 ```
 
 ```{r read_sqanti_stacked_bar, echo=FALSE, message=FALSE, warning=FALSE}
 # Read multiple classification files (helpers + reusable pipeline)
-base_dir <- "/mnt/c/data/nih/sqanti_reads"
+# base_dir <- "/mnt/c/data/nih/sqanti_reads"
+base_dir <- "C:/data/nih/sqanti_reads"
 pacbio_dir <- paste0(base_dir, "/pacbio")
 ont_dir    <- paste0(base_dir, "/ont")
 
@@ -51,18 +91,22 @@ category_map <- c(
 display_levels <- c("FSM","ISM","NIC","NNC","Genic\nGenomic","Antisense","Fusion","Intergenic","Genic\nIntron")
 
 # Helper: read one file, summarize, and discard raw data immediately
+# Memory-optimized: only reads the structural_category column
 summarize_sqanti <- function(dir_path, file_vec, label_vec, tech_value) {
   purrr::map2_dfr(
     file_vec,
     label_vec,
     ~ {
       path <- file.path(dir_path, .x)
-      df <- readr::read_tsv(path, show_col_types = FALSE)
-      df %>%
+      # Only read the column we need to save memory
+      df <- readr::read_tsv(path, show_col_types = FALSE, col_select = "structural_category")
+      result <- df %>%
         dplyr::transmute(category_label = dplyr::recode(structural_category, !!!category_map)) %>%
         dplyr::filter(!is.na(category_label)) %>%
         dplyr::count(category_label, name = "num_reads") %>%
         dplyr::mutate(sample = .y, technology = tech_value)
+      rm(df); gc()  # Free memory immediately
+      result
     }
   )
 }
@@ -109,17 +153,22 @@ plot_sqanti_faceted <- function(counts_df, title = NULL) {
       )
     ) +
     facet_grid(. ~ sample, switch = "x") +
-    labs(x = NULL, y = "Number of reads", fill = "Structural category", title = title) +
+    labs(x = NULL, y = "Number of reads", fill = "Structural Category", title = title) +
     theme(
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
       panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
       strip.placement = "outside",
       strip.background = element_rect(color = "black", fill = NA, linewidth = 0.5),
-      strip.text = element_text(face = "bold"),
-      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+      strip.text = element_text(face = "bold", size = 10),
+      axis.text = element_text(size = 10),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10),
+      axis.title = element_text(size = 12),
       panel.grid.major.x = element_blank(),
       panel.grid.minor.x = element_blank(),
       legend.position = "right",
-      legend.box = "vertical"
+      legend.box = "vertical",
+      legend.title = element_text(size = 14),
+      legend.text = element_text(size = 12)
     )
 }
 
@@ -159,7 +208,7 @@ category_counts_kidney <- build_category_counts("K", "Kidney")
 #       "Genic\nIntron"
 #     )
 #   ) +
-#   labs(x = NULL, y = "Number of reads", fill = "Structural category") +
+#   labs(x = NULL, y = "Number of reads", fill = "Structural Category") +
 #   theme(
 #     axis.text.x = element_text(angle = 45, hjust = 1),
 #     panel.grid.major.x = element_blank(),
@@ -174,12 +223,12 @@ category_counts_kidney <- build_category_counts("K", "Kidney")
 # One-row faceted plot: five boxes (Brain 1–5), two bars per box (PacBio, ONT)
 brain_sq_reads_plot <- plot_sqanti_faceted(category_counts_brain, title = "Brain")
 brain_sq_reads_plot
-ggsave("brain_sq_reads_plot.pdf", device = cairo_pdf, plot = brain_sq_reads_plot, width=6, height=4, unit="in")
+ggsave("plot_creation/brain_sq_reads_plot.pdf", device = cairo_pdf, plot = brain_sq_reads_plot, width=18, height=12, unit="in")
 
 # Kidney plot using same functions
 kidney_sq_reads_plot <- plot_sqanti_faceted(category_counts_kidney, title = "Kidney")
 kidney_sq_reads_plot
-ggsave("kidney_sq_reads_plot.pdf", device = cairo_pdf, plot = kidney_sq_reads_plot, width=6, height=4, unit="in")
+ggsave("plot_creation/kidney_sq_reads_plot.pdf", device = cairo_pdf, plot = kidney_sq_reads_plot, width=18, height=12, unit="in")
 
 ```
 
@@ -293,31 +342,37 @@ plot_readnum_faceted <- function(read_numbers, tissue) {
     facet_grid(. ~ sample_label, switch = "x") +
     labs(x = NULL, y = "Number of reads", fill = "Category", title = tissue) +
     theme(
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
       panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
       strip.placement = "outside",
       strip.background = element_rect(color = "black", fill = NA, linewidth = 0.5),
-      strip.text = element_text(face = "bold"),
-      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+      strip.text = element_text(face = "bold", size = 10),
+      axis.text = element_text(size = 10),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10),
+      axis.title = element_text(size = 12),
       panel.grid.major.x = element_blank(),
-      panel.grid.minor.x = element_blank()
+      panel.grid.minor.x = element_blank(),
+      legend.title = element_text(size = 14),
+      legend.text = element_text(size = 12)
     )
 }
 
 # Render Brain and Kidney plots
 brain_readnum_plot  <- plot_readnum_faceted(read_numbers, "Brain")
 brain_readnum_plot
-ggsave("brain_readnum_plot.pdf", device = cairo_pdf, plot = brain_readnum_plot, width=6, height=4, unit="in")
+ggsave("plot_creation/brain_readnum_plot.pdf", device = cairo_pdf, plot = brain_readnum_plot, width=18, height=12, unit="in")
 
 kidney_readnum_plot <- plot_readnum_faceted(read_numbers, "Kidney")
 kidney_readnum_plot
-ggsave("kidney_readnum_plot.pdf", device = cairo_pdf, plot = kidney_readnum_plot, width=6, height=4, unit="in")
+ggsave("plot_creation/kidney_readnum_plot.pdf", device = cairo_pdf, plot = kidney_readnum_plot, width=18, height=12, unit="in")
 
 ```
 
 
 ```{r read_length_files_once, echo=FALSE, message=FALSE, warning=FALSE}
 
-lengths_base_dir <- "/mnt/c/data/nih/sqanti_reads/lengths_seq_only"
+# lengths_base_dir <- "/mnt/c/data/nih/sqanti_reads/lengths_seq_only"
+lengths_base_dir <- "C:/data/nih/sqanti_reads/lengths_seq_only"
 
 read_lengths_file <- function(file_path, sample_code, technology) {
   if (!file.exists(file_path)) return(tibble())
@@ -379,11 +434,14 @@ plot_lengths_violin_from_df <- function(lengths_df_raw, tissue) {
     scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
     labs(x = NULL, y = "Read length (nt)", fill = "Technology", title = tissue) +
     theme(
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
       panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
       strip.placement = "outside",
       strip.background = element_rect(color = "black", fill = NA, linewidth = 0.5),
-      strip.text = element_text(face = "bold"),
-      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+      strip.text = element_text(face = "bold", size = 10),
+      axis.text = element_text(size = 10),
+      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 10),
+      axis.title = element_text(size = 12),
       legend.position = "none"
     )
 }
@@ -395,7 +453,7 @@ plot_lengths_violin_from_df <- function(lengths_df_raw, tissue) {
 
 brain_lengths_violin  <- plot_lengths_violin_from_df(all_lengths_df, "Brain")
 brain_lengths_violin
-ggsave("brain_lengths_violin.pdf", device = cairo_pdf, plot = brain_lengths_violin, width=6, height=4, unit="in")
+ggsave("plot_creation/brain_lengths_violin.pdf", device = cairo_pdf, plot = brain_lengths_violin, width=18, height=12, unit="in")
 
 ```
 
@@ -404,7 +462,7 @@ ggsave("brain_lengths_violin.pdf", device = cairo_pdf, plot = brain_lengths_viol
 
 kidney_lengths_violin <- plot_lengths_violin_from_df(all_lengths_df, "Kidney")
 kidney_lengths_violin
-ggsave("kidney_lengths_violin.pdf", device = cairo_pdf, plot = kidney_lengths_violin, width=6, height=4, unit="in")
+ggsave("plot_creation/kidney_lengths_violin.pdf", device = cairo_pdf, plot = kidney_lengths_violin, width=18, height=12, unit="in")
 
 ```
 
@@ -420,7 +478,7 @@ brain_combined <- patchwork::wrap_plots(
 )
 
 brain_combined
-ggsave("brain_combined_plots.pdf", device = cairo_pdf, plot = brain_combined, width = 12, height = 8, units = "in")
+ggsave("plot_creation/brain_combined_plots.pdf", device = cairo_pdf, plot = brain_combined, width = 18, height = 12, units = "in")
 
 ```
 
@@ -435,7 +493,172 @@ kidney_combined <- patchwork::wrap_plots(
 )
 
 kidney_combined
-ggsave("kidney_combined_plots.pdf", device = cairo_pdf, plot = kidney_combined, width = 12, height = 8, units = "in")
+ggsave("plot_creation/kidney_combined_plots.pdf", device = cairo_pdf, plot = kidney_combined, width = 18, height = 12, units = "in")
 
 ```
+
+
+```{r inspect_classification_files, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Reuse base_dir, pacbio_dir, ont_dir defined earlier to target the same files
+sample_codes_brain <- paste0("B", 31:35)
+sample_codes_kidney <- paste0("K", 31:35)
+sample_codes <- c(sample_codes_brain) #, sample_codes_kidney)
+sample_labels <- c(paste("Brain", 1:5)) #, paste("Kidney", 1:5))
+
+pacbio_files <- file.path(pacbio_dir, paste0(sample_codes, "_reads_classification.txt"))
+ont_files    <- file.path(ont_dir,    paste0(sample_codes, "_classification.txt"))
+
+# Memory-optimized: only read columns we actually need
+read_sqanti_raw <- function(path, sample_label, technology) {
+  if (!file.exists(path)) return(tibble())
+  df <- readr::read_tsv(path, show_col_types = FALSE, 
+                        col_select = c("structural_category", "associated_transcript", "length"))
+  df$sample <- sample_label
+  df$technology <- technology
+  df
+}
+
+# Preview a small subset from one PacBio and one ONT file (limited columns)
+preview_pb  <- readr::read_tsv(pacbio_files[1], n_max = 5, show_col_types = FALSE,
+                               col_select = c("structural_category", "associated_transcript", "length"))
+preview_ont <- readr::read_tsv(ont_files[1],    n_max = 5, show_col_types = FALSE,
+                               col_select = c("structural_category", "associated_transcript", "length"))
+
+preview_pb
+preview_ont
+
+# Read and combine all classification files (memory-optimized)
+all_pb <- purrr::map2(pacbio_files, sample_labels, ~ read_sqanti_raw(.x, .y, "pacbio")) %>% dplyr::bind_rows()
+gc()  # Free memory
+all_ont <- purrr::map2(ont_files,    sample_labels, ~ read_sqanti_raw(.x, .y, "ont"))    %>% dplyr::bind_rows()
+gc()  # Free memory
+all_class <- dplyr::bind_rows(all_pb, all_ont)
+rm(all_pb, all_ont); gc()  # Free intermediate objects
+
+# Inspect structure and key counts
+dplyr::glimpse(all_class)
+dplyr::count(all_class, technology, structural_category, sort = TRUE)
+
+```
+
+
+```{r length_violin_plot, echo=FALSE, message=FALSE, warning=FALSE}
+
+df_trimmed <- all_lengths_df %>%
+  group_by(technology) %>%
+  filter(length <= quantile(length, 0.995, na.rm = TRUE)) %>%
+  ungroup()
+
+violin_palette <- setNames(
+  RColorConesa::colorConesa(n = 2, palette = "complete"),
+  c("pacbio", "ont")
+)
+
+# Use df_trimmed instead of all_lengths_df
+ggplot(df_trimmed, aes(x = technology, y = length, fill = technology)) +
+  geom_violin(scale = "width", trim = TRUE) +
+  scale_x_discrete(labels = c(pacbio = "pb", ont = "ont")) +
+  scale_fill_manual(values = violin_palette, guide = "none") +
+  labs(x = NULL, y = "Read length (nt)")
+
+```
+
+```{r x, echo=FALSE, message=FALSE, warning=FALSE}
+fsm_counts <- all_class %>%
+  dplyr::filter(structural_category == "full-splice_match", !is.na(associated_transcript)) %>%
+  dplyr::count(technology, associated_transcript, name = "expression")
+
+ggplot(fsm_counts, aes(x = technology, y = expression, fill = technology)) +
+  geom_violin(scale = "width", trim = TRUE) +
+  scale_y_log10() +
+  scale_x_discrete(labels = c(pacbio = "pb", ont = "ont")) +
+  scale_fill_manual(values = violin_palette, guide = "none") +
+  labs(x = NULL, y = "Transcript expression (read count)")
+
+```
+
+
+```{r tusco_overlap_counts, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Read Tusco results and extract transcript IDs from the second column
+# tusco_path <- "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/tusco_results/tusco_mmu_brain.tsv"
+tusco_path <- "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/tusco_results/tusco_mmu_brain.tsv"
+tusco_tbl  <- readr::read_tsv(tusco_path, show_col_types = FALSE, comment = "#", col_names = FALSE)
+tusco_ids  <- tusco_tbl[[2]] %>% as.character() %>% unique()
+
+# Count occurrences of associated_transcript in classification data (across ONT + PB)
+class_counts <- all_class %>%
+  dplyr::filter(!is.na(associated_transcript)) %>%
+  dplyr::count(associated_transcript, name = "num_reads")
+
+# Join Tusco IDs to classification counts
+tusco_in_class <- tibble(associated_transcript = tusco_ids) %>%
+  dplyr::left_join(class_counts, by = "associated_transcript") %>%
+  dplyr::mutate(num_reads = dplyr::coalesce(num_reads, 0L))
+
+# Summary of presence
+summary_presence <- tusco_in_class %>%
+  dplyr::summarise(
+    total_tusco_ids   = dplyr::n(),
+    present_in_class  = sum(num_reads > 0),
+    absent_in_class   = sum(num_reads == 0)
+  )
+
+summary_presence
+
+# Full table of counts per Tusco transcript ID (descending by count)
+tusco_in_class %>% dplyr::arrange(dplyr::desc(num_reads))
+
+```
+
+
+```{r length_violin_with_tusco_sirv, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Ensure length column is available in classification data
+if (!"length" %in% names(all_class)) {
+  stop("Column 'length' not found in classification data; cannot draw TUSCO/SIRVs length violins.")
+}
+
+# Base lengths by technology (PacBio/ONT)
+base_lengths <- all_class %>%
+  dplyr::filter(!is.na(length), !is.na(technology)) %>%
+  dplyr::transmute(group = as.character(technology), length)
+
+# TUSCO subset: reads whose associated_transcript appears in Tusco IDs
+tusco_lengths <- all_class %>%
+  dplyr::filter(!is.na(length), !is.na(associated_transcript)) %>%
+  dplyr::filter(associated_transcript %in% tusco_ids) %>%
+  dplyr::transmute(group = "TUSCO", length)
+
+# SIRVs subset: associated_transcript starts with "SIRV"
+sirv_lengths <- all_class %>%
+  dplyr::filter(!is.na(length), !is.na(associated_transcript)) %>%
+  dplyr::filter(stringr::str_starts(associated_transcript, "SIRV")) %>%
+  dplyr::transmute(group = "SIRVs", length)
+
+# Combine all groups
+violin_lengths <- dplyr::bind_rows(base_lengths, tusco_lengths, sirv_lengths) %>%
+  dplyr::mutate(group = factor(group, levels = c("pacbio", "ont", "TUSCO", "SIRVs")))
+
+# Trim extreme outliers per group to 99.5th percentile
+violin_lengths_trim <- violin_lengths %>%
+  dplyr::group_by(group) %>%
+  dplyr::filter(length <= stats::quantile(length, 0.995, na.rm = TRUE)) %>%
+  dplyr::ungroup()
+
+# Palette for 4 groups
+four_palette <- setNames(
+  RColorConesa::colorConesa(n = 4, palette = "complete"),
+  c("pacbio", "ont", "TUSCO", "SIRVs")
+)
+
+ggplot(violin_lengths_trim, aes(x = group, y = length, fill = group)) +
+  geom_violin(scale = "width", trim = TRUE) +
+  scale_x_discrete(labels = c(pacbio = "pb", ont = "ont", TUSCO = "TUSCO", SIRVs = "SIRVs")) +
+  scale_fill_manual(values = four_palette, guide = "none") +
+  labs(x = NULL, y = "Read length (nt)")
+
+```
+
 

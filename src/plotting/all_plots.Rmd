@@ -321,7 +321,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     method <- "IsoSeq + SQANTI3"
   }
   
-  listUJC <-do.call(rbind, lapply(class_df_list, function(class_df) class_df[!grepl("NA",class_df$UJC), c("structural_category", "UJC")]))
+  listUJC <- do.call(rbind, lapply(class_df_list, function(class_df) class_df[!grepl("NA",class_df$UJC), c("structural_category", "UJC")]))
   listUJC <- distinct(listUJC)
   
   for (i in 1:length(class_df_list)){
@@ -386,15 +386,16 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
   ######### COMBINATION PLOTs ######### 
   ##################################### 
   
-  # 0. Identify your sample columns (assumes exactly five columns ending in " 1"…" 5")
-  sample_cols <- names(listUJC)[str_detect(names(listUJC), " \\d+$")]
+  # 0. Identify your sample columns (assumes exactly five columns ending in digit 1-5)
+  # Matches both "Brain 1" and "B1" formats
+  sample_cols <- names(listUJC)[str_detect(names(listUJC), "\\d+$")]
   if (length(sample_cols) != 5) {
-    stop("Expected exactly 5 sample columns with names like 'Brain 1'…'Brain 5'")
+    stop("Expected exactly 5 sample columns with names ending in digits (e.g. 'B1'…'B5' or 'Brain 1'…'Brain 5')")
   }
   
-  # 1. Extract the shared prefix (e.g. "Brain" or "Kidney")
+  # 1. Extract the shared prefix (e.g. "B" or "Brain ")
   prefix <- sample_cols %>% 
-    str_remove(" \\d+$") %>% 
+    str_remove("\\d+$") %>% 
     unique()
   if (length(prefix) != 1) {
     stop("Failed to detect a single common prefix among the sample columns.")
@@ -475,9 +476,22 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
   ######### COMBINATION BAR PLOTs ######### 
   ######################################### 
   
+  # 2. Build the combination counts
+  comb_counts_sc <- listUJC %>%
+    # collapse the five sample columns into a single binary string
+    unite("pattern", all_of(sample_cols), sep = "") %>%
+    # drop UJCs absent in all samples
+    filter(pattern != str_dup("0", length(sample_cols))) %>%
+    # count how many UJCs per unique pattern
+    group_by(pattern, structural_category) %>%
+    summarise(n_UJC = n(), .groups = "drop") %>%
+    # compute how many samples (1–5) each pattern covers
+    mutate(n_samples = str_count(pattern, "1")) %>%
+    mutate(percent_UJC = (n_UJC / sum(n_UJC)) * 100)
+  
   # Calculate mean percent_UJC for each n_samples group
-  comb_bar_data <- comb_counts %>%
-    group_by(n_samples) %>%
+  comb_bar_data <- comb_counts_sc %>%
+    group_by(n_samples, structural_category) %>%
     summarise(
       sum_n_UJC = sum(n_UJC, na.rm = TRUE),
       sum_percent_UJC = sum(percent_UJC, na.rm = TRUE),
@@ -485,8 +499,8 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     )
   
   # Create the bar plot
-  comb_bar_plot <- ggplot(comb_bar_data, aes(x = factor(n_samples), y = sum_n_UJC)) +
-    geom_col(width = 0.6, fill = colorConesa(n = 1, palette = "complete")) +
+  comb_bar_plot <- ggplot(comb_bar_data, aes(x = factor(n_samples), y = sum_n_UJC, fill = factor(structural_category))) +
+    geom_col(width = 0.6) +
     labs(
       x     = "Number of samples present",
       y     = "Percent of total UJCs",
@@ -495,11 +509,15 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     theme_minimal(base_size = 10) +
     theme(
       plot.title = element_text(hjust = 0.5, face = "bold")
+    ) +
+    scale_fill_manual(
+      values = category_colors,
+      name = "Structural Category"
     )
   
   # Create the percentage bar plot
-  perc_comb_bar_plot <- ggplot(comb_bar_data, aes(x = factor(n_samples), y = sum_percent_UJC)) +
-    geom_col(width = 0.6, fill = colorConesa(n = 1, palette = "complete")) +
+  perc_comb_bar_plot <- ggplot(comb_bar_data, aes(x = factor(n_samples), y = sum_percent_UJC, fill = factor(structural_category))) +
+    geom_col(width = 0.6) +
     labs(
       x     = "Number of samples present",
       y     = "Percent of total UJCs",
@@ -508,6 +526,10 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     theme_minimal(base_size = 10) +
     theme(
       plot.title = element_text(hjust = 0.5, face = "bold")
+    ) +
+    scale_fill_manual(
+      values = category_colors,
+      name = "Structural Category"
     )
   
   ############################################
@@ -518,7 +540,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     # 1) drop any "NA" UJCs
     filter(!grepl("^NA", UJC)) %>%
     # 2) sum FL per UJC *and* sample in one shot
-    group_by(UJC, sample) %>%
+    group_by(UJC, sample, structural_category) %>%
     summarise(FL_sum = sum(FL, na.rm = TRUE), .groups = "drop") %>%
     # 3) pivot to wide form, prefixing each sample column with "FL_"
     pivot_wider(
@@ -545,7 +567,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
       row_total = rowSums(across(all_of(sample_cols_fl)), na.rm = TRUE)
     ) %>%
     # now group by samples_present and sum those row-totals
-    group_by(samples_present) %>%
+    group_by(samples_present, structural_category) %>%
     summarise(
       FL_sum = sum(row_total, na.rm = TRUE),
       .groups = "drop"
@@ -556,8 +578,8 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     )
   
   # 3) Barplot of absolute FL_sum
-  comb_fl_bar_plot <- ggplot(fl_comb, aes(x = factor(samples_present), y = FL_sum)) +
-    geom_col(width = 0.6, fill = colorConesa(n = 1, palette = "complete")) +
+  comb_fl_bar_plot <- ggplot(fl_comb, aes(x = factor(samples_present), y = FL_sum, fill = factor(structural_category))) +
+    geom_col(width = 0.6) +
     labs(
       x     = "Number of samples present",
       y     = "# reads supporting UJCs",
@@ -566,11 +588,15 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     theme_minimal(base_size = 10) +
     theme(
       plot.title = element_text(hjust = 0.5, face = "bold")
+    ) +
+    scale_fill_manual(
+      values = category_colors,
+      name = "Structural Category"
     )
   
   # 4) Barplot of percentage
-  perc_comb_FL_bar_plot <- ggplot(fl_comb, aes(x = factor(samples_present), y = FL_percent)) +
-    geom_col(width = 0.6, fill = colorConesa(n = 1, palette = "complete")) +
+  perc_comb_FL_bar_plot <- ggplot(fl_comb, aes(x = factor(samples_present), y = FL_percent, fill = factor(structural_category))) +
+    geom_col(width = 0.6) +
     labs(
       x     = "Number of samples present",
       y     = "Percent of total reads supporting UJCs",
@@ -579,6 +605,10 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     theme_minimal(base_size = 10) +
     theme(
       plot.title = element_text(hjust = 0.5, face = "bold")
+    ) +
+    scale_fill_manual(
+      values = category_colors,
+      name = "Structural Category"
     )
   
   
@@ -803,6 +833,8 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     theme(plot.title = element_text(hjust = 0.5, face = "bold"))
     
   
+  
+  
   ###################################
   ######### RETURNING PLOTS ######### 
   ###################################
@@ -835,7 +867,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
 ```
 
 
-```{r}
+```{r, include=FALSE}
 
 # class_df_list <- all_results$IsoSeq$IsoQuant$`1`$b_class_df_list
 # sample_labels <- sample_labels_Brain
@@ -1096,8 +1128,13 @@ ont_read_numbers_kidney["K2"] <- sum(fastq_reads_ont_kidney)
 
 
 ```{r process-and-plot}
-sample_labels_Brain <- c('Join&Call',  'Call&Join', paste0("Brain ", 1:5))
-sample_labels_Kidney <- c('Join&Call',  'Call&Join', paste0("Kidney ", 1:5))
+# Internal names for data frame access (must match data structure)
+sample_names_Brain <- c('Join&Call',  'Call&Join', paste0("Brain ", 1:5))
+sample_names_Kidney <- c('Join&Call',  'Call&Join', paste0("Kidney ", 1:5))
+
+# Display labels for plots (abbreviated)
+sample_labels_Brain <- c('J&C',  'C&J', paste0("B", 1:5))
+sample_labels_Kidney <- c('J&C',  'C&J', paste0("K", 1:5))
 
 load_df_lists <- function(paths) {
   # Set root directory
@@ -1109,8 +1146,8 @@ load_df_lists <- function(paths) {
   # Read and process data for Kidney
   load(paste0(paths$src_dir, "/Kclass_df_list.RData"))
   
-  names(Bclass_df_list) <- sample_labels_Brain
-  names(Kclass_df_list) <- sample_labels_Kidney
+  names(Bclass_df_list) <- sample_names_Brain
+  names(Kclass_df_list) <- sample_names_Kidney
   
   # Include C&J FL counts
   
@@ -1304,6 +1341,8 @@ process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, fl_thre
     brain_ujc_stack_data = brain_upset_plots[["ujc_stack_data"]],
     brain_ujc_fl_stack_data = brain_upset_plots[["ujc_fl_stack_data"]],
     brain_ujc_fl_stack_pct_data = brain_upset_plots[["ujc_fl_stack_pct_data"]],
+    # brain_perc_ujc_upset_plot = brain_upset_plots[["perc_ujc_upset"]],
+    # brain_ujc_fl_upset_pct_data = brain_upset_plots[["ujc_fl_upset_pct_data"]],
     kidney_upset_plot = kidney_upset_plots[["upset"]],
     kidney_comb_plot = kidney_upset_plots[["comb"]],
     kidney_perc_comb_plot = kidney_upset_plots[["perc_comb"]],
@@ -1320,6 +1359,8 @@ process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, fl_thre
     kidney_ujc_stack_data = kidney_upset_plots[["ujc_stack_data"]],
     kidney_ujc_fl_stack_data = kidney_upset_plots[["ujc_fl_stack_data"]],
     kidney_ujc_fl_stack_pct_data = kidney_upset_plots[["ujc_fl_stack_pct_data"]],
+    # kidney_perc_ujc_upset_plot = kidney_upset_plots[["perc_ujc_upset"]],
+    # kidney_ujc_fl_upset_pct_data = kidney_upset_plots[["ujc_fl_upset_pct_data"]],
     brain_expression_plot = plots_Brain_Expression,
     kidney_expression_plot = plots_Kidney_Expression,
     brain_compare_plots = brain_compare_plots,
@@ -1328,6 +1369,10 @@ process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, fl_thre
     k_class_df_list = Kclass_df_list
   ))
 }
+
+
+  upset_plots[["perc_ujc_upset"]] <- perc_cumul_ujc_upset_plot
+  upset_plots[["perc_ujc_fl_upset"]] <- perc_cumul_ujc_fl_upset_plot
 
 #box_arrange_brain = box_arrange_brain,
 #box_arrange_kidney = box_arrange_kidney,
@@ -1422,7 +1467,7 @@ check_paths(src_dirs)
 # Initialize an empty nested list for all_results
 all_results <- list()
 
-fl_filter_levels <- list(1, 3, 5, 10)
+fl_filter_levels <- list(1, 3, 5, 10, 20)
 
 # Loop over the nested src_dirs structure
 for (platform in names(src_dirs)) {
@@ -1445,6 +1490,416 @@ for (platform in names(src_dirs)) {
     }
   }
 }
+
+```
+
+
+```{r test_upset_ujc, include=FALSE}
+
+# class_df_list <- all_results$IsoSeq$IsoQuant$`1`$b_class_df_list
+# sample_labels <- sample_labels_Brain
+# method = "x"
+# n = 10
+# 
+# 
+# listUJC <-do.call(rbind, lapply(class_df_list, function(class_df) class_df[!grepl("NA",class_df$UJC), c("structural_category", "UJC")]))
+# listUJC <- distinct(listUJC)
+# 
+# for (i in 1:length(class_df_list)){
+#   sample_id <- names(class_df_list)[[i]]
+#   listUJC[, sample_id] <- ifelse(listUJC$UJC %in% class_df_list[[i]]$UJC, 1, 0)
+# }
+# colnames(listUJC) <- c("structural_category", "UJC", sample_labels)
+# 
+# # Define structural categories and their colors
+# structural_categories <- unique(listUJC$structural_category)
+# category_colors <- c(
+#   "FSM" = "#6BAED6",
+#   "ISM" = "#FC8D59",
+#   "NIC" = "#78C679",
+#   "NNC" = "#EE6A50",
+#   "Genic\nGenomic" = "#969696",
+#   "Antisense" = "#66C2A4",
+#   "Fusion" = "goldenrod1",
+#   "Intergenic" = "darksalmon",
+#   "Genic\nIntron" = "#41B6C4"
+# )
+# 
+# ##############################
+# ######### UPSET PLOT #########
+# ##############################
+# 
+# # Create the Intersection Size annotation with custom fill colors
+# intersection_size_annotation <- intersection_size(
+#     counts = FALSE,
+#     mapping = aes(fill = structural_category)
+#   ) +
+#   scale_fill_manual(
+#     values = category_colors,
+#     name = "Structural Category"
+#   ) +
+#   ggtitle(method) +
+#   theme(
+#     axis.title.y = element_blank(),
+#     axis.text.y = element_text(size = 10),
+#     legend.position = "none",
+#     plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+#   )
+# 
+# rev_sample_labels <- rev(sample_labels)
+# 
+# 
+# #####################################
+# ######### COMBINATION PLOTs #########
+# #####################################
+# 
+# # 0. Identify your sample columns (assumes exactly five columns ending in " 1"…" 5")
+# sample_cols <- names(listUJC)[str_detect(names(listUJC), " \\d+$")]
+# if (length(sample_cols) != 5) {
+#   stop("Expected exactly 5 sample columns with names like 'Brain 1'…'Brain 5'")
+# }
+# 
+# # 1. Extract the shared prefix (e.g. "Brain" or "Kidney")
+# prefix <- sample_cols %>%
+#   str_remove(" \\d+$") %>%
+#   unique()
+# if (length(prefix) != 1) {
+#   stop("Failed to detect a single common prefix among the sample columns.")
+# }
+# 
+# # 2. Build the combination counts
+# comb_counts <- listUJC %>%
+#   # collapse the five sample columns into a single binary string
+#   unite("pattern", all_of(sample_cols), sep = "") %>%
+#   # drop UJCs absent in all samples
+#   filter(pattern != str_dup("0", length(sample_cols))) %>%
+#   # count how many UJCs per unique pattern
+#   group_by(pattern, structural_category) %>%
+#   summarise(n_UJC = n(), .groups = "drop") %>%
+#   # compute how many samples (1–5) each pattern covers
+#   mutate(n_samples = str_count(pattern, "1")) %>%
+#   mutate(percent_UJC = (n_UJC / sum(n_UJC)) * 100)
+# 
+# 
+# #########################################
+# ######### COMBINATION BAR PLOTs #########
+# #########################################
+# 
+# # Calculate mean percent_UJC for each n_samples group
+# comb_bar_data <- comb_counts %>%
+#   group_by(n_samples, structural_category) %>%
+#   summarise(
+#     sum_n_UJC = sum(n_UJC, na.rm = TRUE),
+#     sum_percent_UJC = sum(percent_UJC, na.rm = TRUE),
+#     .groups = "drop"
+#   )
+#   
+# # Create the bar plot
+# comb_bar_plot <- ggplot(comb_bar_data, aes(x = factor(n_samples), y = sum_n_UJC, fill = factor(structural_category))) +
+#   geom_col(width = 0.6) +
+#   labs(
+#     x     = "Number of samples present",
+#     y     = "Percent of total UJCs",
+#     title = paste0("Average UJC distribution across ", prefix, " samples")
+#   ) +
+#   theme_minimal(base_size = 10) +
+#   theme(
+#     plot.title = element_text(hjust = 0.5, face = "bold")
+#   ) +
+#   scale_fill_manual(
+#     values = category_colors,
+#     name = "Structural Category"
+#   )
+# 
+# # Create the percentage bar plot
+# perc_comb_bar_plot <- ggplot(comb_bar_data, aes(x = factor(n_samples), y = sum_percent_UJC)) +
+#   geom_col(width = 0.6, fill = colorConesa(n = 1, palette = "complete")) +
+#   labs(
+#     x     = "Number of samples present",
+#     y     = "Percent of total UJCs",
+#     title = paste0("Average UJC distribution across ", prefix, " samples")
+#   ) +
+#   theme_minimal(base_size = 10) +
+#   theme(
+#     plot.title = element_text(hjust = 0.5, face = "bold")
+#   )
+# 
+# ############################################
+# ######### COMBINATION BAR FL PLOTs #########
+# ############################################
+# 
+# fl_sums <- bind_rows(class_df_list, .id = "sample") %>%
+#   # 1) drop any "NA" UJCs
+#   filter(!grepl("^NA", UJC)) %>%
+#   # 2) sum FL per UJC *and* sample in one shot
+#   group_by(UJC, sample, structural_category) %>%
+#   summarise(FL_sum = sum(FL, na.rm = TRUE), .groups = "drop") %>%
+#   # 3) pivot to wide form, prefixing each sample column with "FL_"
+#   pivot_wider(
+#     names_from   = sample,
+#     values_from  = FL_sum,
+#     names_prefix = "FL_"
+#   ) %>%
+#   # 4) drop any unwanted columns in one go
+#   select(-c("FL_Join&Call", "FL_Call&Join")) %>%
+#   mutate(across(starts_with("FL_"), ~ replace_na(.x, 0)))
+# 
+# sample_cols_fl <- grep("^FL", names(fl_sums), value = TRUE)
+# 
+# fl_sums <- fl_sums %>%
+#   mutate(
+#     samples_present = rowSums(across(all_of(sample_cols_fl), ~ .x != 0))
+#   )
+# 
+# fl_comb <- fl_sums %>%
+#   # drop UJCs with zero samples
+#   filter(samples_present != 0) %>%
+#   # compute a per-UJC total across all sample columns
+#   mutate(
+#     row_total = rowSums(across(all_of(sample_cols_fl)), na.rm = TRUE)
+#   ) %>%
+#   # now group by samples_present and sum those row-totals
+#   group_by(samples_present, structural_category) %>%
+#   summarise(
+#     FL_sum = sum(row_total, na.rm = TRUE),
+#     .groups = "drop"
+#   ) %>%
+#   # add percentage column
+#   mutate(
+#     FL_percent = (FL_sum / sum(FL_sum)) * 100
+#   )
+# 
+# # 3) Barplot of absolute FL_sum
+# comb_fl_bar_plot <- ggplot(fl_comb, aes(x = factor(samples_present), y = FL_sum, fill = factor(structural_category))) +
+#   geom_col(width = 0.6) +
+#   labs(
+#     x     = "Number of samples present",
+#     y     = "# reads supporting UJCs",
+#     title = paste0("Total read distribution of UJCs across ", prefix, " samples")
+#   ) +
+#   theme_minimal(base_size = 10) +
+#   theme(
+#     plot.title = element_text(hjust = 0.5, face = "bold")
+#   ) +
+#   scale_fill_manual(
+#     values = category_colors,
+#     name = "Structural Category"
+#   )
+# 
+# # 4) Barplot of percentage
+# perc_comb_FL_bar_plot <- ggplot(fl_comb, aes(x = factor(samples_present), y = FL_percent)) +
+#   geom_col(width = 0.6, fill = colorConesa(n = 1, palette = "complete")) +
+#   labs(
+#     x     = "Number of samples present",
+#     y     = "Percent of total reads supporting UJCs",
+#     title = paste0("Relative read distribution of UJCs across ", prefix, " samples")
+#   ) +
+#   theme_minimal(base_size = 10) +
+#   theme(
+#     plot.title = element_text(hjust = 0.5, face = "bold")
+#   )
+# 
+# 
+# #########################################
+# ######### DISCOVERY CURVE PLOTs #########
+# #########################################
+# 
+# # For each n = 1 to 5
+# discovery_curve <- map_dfr(1:length(sample_cols), function(n) {
+#   # All combinations of n samples
+#   combos <- combn(sample_cols, n, simplify = FALSE)
+# 
+#   # For each combination, count UJCs present in at least one sample
+#   ujc_counts <- map_int(combos, function(sample_set) {
+#     listUJC %>%
+#       select(all_of(sample_set)) %>%
+#       transmute(present = rowSums(.) > 0) %>%
+#       summarise(n_UJC = sum(present)) %>%
+#       pull(n_UJC)
+#   })
+# 
+#   tibble(
+#     n_samples = n,
+#     mean_UJCs = mean(ujc_counts),
+#     min_UJCs  = min(ujc_counts),
+#     max_UJCs  = max(ujc_counts)
+#   )
+# })
+# 
+# max_total <- discovery_curve %>% filter(n_samples == max(n_samples)) %>% pull(max_UJCs)
+# 
+# discovery_curve <- discovery_curve %>%
+#   mutate(
+#     mean_pct = 100 * mean_UJCs / max_total,
+#     min_pct  = 100 * min_UJCs  / max_total,
+#     max_pct  = 100 * max_UJCs  / max_total
+#   )
+# 
+# 
+# #################################################
+# ######### COMBINATION STACKED BAR PLOTs #########
+# #################################################
+# 
+# # Clean loop with non-conflicting variable name
+# stack_data <- map_dfr(1:length(sample_cols), function(k) {
+#   combos <- combn(sample_cols, k, simplify = FALSE)
+# 
+#   bind_rows(lapply(combos, function(sample_set) {
+#     ujc_data <- listUJC %>%
+#       mutate(n_present = rowSums(across(all_of(sample_set)))) %>%
+#       filter(n_present > 0) %>%
+#       count(n_present) %>%
+#       complete(n_present = 1:k, fill = list(n = 0)) %>%
+#       mutate(n_samples = k)
+# 
+#     return(ujc_data)
+#   }))
+# }) %>%
+#   group_by(n_samples, n_present) %>%
+#   summarise(
+#     mean_count = mean(n),
+#     sd_count = sd(n),
+#     .groups = "drop"
+#   ) %>%
+#   mutate(
+#     percent = 100 * mean_count / max_total,
+#     sd_percent = 100 * sd_count / max_total
+#   )
+# 
+# # Plot the stacked bar
+# cumul_ujc_stack_plot <- ggplot(stack_data, aes(x = factor(n_samples), y = mean_count, fill = factor(n_present))) +
+#   geom_col(width = 0.8) +
+#   scale_fill_conesa(palette = "complete", name = "Samples present in") +
+#   labs(
+#     title = "UJC reproducibility across sample combinations",
+#     x = "Number of samples included",
+#     y = "Mean number of UJCs",
+#     fill = "Reproducibility"
+#   ) +
+#   theme_minimal(base_size = 11) +
+#   theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+# 
+# perc_cumul_ujc_stack_plot <- ggplot(stack_data, aes(x = factor(n_samples), y = percent, fill = factor(n_present))) +
+#   geom_col(width = 0.8) +
+#   scale_fill_conesa(palette = "complete", name = "Samples present in") +
+#   labs(
+#     title = "UJC reproducibility across sample combinations",
+#     x = "Number of samples included",
+#     y = "Mean number of UJCs",
+#     fill = "Reproducibility"
+#   ) +
+#   theme_minimal(base_size = 11) +
+#   theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+# 
+# 
+# 
+# ####################################################
+# ######### COMBINATION FL STACKED BAR PLOTs #########
+# ####################################################
+# 
+# 
+# sample_combs_fl <- seq_along(sample_cols_fl) %>%
+#   map(~ combn(sample_cols_fl, .x, simplify = FALSE)) %>%
+#   flatten()
+# 
+# combos_tbl <- tibble(
+#   cols = sample_combs_fl
+# ) %>%
+#   rowwise() %>%
+#   mutate(
+#     df = list(
+#       fl_sums %>%
+#         select(all_of(cols)) %>%
+#         mutate(
+#           samples_present = rowSums(across(everything()) > 0)
+#         ) %>%
+#         group_by(samples_present) %>%
+#         summarise(
+#           across(
+#             .cols = all_of(cols),
+#             .fns  = ~sum(.x, na.rm = TRUE)
+#           ),
+#           .groups = "drop"
+#         ) %>%
+#         mutate(
+#           FL_total = rowSums(across(all_of(cols)))
+#         ) %>%
+#         filter(samples_present > 0) %>%
+#         select(samples_present, FL_total)
+#     )
+#   ) %>%
+#   ungroup()
+# 
+# combos_fl <- combos_tbl %>%
+#   # 1) add a column for the number of samples in each combo
+#   mutate(nr_samples = map_int(cols, length)) %>%
+# 
+#   # 2) pull all the mini‐summaries into one flat table
+#   unnest(df) %>%
+# 
+#   # 3) group by combo‐size and presence‐count, then average FL_total
+#   group_by(nr_samples, samples_present) %>%
+#   summarise(
+#     min_FL_total = min(FL_total),
+#     mean_FL_total = mean(FL_total),
+#     sd_FL_total = sd(FL_total),
+#     max_FL_total = max(FL_total),
+#     .groups  = "drop"
+#   ) %>%
+# 
+#   # (optional) arrange nicely
+#   arrange(nr_samples, samples_present)
+# 
+# fl_max <- combos_fl %>%
+#   filter(nr_samples == max(nr_samples)) %>%
+#   summarise(sum_FL_total = sum(max_FL_total)) %>%
+#   pull(sum_FL_total)
+# 
+# combos_fl_pct <- combos_fl %>%
+#   mutate(
+#     mean_FL_pct = max_FL_total / fl_max * 100,
+#     sd_FL_pct = sd_FL_total / fl_max * 100
+#   )
+# 
+# 
+# cumul_ujc_fl_stack_plot <- ggplot(combos_fl,
+#                             aes(x = factor(nr_samples),
+#                                 y = mean_FL_total,
+#                                 fill = factor(samples_present))) +
+#   geom_col(width = 0.8) +
+#   scale_fill_conesa(palette = "complete", name = "Samples present in") +
+#   labs(
+#     title = "Mean FL total across sample combinations",
+#     x     = "Number of samples included",
+#     y     = "Mean # of reads supporting UJCs"
+#   ) +
+#   theme_minimal(base_size = 11) +
+#   theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+# 
+# perc_cumul_ujc_fl_stack_plot <- ggplot(combos_fl_pct,
+#                              aes(x = factor(nr_samples),
+#                                  y = mean_FL_pct,
+#                                  fill = factor(samples_present))) +
+#   geom_col(width = 0.8) +
+#   scale_fill_conesa(palette = "complete", name = "Samples present in") +
+#   labs(
+#     title = "FL total as % of max across sample combinations",
+#     x     = "Number of samples included",
+#     y     = "Mean % of reads supporting UJCs"
+#   ) +
+#   theme_minimal(base_size = 11) +
+#   theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+# 
+# 
+# perc_cumul_ujc_stack_plot
+# perc_cumul_ujc_fl_stack_plot
+# 
+# comb_bar_plot
+# perc_comb_bar_plot
+# 
+# comb_fl_bar_plot
+# 
+# listUJC
 
 ```
 
@@ -1482,10 +1937,10 @@ extract_fl_data <- function(data_type, tool, tissue) {
   tryCatch({
     fl_data <- all_results[[data_type]][[tool]][[fl_filter_level]][[paste0(tissue, "_ujc_fl_stack_data")]]
     pct_data <- all_results[[data_type]][[tool]][[fl_filter_level]][[paste0(tissue, "_ujc_fl_stack_pct_data")]]
-    
+
     if (!is.null(fl_data) && !is.null(pct_data)) {
       fl_data %>%
-        left_join(pct_data %>% select(nr_samples, samples_present, mean_FL_pct, sd_FL_pct), 
+        left_join(pct_data %>% select(nr_samples, samples_present, mean_FL_pct, sd_FL_pct),
                   by = c("nr_samples", "samples_present")) %>%
         mutate(
           data_type = data_type,
@@ -1509,6 +1964,8 @@ all_ujc_data <- map_dfr(data_types, function(dt) {
   })
 })
 
+write.csv(all_ujc_data, "all_ujcs_data.csv")
+
 # Extract all FL data
 all_fl_data <- map_dfr(data_types, function(dt) {
   map_dfr(tools, function(tool) {
@@ -1517,6 +1974,7 @@ all_fl_data <- map_dfr(data_types, function(dt) {
     })
   })
 })
+write.csv(all_fl_data, "all_fl_data.csv")
 
 # Create comprehensive summary tables
 brain_ujc_summary <- all_ujc_data %>%
@@ -1691,14 +2149,17 @@ library(cowplot)
 
 
 ```{r bar-plot-themes}
+
 bar_theme <- function(plot, title, ylims) {
   plot +
     scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
     ggtitle(title) +
     theme(
-      plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
-      axis.text = element_text(size = 8),
-      axis.title = element_text(size = 10)
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 10),
+      axis.title = element_text(size = 12),
+      legend.text = element_text(size = 12),
+      legend.title = element_text(size = 14)
     ) +
     coord_cartesian(ylim = ylims)
 }
@@ -1741,13 +2202,13 @@ assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle
     pb_ylims
   )
   
-  bar_1_3 <- bar_theme_noaxis(
+  bar_1_3 <- bar_theme(
     all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]][[1]],
     "Bambu",
     pb_ylims
   )
   
-  bar_1_4 <- bar_theme_noaxis(
+  bar_1_4 <- bar_theme(
     all_results$IsoSeq$TALON[[fl_filter_level]][[plot_name]][[1]],
     "TALON",
     pb_ylims
@@ -1822,14 +2283,14 @@ assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle
         IJKM
       ",
       heights = c(1, 1, 0.2, 1),
-      axes = "collect"
+      axes = "collect_y"
     ) +
     plot_annotation(
       title = title,
       subtitle = subtitle,
       theme = theme(
-        plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
-        plot.subtitle = element_text(size = 10, hjust = 0.5)
+        plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(size = 16, hjust = 0.5)
       )
     )
   
@@ -1837,12 +2298,12 @@ assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle
   # Define label plots
   label_a <- ggplot() +
     annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 5, fontface = "bold") +
+             size = 10, fontface = "bold") +
     theme_void()
   
   label_b <- ggplot() +
     annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 5, fontface = "bold") +
+             size = 10, fontface = "bold") +
     theme_void()
   
   final_plot <- wrap_elements(full = bar_plot)
@@ -1858,110 +2319,44 @@ assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle
 
 ```{r}
 
+# Create output directory if it doesn't exist
+if (!dir.exists("plot_creation")) {
+  dir.create("plot_creation")
+}
+
 pb_ylims = c(0, 160000)
 ont_ylims = c(0, 80000)
 
+pb5_ylims = c(0, 130000)
+ont5_ylims = c(0, 65000)
+
+pb10_ylims = c(0, 80000)
+ont10_ylims = c(0, 40000)
+
+pb20_ylims = c(0, 50000)
+ont20_ylims = c(0, 30000)
+
 brain_plot_1 <- assemble_bar_plots(all_results, "brain", 1, title="Transcripts per structural category; brain", subtitle="Filter: >=1 read", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("brain_bar_filter1.pdf", device = cairo_pdf, plot = brain_plot_1, width=6, height=4, unit="in")
+ggsave("plot_creation/brain_bar_filter1.pdf", device = cairo_pdf, plot = brain_plot_1, width=18, height=12, unit="in")
 brain_plot_3 <- assemble_bar_plots(all_results, "brain", 3, title="Transcripts per structural category; brain", subtitle="Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("brain_bar_filter3.pdf", device = cairo_pdf, plot = brain_plot_3, width=6, height=4, unit="in")
-brain_plot_5 <- assemble_bar_plots(all_results, "brain", 5, title="Transcripts per structural category; brain", subtitle="Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("brain_bar_filter5.pdf", device = cairo_pdf, plot = brain_plot_5, width=6, height=4, unit="in")
-brain_plot_10 <- assemble_bar_plots(all_results, "brain", 10, title="Transcripts per structural category; brain", subtitle="Filter: >=10 read", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("brain_bar_filter10.pdf", device = cairo_pdf, plot = brain_plot_10, width=6, height=4, unit="in")
+ggsave("plot_creation/brain_bar_filter3.pdf", device = cairo_pdf, plot = brain_plot_3, width=18, height=12, unit="in")
+brain_plot_5 <- assemble_bar_plots(all_results, "brain", 5, title="Transcripts per structural category; brain", subtitle="Filter: >=5 reads", pb_ylims = pb5_ylims, ont_ylims = ont5_ylims)
+ggsave("plot_creation/brain_bar_filter5.pdf", device = cairo_pdf, plot = brain_plot_5, width=18, height=12, unit="in")
+brain_plot_10 <- assemble_bar_plots(all_results, "brain", 10, title="Transcripts per structural category; brain", subtitle="Filter: >=10 reads", pb_ylims = pb10_ylims, ont_ylims = ont10_ylims)
+ggsave("plot_creation/brain_bar_filter10.pdf", device = cairo_pdf, plot = brain_plot_10, width=18, height=12, unit="in")
+
+brain_plot_20 <- assemble_bar_plots(all_results, "brain", 20, title="Transcripts per structural category; brain", subtitle="Filter: >=20 reads", pb_ylims = pb20_ylims, ont_ylims = ont20_ylims)
+ggsave("plot_creation/brain_bar_filter20.pdf", device = cairo_pdf, plot = brain_plot_20, width=18, height=12, unit="in")
+
 
 brain_plot_1
 brain_plot_3
 brain_plot_5
 brain_plot_10
+brain_plot_20
 
 ```
 
-```{r}
-
-  
-results <- all_results
-tissue <- "brain"
-fl_filter_level = 1
-title <- ""
-subtitle <- ""
-pb_ylims = c(0, 125000)
-ont_ylims = c(0, 125000)
-plot_name_suffix = "_plots"
-use_scientific = FALSE
-  
-fl_filter_level = as.character(fl_filter_level)
-
-plot_name = paste(tissue, plot_name_suffix, sep="")
-
-# select and adjust plots
-bar_1_1 <- bar_theme(
-  all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
-  "IsoQuant",
-  pb_ylims
-)
-  
-bar_1_2 <- bar_theme(
-  all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]][[1]],
-  "FLAIR",
-  pb_ylims
-)
-  
-bar_1_3 <- bar_theme(
-  all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]][[1]],
-  "FLAIR",
-  pb_ylims
-)
-
-# select and adjust plots
-bar_2_1 <- bar_theme(
-  all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]][[1]],
-  "IsoQuant",
-  ont_ylims
-)
-  
-bar_2_2 <- bar_theme(
-  all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]][[1]],
-  "FLAIR",
-  ont_ylims
-)
-  
-bar_2_3 <- bar_theme(
-  all_results$ONT$Bambu[[fl_filter_level]][[plot_name]][[1]],
-  "FLAIR",
-  ont_ylims
-)
-
-# If use_scientific is TRUE, add scientific notation for y axis ticks to each plot
-if (use_scientific) {
-  sci_format <- scales::scientific_format()
-  bar_1_1 <- bar_1_1 + scale_y_continuous(labels = sci_format)
-  bar_1_2 <- bar_1_2 + scale_y_continuous(labels = sci_format)
-}
-
-bar_plot <- (
-  bar_1_1 + bar_1_2 + bar_1_3 +
-  bar_2_1 + bar_2_2 + bar_2_3
-) +
-  plot_layout(
-    design = "
-      ABC
-      XXX
-      DEF
-    ",
-    axes = "collect",
-    heights = c(1, 0.2, 1)
-  ) +
-  plot_annotation(
-    title = "Transcriptome diversity by isoforms",
-    theme = theme(
-      plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
-    )
-  )
-
-bar_plot
-
-```
 
 ```{r}
 
@@ -2042,7 +2437,7 @@ bar_plot <- (
       XXX
       DEF
     ",
-    axes = "collect",
+    axes = "collect_y",
     heights = c(1, 0.2, 1)
   ) +
   plot_annotation(
@@ -2061,20 +2456,32 @@ bar_plot
 
 pb_ylims = c(0, 140000)
 ont_ylims = c(0, 70000)
+pb5_ylims = c(0, 110000)
+ont5_ylims = c(0, 60000)
+pb10_ylims = c(0, 75000)
+ont10_ylims = c(0, 35000)
+pb20_ylims = c(0, 45000)
+ont20_ylims = c(0, 20000)
 
 kidney_plot_1 <- assemble_bar_plots(all_results, "kidney", 1, title="Transcripts per structural category; kidney", subtitle="", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("kidney_bar_filter1.pdf", device = cairo_pdf, plot = kidney_plot_1, width=6, height=4, unit="in")
-kidney_plot_3 <- assemble_bar_plots(all_results, "kidney", 3, title="Transcripts per structural category; kidney", subtitle="Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("kidney_bar_filter3.pdf", device = cairo_pdf, plot = kidney_plot_3, width=6, height=4, unit="in")
-kidney_plot_5 <- assemble_bar_plots(all_results, "kidney", 5, title="Transcripts per structural category; kidney", subtitle="Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("kidney_bar_filter5.pdf", device = cairo_pdf, plot = kidney_plot_5, width=6, height=4, unit="in")
-kidney_plot_10 <- assemble_bar_plots(all_results, "kidney", 10, title="Transcripts per structural category; kidney", subtitle="Filter: >=10 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("kidney_bar_filter10.pdf", device = cairo_pdf, plot = kidney_plot_10, width=6, height=4, unit="in")
+ggsave("plot_creation/kidney_bar_filter1.pdf", device = cairo_pdf, plot = kidney_plot_1, width=18, height=12, unit="in")
+kidney_plot_3 <- assemble_bar_plots(all_results, "kidney", 3, title="Transcripts per structural category; kidney", subtitle="Filter: >=3 reads", pb_ylims = pb5_ylims, ont_ylims = ont5_ylims)
+ggsave("plot_creation/kidney_bar_filter3.pdf", device = cairo_pdf, plot = kidney_plot_3, width=18, height=12, unit="in")
+kidney_plot_5 <- assemble_bar_plots(all_results, "kidney", 5, title="Transcripts per structural category; kidney", subtitle="Filter: >=5 reads", pb_ylims = pb5_ylims, ont_ylims = ont5_ylims)
+ggsave("plot_creation/kidney_bar_filter5.pdf", device = cairo_pdf, plot = kidney_plot_5, width=18, height=12, unit="in")
+kidney_plot_10 <- assemble_bar_plots(all_results, "kidney", 10, title="Transcripts per structural category; kidney", subtitle="Filter: >=10 reads", pb_ylims = pb10_ylims, ont_ylims = ont10_ylims)
+ggsave("plot_creation/kidney_bar_filter10.pdf", device = cairo_pdf, plot = kidney_plot_10, width=18, height=12, unit="in")
+
+
+kidney_plot_20 <- assemble_bar_plots(all_results, "kidney", 20, title="Transcripts per structural category; kidney", subtitle="Filter: >=20 reads", pb_ylims = pb20_ylims, ont_ylims = ont20_ylims)
+ggsave("plot_creation/kidney_bar_filter20.pdf", device = cairo_pdf, plot = kidney_plot_20, width=18, height=12, unit="in")
+
 
 kidney_plot_1
 kidney_plot_3
 kidney_plot_5
 kidney_plot_10
+kidney_plot_20
 
 ```
 
@@ -2136,13 +2543,13 @@ assemble_expr_bar_plots <- function(results, tissue, fl_filter_level, title,
     pb_ylims
   )
   
-  bar_1_3 <- bar_theme_noaxis(
+  bar_1_3 <- bar_theme(
     all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]][[1]],
     "Bambu",
     pb_ylims
   )
   
-  bar_1_4 <- bar_theme_noaxis(
+  bar_1_4 <- bar_theme(
     all_results$IsoSeq$TALON[[fl_filter_level]][[plot_name]][[1]],
     "TALON",
     pb_ylims
@@ -2221,12 +2628,12 @@ assemble_expr_bar_plots <- function(results, tissue, fl_filter_level, title,
         IJKM
       ",
       heights = c(1, 1, 0.2, 1),
-      axes = "collect"
+      axes = "collect_y"
     ) +
     plot_annotation(
       title = title,
       theme = theme(
-        plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
       )
     )
   
@@ -2234,12 +2641,12 @@ assemble_expr_bar_plots <- function(results, tissue, fl_filter_level, title,
   # Define label plots
   label_a <- ggplot() +
     annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 5, fontface = "bold") +
+             size = 10, fontface = "bold") +
     theme_void()
   
   label_b <- ggplot() +
     annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 5, fontface = "bold") +
+             size = 10, fontface = "bold") +
     theme_void()
   
   final_plot <- wrap_elements(full = bar_plot)
@@ -2261,7 +2668,7 @@ ont_ylims = c(0, 45000000)
 
 brain_expr_plot_1 <- assemble_expr_bar_plots(all_results, "brain", 1, "Transcript expression per structural category; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix="_expression_plot", use_scientific = TRUE)
 
-ggsave("brain_expr_bar_filter1.pdf", device = cairo_pdf, plot = brain_expr_plot_1, width=6, height=4, unit="in")
+ggsave("plot_creation/brain_expr_bar_filter1.pdf", device = cairo_pdf, plot = brain_expr_plot_1, width=18, height=12, unit="in")
 
 brain_expr_plot_1
 ```
@@ -2274,7 +2681,7 @@ ont_ylims = c(0, 35000000)
 
 kidney_expr_plot_1 <- assemble_expr_bar_plots(all_results, "kidney", 1, "Transcript expression per structural category; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix="_expression_plot", use_scientific = TRUE)
 
-ggsave("kidney_expr_bar_filter1.pdf", device = cairo_pdf, plot = kidney_expr_plot_1, width = 6, height = 4, units = "in")
+ggsave("plot_creation/kidney_expr_bar_filter1.pdf", device = cairo_pdf, plot = kidney_expr_plot_1, width = 18, height = 12, units = "in")
 
 kidney_expr_plot_1
 
@@ -2304,13 +2711,13 @@ assemble_bar_sirv_plots <- function(results, tissue, fl_filter_level, title, sub
     pb_ylims
   ) + geom_hline(yintercept = 69, color = "red")
   
-  bar_1_3 <- bar_theme_noaxis(
+  bar_1_3 <- bar_theme(
     all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]][[1]],
     "Bambu",
     pb_ylims
   ) + geom_hline(yintercept = 69, color = "red")
   
-  bar_1_4 <- bar_theme_noaxis(
+  bar_1_4 <- bar_theme(
     all_results$IsoSeq$TALON[[fl_filter_level]][[plot_name]][[1]],
     "TALON",
     pb_talon_ylims
@@ -2366,7 +2773,7 @@ assemble_bar_sirv_plots <- function(results, tissue, fl_filter_level, title, sub
                 IJKL
                 ",
                 heights = c(1, 1, 0.1, 1),
-                axes = "collect") +
+                axes = "collect_y") +
     plot_annotation(
       title = title,
       subtitle = subtitle,
@@ -2406,13 +2813,13 @@ pb_talon_ylims = c(0, 300)
 ont_talon_ylims = c(0, 1200)
 
 sirv_brain_plot_1 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 1, title="SIRV transcripts; brain", subtitle = "", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("sirv_brain_bar_filter1.pdf", device = cairo_pdf, plot = sirv_brain_plot_1, width = 6, height = 4, units = "in")
+ggsave("plot_creation/sirv_brain_bar_filter1.pdf", device = cairo_pdf, plot = sirv_brain_plot_1, width = 18, height = 12, units = "in")
 sirv_brain_plot_3 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 3, title="SIRV transcripts; brain", subtitle = "Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("sirv_brain_bar_filter3.pdf", device = cairo_pdf, plot = sirv_brain_plot_3, width = 6, height = 4, units = "in")
+ggsave("plot_creation/sirv_brain_bar_filter3.pdf", device = cairo_pdf, plot = sirv_brain_plot_3, width = 18, height = 12, units = "in")
 sirv_brain_plot_5 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 5, title="SIRV transcripts; brain", subtitle = "Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("sirv_brain_bar_filter5.pdf", device = cairo_pdf, plot = sirv_brain_plot_5, width = 6, height = 4, units = "in")
+ggsave("plot_creation/sirv_brain_bar_filter5.pdf", device = cairo_pdf, plot = sirv_brain_plot_5, width = 18, height = 12, units = "in")
 sirv_brain_plot_10 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 10, title="SIRV transcripts; brain", subtitle = "Filter: >=10 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("sirv_brain_bar_filter10.pdf", device = cairo_pdf, plot = sirv_brain_plot_10, width = 6, height = 4, units = "in")
+ggsave("plot_creation/sirv_brain_bar_filter10.pdf", device = cairo_pdf, plot = sirv_brain_plot_10, width = 18, height = 12, units = "in")
 
 sirv_brain_plot_1
 sirv_brain_plot_3
@@ -2431,13 +2838,13 @@ pb_talon_ylims = c(0, 350)
 ont_talon_ylims = c(0, 1000)
 
 sirv_kidney_plot_1 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 1, title="SIRV transcripts; kidney", subtitle = "", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("sirv_kidney_bar_filter1.pdf", device = cairo_pdf, plot = sirv_kidney_plot_1, width = 6, height = 4, units = "in")
+ggsave("plot_creation/sirv_kidney_bar_filter1.pdf", device = cairo_pdf, plot = sirv_kidney_plot_1, width = 18, height = 12, units = "in")
 sirv_kidney_plot_3 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 3, title="SIRV transcripts; kidney", subtitle = "Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("sirv_kidney_bar_filter3.pdf", device = cairo_pdf, plot = sirv_kidney_plot_3, width = 6, height = 4, units = "in")
+ggsave("plot_creation/sirv_kidney_bar_filter3.pdf", device = cairo_pdf, plot = sirv_kidney_plot_3, width = 18, height = 12, units = "in")
 sirv_kidney_plot_5 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 5, title="SIRV transcripts; kidney", subtitle = "Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("sirv_kidney_bar_filter5.pdf", device = cairo_pdf, plot = sirv_kidney_plot_5, width = 6, height = 4, units = "in")
+ggsave("plot_creation/sirv_kidney_bar_filter5.pdf", device = cairo_pdf, plot = sirv_kidney_plot_5, width = 18, height = 12, units = "in")
 sirv_kidney_plot_10 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 10, title="SIRV transcripts; kidney", subtitle = "Filter: >=10 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("sirv_kidney_bar_filter10.pdf", device = cairo_pdf, plot = sirv_kidney_plot_10, width = 6, height = 4, units = "in")
+ggsave("plot_creation/sirv_kidney_bar_filter10.pdf", device = cairo_pdf, plot = sirv_kidney_plot_10, width = 18, height = 12, units = "in")
 
 sirv_kidney_plot_1
 sirv_kidney_plot_3
@@ -2517,7 +2924,7 @@ assemble_upset_plots <- function(results, tissue, fl_filter_level, title, plot_n
 ```{r}
 
 brain_upset_plot <- assemble_upset_plots(all_results, "brain", 1, "Unique Junction Chain overlap; brain")
-ggsave("brain_upset_filter1.pdf", device = cairo_pdf, plot = brain_upset_plot, width = 18, height = 12, units = "in")
+ggsave("plot_creation/brain_upset_filter1.pdf", device = cairo_pdf, plot = brain_upset_plot, width = 18, height = 12, units = "in")
 
 brain_upset_plot
 
@@ -2526,7 +2933,7 @@ brain_upset_plot
 ```{r}
 
 kidney_upset_plot <- assemble_upset_plots(all_results, "kidney", 1, "Unique Junction Chain overlap; kidney")
-ggsave("kidney_upset_filter1.pdf", device = cairo_pdf, plot = kidney_upset_plot, width = 18, height = 12, units = "in")
+ggsave("plot_creation/kidney_upset_filter1.pdf", device = cairo_pdf, plot = kidney_upset_plot, width = 18, height = 12, units = "in")
 
 kidney_upset_plot
 
@@ -2544,45 +2951,83 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
   
   comb_1_1 <- all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoQuant") +
-    scale_y_continuous(limits = pb_ylims)
+    scale_y_continuous(limits = pb_ylims) +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12))
   
   comb_1_2 <- all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]] +
     labs(title = "FLAIR") +
-    scale_y_continuous(limits = pb_ylims)
+    scale_y_continuous(limits = pb_ylims) +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12))
   
   comb_1_3 <- all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]] +
     labs(title = "Bambu") +
     scale_y_continuous(limits = pb_ylims) +
-    theme(axis.text.x = element_blank())
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12))
   
   comb_1_4 <- all_results$IsoSeq$TALON[[fl_filter_level]][[plot_name]] +
     labs(title = "TALON") +
     scale_y_continuous(limits = pb_ylims) +
-    theme(axis.text.x = element_blank())
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12))
   
   comb_2_1 <- all_results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]] +
     labs(title = "Mandalorion") +
-    scale_y_continuous(limits = pb_ylims)
+    scale_y_continuous(limits = pb_ylims)+
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12))
   
   comb_2_2 <- all_results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoSeq + SQANTI3") +
-    scale_y_continuous(limits = pb_ylims)
+    scale_y_continuous(limits = pb_ylims) +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12))
   
   comb_3_1 <- all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoQuant") +
-    scale_y_continuous(limits = ont_ylims)
+    scale_y_continuous(limits = ont_ylims) +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12))
   
   comb_3_2 <- all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]] +
     labs(title = "FLAIR") +
-    scale_y_continuous(limits = ont_ylims)
+    scale_y_continuous(limits = ont_ylims) +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12))
   
   comb_3_3 <- all_results$ONT$Bambu[[fl_filter_level]][[plot_name]] +
     labs(title = "Bambu") +
-    scale_y_continuous(limits = ont_ylims)
+    scale_y_continuous(limits = ont_ylims) +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12))
   
   comb_3_4 <- all_results$ONT$TALON[[fl_filter_level]][[plot_name]] +
     labs(title = "TALON") +
-    scale_y_continuous(limits = ont_ylims)
+    scale_y_continuous(limits = ont_ylims) +
+    theme(legend.position = "none",
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12))
   
   # assemble final plot
   comb_plot <- (
@@ -2599,12 +3044,12 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
         IJKM
       ",
       heights = c(1, 1, 0.2, 1),
-      axes = "collect"
+      axes = "collect_y"
     ) +
     plot_annotation(
       title = title,
       theme = theme(
-        plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
       )
     )
   
@@ -2622,12 +3067,12 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
   # Define label plots
   label_a <- ggplot() +
     annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 5, fontface = "bold") +
+             size = 10, fontface = "bold") +
     theme_void()
   
   label_b <- ggplot() +
     annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 5, fontface = "bold") +
+             size = 10, fontface = "bold") +
     theme_void()
   
   final_plot <- wrap_elements(full = comb_plot)
@@ -2647,7 +3092,7 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
 # pb_ylims  <- c(0, 40000)
 # ont_ylims <- c(0, 25000)
 # brain_comb_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-# ggsave("brain_comb.pdf", device = cairo_pdf, plot = brain_comb_plot, width = 6, height = 4, units = "in")
+# ggsave("plot_creation/brain_comb.pdf", device = cairo_pdf, plot = brain_comb_plot, width = 18, height = 12, units = "in")
 # brain_comb_plot
 
 ```
@@ -2657,7 +3102,7 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
 # pb_ylims  <- c(0, 50)
 # ont_ylims <- c(0, 50)
 # brain_perc_comb_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_plot")
-# ggsave("brain_perc_comb.pdf", device = cairo_pdf, plot = brain_perc_comb_plot, width = 6, height = 4, units = "in")
+# ggsave("plot_creation/brain_perc_comb.pdf", device = cairo_pdf, plot = brain_perc_comb_plot, width = 18, height = 12, units = "in")
 # brain_perc_comb_plot
 
 ```
@@ -2667,7 +3112,7 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
 pb_ylims  <- c(0, 35000)
 ont_ylims <- c(0, 20000)
 brain_comb_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Unique Junction Chain occurrence across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_bar_plot", y_label = "# of UJCs")
-ggsave("brain_comb_bar.pdf", device = cairo_pdf, plot = brain_comb_bar_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/brain_comb_bar.pdf", device = cairo_pdf, plot = brain_comb_bar_plot, width = 18, height = 12, units = "in")
 brain_comb_bar_plot
 
 ```
@@ -2677,7 +3122,7 @@ brain_comb_bar_plot
 pb_ylims  <- c(0, 35000)
 ont_ylims <- c(0, 20000)
 kidney_comb_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Unique Junction Chain occurrence across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_bar_plot", y_label = "# of UJCs")
-ggsave("kidney_comb_bar.pdf", device = cairo_pdf, plot = kidney_comb_bar_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/kidney_comb_bar.pdf", device = cairo_pdf, plot = kidney_comb_bar_plot, width = 18, height = 12, units = "in")
 kidney_comb_bar_plot
 
 ```
@@ -2687,8 +3132,8 @@ kidney_comb_bar_plot
 
 pb_ylims  <- c(0, 50)
 ont_ylims <- c(0, 50)
-brain_perc_comb_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Relative Unique Junction Chain occurrence across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_bar_plot", y_label = "% of UJCs")
-ggsave("brain_perc_comb_bar.pdf", device = cairo_pdf, plot = brain_perc_comb_bar_plot, width = 6, height = 4, units = "in")
+brain_perc_comb_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Unique Junction Chain occurrence across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_bar_plot", y_label = "% of UJCs")
+ggsave("plot_creation/brain_perc_comb_bar.pdf", device = cairo_pdf, plot = brain_perc_comb_bar_plot, width = 18, height = 12, units = "in")
 brain_perc_comb_bar_plot
 
 ```
@@ -2697,8 +3142,8 @@ brain_perc_comb_bar_plot
 
 pb_ylims  <- c(0, 50)
 ont_ylims <- c(0, 50)
-kidney_perc_comb_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Relative Unique Junction Chain occurrence across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_bar_plot", y_label = "% of UJCs")
-ggsave("kidney_perc_comb_bar.pdf", device = cairo_pdf, plot = kidney_perc_comb_bar_plot, width = 6, height = 4, units = "in")
+kidney_perc_comb_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Unique Junction Chain occurrence across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_bar_plot", y_label = "% of UJCs")
+ggsave("plot_creation/kidney_perc_comb_bar.pdf", device = cairo_pdf, plot = kidney_perc_comb_bar_plot, width = 18, height = 12, units = "in")
 kidney_perc_comb_bar_plot
 
 ```
@@ -2708,7 +3153,7 @@ kidney_perc_comb_bar_plot
 pb_ylims  <- c(0, 20000000)
 ont_ylims <- c(0, 20000000)
 brain_comb_fl_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Expression of UJCs across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_fl_bar_plot", y_label = "# of reads of UJCs")
-ggsave("brain_comb_fl_bar.pdf", device = cairo_pdf, plot = brain_comb_fl_bar_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/brain_comb_fl_bar.pdf", device = cairo_pdf, plot = brain_comb_fl_bar_plot, width = 18, height = 12, units = "in")
 brain_comb_fl_bar_plot
 
 ```
@@ -2717,7 +3162,7 @@ brain_comb_fl_bar_plot
 pb_ylims  <- c(0, 25000000)
 ont_ylims <- c(0, 25000000)
 kidney_comb_fl_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Expression of UJCs across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_fl_bar_plot", y_label = "# of reads of UJCs")
-ggsave("kidney_comb_fl_bar.pdf", device = cairo_pdf, plot = kidney_comb_fl_bar_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/kidney_comb_fl_bar.pdf", device = cairo_pdf, plot = kidney_comb_fl_bar_plot, width = 18, height = 12, units = "in")
 kidney_comb_fl_bar_plot
 
 ```
@@ -2726,8 +3171,8 @@ kidney_comb_fl_bar_plot
 
 pb_ylims  <- c(0, 100)
 ont_ylims <- c(0, 100)
-brain_perc_comb_fl_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Relative expression of UJCs across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_fl_bar_plot", y_label = "% of reads of UJCs")
-ggsave("brain_perc_comb_fl_bar.pdf", device = cairo_pdf, plot = brain_perc_comb_fl_bar_plot, width = 6, height = 4, units = "in")
+brain_perc_comb_fl_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Expression of UJCs across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_fl_bar_plot", y_label = "% of reads of UJCs")
+ggsave("plot_creation/brain_perc_comb_fl_bar.pdf", device = cairo_pdf, plot = brain_perc_comb_fl_bar_plot, width = 18, height = 12, units = "in")
 brain_perc_comb_fl_bar_plot
 
 ```
@@ -2735,8 +3180,8 @@ brain_perc_comb_fl_bar_plot
 
 pb_ylims  <- c(0, 100)
 ont_ylims <- c(0, 100)
-kidney_perc_comb_fl_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Relative expression of UJCs across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_fl_bar_plot", y_label = "% of reads of UJCs")
-ggsave("kidney_perc_comb_fl_bar.pdf", device = cairo_pdf, plot = kidney_perc_comb_fl_bar_plot, width = 6, height = 4, units = "in")
+kidney_perc_comb_fl_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Expression of UJCs across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_fl_bar_plot", y_label = "% of reads of UJCs")
+ggsave("plot_creation/kidney_perc_comb_fl_bar.pdf", device = cairo_pdf, plot = kidney_perc_comb_fl_bar_plot, width = 18, height = 12, units = "in")
 kidney_perc_comb_fl_bar_plot
 
 ```
@@ -2748,7 +3193,7 @@ kidney_perc_comb_fl_bar_plot
 pb_ylims  <- c(0, 100000)
 ont_ylims <- c(0, 62500)
 brain_ujc_curve_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_curve_plot")
-ggsave("brain_ujc_curve_plot.pdf", device = cairo_pdf, plot = brain_ujc_curve_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/brain_ujc_curve_plot.pdf", device = cairo_pdf, plot = brain_ujc_curve_plot, width = 18, height = 12, units = "in")
 brain_ujc_curve_plot
 
 ```
@@ -2759,7 +3204,7 @@ brain_ujc_curve_plot
 pb_ylims  <- c(0, 100)
 ont_ylims <- c(0, 100)
 brain_perc_ujc_curve_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence by across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_curve_plot")
-ggsave("brain_perc_ujc_curve_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_curve_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/brain_perc_ujc_curve_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_curve_plot, width = 18, height = 12, units = "in")
 brain_perc_ujc_curve_plot
 
 ```
@@ -2776,54 +3221,72 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
   
   comb_1_1 <- all_results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoQuant") +
-    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12)) +
     scale_y_continuous(limits = pb_ylims)
   
   comb_1_2 <- all_results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]] +
     labs(title = "FLAIR") +
-    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12)) +
     scale_y_continuous(limits = pb_ylims)
   
   comb_1_3 <- all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]] +
     labs(title = "Bambu") +
-    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
-    scale_y_continuous(limits = pb_ylims) +
-    theme(axis.text.x = element_blank())
+    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12)) +
+    scale_y_continuous(limits = pb_ylims)
   
   comb_1_4 <- all_results$IsoSeq$TALON[[fl_filter_level]][[plot_name]] +
     labs(title = "TALON") +
-    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
-    scale_y_continuous(limits = pb_ylims) +
-    theme(axis.text.x = element_blank())
+    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12)) +
+    scale_y_continuous(limits = pb_ylims)
   
   comb_2_1 <- all_results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]] +
     labs(title = "Mandalorion") +
-    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12)) +
     scale_y_continuous(limits = pb_ylims)
   
   comb_2_2 <- all_results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoSeq + SQANTI3") +
-    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12)) +
     scale_y_continuous(limits = pb_ylims)
   
   comb_3_1 <- all_results$ONT$IsoQuant[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoQuant") +
-    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12)) +
     scale_y_continuous(limits = ont_ylims)
   
   comb_3_2 <- all_results$ONT$FLAIR[[fl_filter_level]][[plot_name]] +
     labs(title = "FLAIR") +
-    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12)) +
     scale_y_continuous(limits = ont_ylims)
   
   comb_3_3 <- all_results$ONT$Bambu[[fl_filter_level]][[plot_name]] +
     labs(title = "Bambu") +
-    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12)) +
     scale_y_continuous(limits = ont_ylims)
   
   comb_3_4 <- all_results$ONT$TALON[[fl_filter_level]][[plot_name]] +
     labs(title = "TALON") +
-    theme(plot.title = element_text(hjust = 0.5, size = 10, face = "bold")) +
+    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text = element_text(size = 10),
+          axis.title = element_text(size = 12)) +
     scale_y_continuous(limits = ont_ylims)
   
   # assemble final plot
@@ -2841,13 +3304,13 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
         IJKL
       ",
       heights = c(1, 1, 0.2, 1),
-      axes = "collect",
+      axes = "collect_y",
       guides = "collect"
     ) +
     plot_annotation(
       title = title,
       theme = theme(
-        plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
       )
     ) &
     theme(legend.position = "none") 
@@ -2866,12 +3329,12 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
   # Define label plots
   label_a <- ggplot() +
     annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 5, fontface = "bold") +
+             size = 10, fontface = "bold") +
     theme_void()
   
   label_b <- ggplot() +
     annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 5, fontface = "bold") +
+             size = 10, fontface = "bold") +
     theme_void()
   
   final_plot <- wrap_elements(full = comb_plot)
@@ -2891,7 +3354,7 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
 pb_ylims  <- c(0, 100000)
 ont_ylims <- c(0, 62500)
 brain_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "UJC occurrence across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_stack_plot", y_label = "Mean # of UJCs")
-ggsave("brain_ujc_stack_plot.pdf", device = cairo_pdf, plot = brain_ujc_stack_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/brain_ujc_stack_plot.pdf", device = cairo_pdf, plot = brain_ujc_stack_plot, width = 18, height = 12, units = "in")
 brain_ujc_stack_plot
 
 ```
@@ -2901,7 +3364,7 @@ brain_ujc_stack_plot
 pb_ylims  <- c(0, 100000)
 ont_ylims <- c(0, 62500)
 kidney_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "UJC occurrence across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_stack_plot", y_label = "Mean # of UJCs")
-ggsave("kidney_ujc_stack_plot.pdf", device = cairo_pdf, plot = kidney_ujc_stack_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/kidney_ujc_stack_plot.pdf", device = cairo_pdf, plot = kidney_ujc_stack_plot, width = 18, height = 12, units = "in")
 kidney_ujc_stack_plot
 
 ```
@@ -2911,7 +3374,7 @@ kidney_ujc_stack_plot
 pb_ylims  <- c(0, 100)
 ont_ylims <- c(0, 100)
 brain_perc_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "Relative UJC occurrence across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_stack_plot", y_label = "Mean % of UJCs")
-ggsave("brain_perc_ujc_stack_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_stack_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/brain_perc_ujc_stack_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_stack_plot, width = 18, height = 12, units = "in")
 brain_perc_ujc_stack_plot
 
 ```
@@ -2921,7 +3384,7 @@ brain_perc_ujc_stack_plot
 pb_ylims  <- c(0, 100)
 ont_ylims <- c(0, 100)
 kidney_perc_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "Relative UJC occurrence across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_stack_plot", y_label = "Mean % of UJCs")
-ggsave("kidney_perc_ujc_stack_plot.pdf", device = cairo_pdf, plot = kidney_perc_ujc_stack_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/kidney_perc_ujc_stack_plot.pdf", device = cairo_pdf, plot = kidney_perc_ujc_stack_plot, width = 18, height = 12, units = "in")
 kidney_perc_ujc_stack_plot
 
 ```
@@ -2983,7 +3446,7 @@ comb_plot <- (
       DEF
     ",
     heights = c(1, 0.2, 1),
-    axes = "collect",
+    axes = "collect_y",
     guides = "collect"
   ) +
   plot_annotation(
@@ -3064,7 +3527,7 @@ comb_plot <- (
       DEF
     ",
     heights = c(1, 0.2, 1),
-    axes = "collect",
+    axes = "collect_y",
     guides = "collect"
   ) +
   plot_annotation(
@@ -3123,7 +3586,7 @@ all_results$ONT$FLAIR$`1`$b_class_df_list$`Join&Call` %>%
 pb_ylims  <- c(0, 20000000)
 ont_ylims <- c(0, 20000000)
 brain_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "Expression of UJCs across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_fl_stack_plot", y_label = "Mean # of reads of UJCs")
-ggsave("brain_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = brain_ujc_fl_stack_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/brain_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = brain_ujc_fl_stack_plot, width = 18, height = 12, units = "in")
 brain_ujc_fl_stack_plot
 
 ```
@@ -3133,7 +3596,7 @@ brain_ujc_fl_stack_plot
 pb_ylims  <- c(0, 25000000)
 ont_ylims <- c(0, 25000000)
 kidney_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "Expression of UJCs across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_fl_stack_plot", y_label = "Mean # of reads of UJCs")
-ggsave("kidney_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = kidney_ujc_fl_stack_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/kidney_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = kidney_ujc_fl_stack_plot, width = 18, height = 12, units = "in")
 kidney_ujc_fl_stack_plot
 
 ```
@@ -3143,7 +3606,7 @@ kidney_ujc_fl_stack_plot
 pb_ylims  <- c(0, 100)
 ont_ylims <- c(0, 100)
 brain_perc_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "Relative expression of UJCs across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_fl_stack_plot", y_label = "Mean % of reads of UJCs")
-ggsave("brain_perc_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_fl_stack_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/brain_perc_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_fl_stack_plot, width = 18, height = 12, units = "in")
 brain_perc_ujc_fl_stack_plot
 
 ```
@@ -3152,7 +3615,7 @@ brain_perc_ujc_fl_stack_plot
 pb_ylims  <- c(0, 100)
 ont_ylims <- c(0, 100)
 kidney_perc_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "Relative expression of UJCs across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_fl_stack_plot", y_label = "Mean % of reads of UJCs")
-ggsave("kidney_perc_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = kidney_perc_ujc_fl_stack_plot, width = 6, height = 4, units = "in")
+ggsave("plot_creation/kidney_perc_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = kidney_perc_ujc_fl_stack_plot, width = 18, height = 12, units = "in")
 kidney_perc_ujc_fl_stack_plot
 
 ```
@@ -3163,10 +3626,10 @@ compare_theme <- function(plot, title) {
   plot +
     ggtitle(title) +
     theme(
-      plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
-      axis.text = element_text(size = 8),
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+      axis.text = element_text(size = 10),
       axis.text.x = element_text(angle = 45, hjust = 1),
-      axis.title = element_text(size = 10),
+      axis.title = element_text(size = 12),
       legend.position = "none"
     ) +
     labs(x = "Strategy")
@@ -3236,12 +3699,12 @@ assemble_compare_plots <- function(results, tissue, fl_filter_level) {
       "FLAIR"
     )
     
-    bar_1_3 <- compare_theme_noaxis(
+    bar_1_3 <- compare_theme(
       all_results$IsoSeq$Bambu[[fl_filter_level]][[plot_base_name]][[subplot_name]],
       "Bambu"
     )
     
-    bar_1_4 <- compare_theme_noaxis(
+    bar_1_4 <- compare_theme(
       all_results$IsoSeq$TALON[[fl_filter_level]][[plot_base_name]][[subplot_name]],
       "TALON"
     )
@@ -3290,13 +3753,13 @@ assemble_compare_plots <- function(results, tissue, fl_filter_level) {
           IJKM
         ",
         heights = c(1, 1, 0.2, 1),
-        axes = "collect_x",
+        axes = "collect_y",
         axis_titles = "collect"
       ) +
       plot_annotation(
         title = paste0(subplot_title, "; ", tissue),
         theme = theme(
-          plot.title = element_text(size = 12, face = "bold", hjust = 0.5)
+          plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
         )
       )
     
@@ -3304,12 +3767,12 @@ assemble_compare_plots <- function(results, tissue, fl_filter_level) {
     # Define label plots
     label_a <- ggplot() +
       annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-               size = 5, fontface = "bold") +
+               size = 10, fontface = "bold") +
       theme_void()
     
     label_b <- ggplot() +
       annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-               size = 5, fontface = "bold") +
+               size = 10, fontface = "bold") +
       theme_void()
     
     final_plot <- wrap_elements(full = bar_plot)
@@ -3333,7 +3796,7 @@ brain_isoform_compare_figures <- assemble_compare_plots(all_results, "brain", 1)
 for (bicf_name in names(brain_isoform_compare_figures)) {
   
   bicf <- brain_isoform_compare_figures[[bicf_name]]
-  ggsave(paste0(bicf_name, "_brain.pdf"), device = cairo_pdf, plot = bicf, width = 6, height = 4, unit = "in")
+  ggsave(paste0("plot_creation/", bicf_name, "_brain.pdf"), device = cairo_pdf, plot = bicf, width = 18, height = 12, unit = "in")
   
 }
 
@@ -3349,7 +3812,7 @@ kidney_isoform_compare_figures <- assemble_compare_plots(all_results, "kidney", 
 for (kicf_name in names(kidney_isoform_compare_figures)) {
   
   kicf <- kidney_isoform_compare_figures[[kicf_name]]
-  ggsave(paste0(kicf_name, "_kidney.pdf"), device = cairo_pdf, plot = kicf, width = 6, height = 4, unit = "in")
+  ggsave(paste0("plot_creation/", kicf_name, "_kidney.pdf"), device = cairo_pdf, plot = kicf, width = 18, height = 12, unit = "in")
   
 }
 
@@ -3744,7 +4207,7 @@ missing_sirvs <- setdiff(real_sirvs, sirv_df$isoform)
 
 ```{r investigate_sirvs}
 tissue_df_lists <- list("b_class_df_list", "k_class_df_list")
-tissues_df_labels <- list(Brain=sample_labels_Brain, Kidney=sample_labels_Kidney)
+tissues_df_labels <- list(Brain=sample_names_Brain, Kidney=sample_names_Kidney)
 sirv_results <- list()
 
 missing_sirvs <- real_sirvs

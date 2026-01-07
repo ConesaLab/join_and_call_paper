@@ -1,20 +1,19 @@
 This repository serves to document and make available to the community the code of the publication 'To join or not to join: handling biological replicates in long-read RNA sequencing data'.
 
-The pre-print will be shortly submitted to bioRxiv once it is submitted to a journal for review.
+The pre-print is available on bioRxiv at: https://doi.org/10.64898/2025.12.09.693269
 
 # Analysis
 The paper focusses on investigating strategies on combining long-read RNAseq data from multiple biological replicates for transcriptome reconstruction. We investigate 2 strategies: "Join & Call" (J&C), where reads from all replicates are combined before performing transcriptome reconstruction, and "Call & Join" (C&J), where transcriptome reconstruction is performed on each replicate individually before combining the resulting annotations. We compare IsoQuant, FLAIR, Bambu, and TALON on both PacBio and ONT data, as well as Mandalorion and IsoSeq + SQANTI3 Filter on PacBio data only, using a data set of mouse brain and kidney tissue with 5 biological replicates per tissue.
 
 # Data availability
-The data used in this study has been submitted to the European Nucleotide Archive (ENA; https://www.ebi.ac.uk/ena/browser/home). Mice brain and kidney data generated using PacBio sequencing are accessible under accession number PRJEB85167 and PRJEB94912, respectively. 
+All data generated in this study have been submitted to the European Nucleotide Archive (ENA; https://www.ebi.ac.uk/ena/browser/home). Mice brain and kidney data generated using PacBio, ONT and Illumina sequencing are accessible under accession numbers PRJEB85167 and PRJEB94912. 
 
-TODO: Add ONT and Illumina accession numbers
+For convenience, a small test set as well as reference data are provided at https://drive.google.com/drive/folders/1c3ZDXIxwh_Icx5-KVcjch-QnGkfk_j_B?usp=sharing
 
 # Code & Reusability
 The code is organized in a nextflow pipeline which runs a specified transcriptome reconstruction tool (out of the above mentioned) with both strategies and on both brain and kidney tissues on a specified data type (ONT or PacBio, where compatible). 
 
 **The scripts used by the pipeline are specifically designed to be run on a SLURM cluster and will not be compatible with other environments out-of-the-box.**
-
 
 There are further options (e.g. not using supporting short-read data for FLAIR, or running partial joins with 2,3,4 samples, etc.) which are not used for the analyses in the paper.
 
@@ -22,9 +21,15 @@ Under `/src/util/conda_envs`, .yaml files to configure the needed conda environm
 
 Under `/src/util/tool_setup`, instructions for cloning the repositories of tools which need to have a local copy can be found.
 
+## Installation instructions
+
+- Clone the repository
+- Run the script `src/util/tool_setup/clone_tool_git_repos.sh` in order to clone the repositories of SQANTI3 and TAMA at specific commits. If intending to use TALON (TranscriptClean) and/or Mandalorion, uncomment the corresponding sections of the script.
+- Run the script `/mnt/c/Users/jetzi/other_repos/join_and_call_paper/src/util/conda_envs/install_conda_envs.sh` in order to install the conda environments. Uncomment any of the isoform identification tools depending on what you intend to run (by default only the IsoQuant environment is installed.)
+
 ## Example usage
 
-Examples of how to use the SLURM-wrapper `nextflow_wrapper.sbatch` script to launch the `main_workflow.nf`:
+Examples of how to use the SLURM-wrapper `nextflow_wrapper.sbatch` script to launch the `main_workflow.nf` (once pre-processing has been conducted and metadata files have been created):
 
 * Run FLAIR with supporting short reads on ONT data:
 

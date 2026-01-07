@@ -10,6 +10,26 @@ date: "2025-06-10"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r install-packages, include=FALSE}
+# List of required packages
+required_packages <- c(
+  "ggplot2",
+  "patchwork",
+  "cowplot",
+  "dplyr",
+  "tidyr",
+  "ggstats",
+  "ggpubr"
+)
+
+# Install missing packages
+missing_packages <- required_packages[!required_packages %in% installed.packages()[, "Package"]]
+if (length(missing_packages) > 0) {
+  message("Installing missing packages: ", paste(missing_packages, collapse = ", "))
+  install.packages(missing_packages, repos = "https://cloud.r-project.org")
+}
+```
+
 ```{r libraries}
 
 library(ggplot2)
@@ -19,6 +39,11 @@ library(dplyr)
 library(tidyr)
 library(ggstats)  # for geom_stripped_rows()
 library(ggpubr)
+
+# Create output directory if it doesn't exist
+if (!dir.exists("plot_creation")) {
+  dir.create("plot_creation")
+}
 ```
 
 
@@ -192,7 +217,11 @@ assemble_radar_plots <- function(tusco_plot_list) {
   style_title <- function(p, title) {
     p + ggtitle(title) +
       theme(
-        plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text = element_text(size = 10),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
         legend.position = "right"  # Ensure legend is enabled
       )
   }
@@ -216,7 +245,7 @@ assemble_radar_plots <- function(tusco_plot_list) {
     plot_annotation(
       title = "TUSCO_mouse, isoseq, isoquant, brain",
       theme = theme(
-        plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+        plot.title = element_text(hjust = 0.5, size = 22, face = "bold")
       )
     )
   
@@ -230,7 +259,7 @@ assemble_radar_plots <- function(tusco_plot_list) {
 radar_plot <- assemble_radar_plots(tusco_renamed$tusco_full$isoseq$isoquant$B100K0)
 radar_plot
 
-ggsave("radar_plot.pdf", device = cairo_pdf, plot = radar_plot, height=4, width=20, unit="in")
+ggsave("plot_creation/radar_plot.pdf", device = cairo_pdf, plot = radar_plot, height=12, width=18, unit="in")
 ```
 
 ```{r}
@@ -268,7 +297,7 @@ final_plot <- plot_grid(
 
 # 5. Draw the whole thing
 print(final_plot)
-ggsave("radar_plot.pdf", device = cairo_pdf, plot = final_plot, height=4, width=20, unit="in")
+ggsave("plot_creation/radar_plot.pdf", device = cairo_pdf, plot = final_plot, height=12, width=18, unit="in")
 
 ```
 
@@ -331,7 +360,7 @@ build_dumbbell_plot <- function(metrics_long,
   # 3) Build plot
   p <- ggplot() +
     # striped rows
-    geom_stripped_rows(
+    ggstats::geom_stripped_rows(
       data = metrics_wide,
       aes(y = metric),
       width   = 1,
@@ -395,21 +424,122 @@ build_dumbbell_plot <- function(metrics_long,
     labs(x = "Metric value (%)", y = NULL, title = title) +
     theme_minimal(base_size = 12) +
     theme(
-      plot.title         = element_text(hjust = 0.5, face = "bold", size = 14),
+      plot.title         = element_text(hjust = 0.5, face = "bold", size = 16),
       plot.margin        = margin(t = 5, r = 20, b = 5, l = 20, unit = "pt"),
       panel.grid.major.y = element_blank(),
       panel.grid.minor   = element_blank(),
       panel.background   = element_rect(fill = "white", color = NA),
-      axis.text.y        = element_text(face = "bold"),
-      legend.box      = "horizontal",
+      axis.text          = element_text(size = 10),
+      axis.text.y        = element_text(face = "bold", size = 10),
+      axis.title         = element_text(size = 12),
+      legend.box         = "horizontal",
       legend.position    = "right",
-      legend.title = element_text(size = 14, face = "bold"),
-      legend.text  = element_text(size = 12)
+      legend.title       = element_text(size = 14, face = "bold"),
+      legend.text        = element_text(size = 12)
     )
   
   return(p)
 }
 
+
+```
+
+
+
+
+```{r}
+
+
+build_indiv_dumbbell_plot <- function(metrics_long,
+                                      title,
+                                      dataset_to_plot, # <-- New argument
+                                      metric_order = c("Sn", "PDR", "nrPre", "rPre", "1/red", "1-FDR")
+) {
+  # 0) make metric a factor in the desired order
+  metrics_long <- metrics_long %>%
+    mutate(metric = factor(metric, levels = rev(metric_order)))
+  
+  # 1) Pivot to wide for segments
+  metrics_wide <- metrics_long %>%
+    separate(method_dataset, into = c("method", "dataset"), sep = "_") %>%
+    filter(dataset == dataset_to_plot) %>% # <-- Filter for the specific dataset
+    pivot_wider(names_from = method, values_from = value)
+  
+  # 2) Prepare points data
+  points_df <- metrics_wide %>%
+    pivot_longer(
+      cols      = c(concat, tama),
+      names_to  = "method",
+      values_to = "value"
+    )
+  
+  # 3) Build plot
+  p <- ggplot() +
+    # striped rows
+    ggstats::geom_stripped_rows(
+      data = metrics_wide,
+      aes(y = metric),
+      width   = 1,
+      nudge_y = 0
+    ) +
+    # segments
+    geom_segment(
+      data = metrics_wide,
+      aes(x    = concat, xend = tama,
+          y    = metric, yend = metric),
+      color    = "black", # <-- Set color directly
+      size     = 1.2
+      # position = position_nudge() removed
+    ) +
+    # endpoints
+    geom_point(
+      data = points_df,
+      aes(x     = value,
+          y     = metric,
+          shape = method),
+      color    = "black", # <-- Set color directly
+      fill     = "black", # <-- Set fill directly
+      size     = 3,
+      stroke   = 0.8
+      # position = position_nudge() removed
+    ) +
+    # scales and legends
+    # scale_color_manual() removed
+    # scale_fill_manual() removed
+    scale_shape_manual(
+      name   = "Strategy",
+      values = c("concat" = 16, "tama" = 17), # 16=filled circle, 17=filled triangle
+      labels = c("concat" = "Join & Call", "tama" = "Call & Join"),
+      guide  = guide_legend(
+        override.aes = list(fill = "black", size = 3),
+        order = 1 # Now this is the only legend
+      )
+    ) +
+    # axes, padding, clipping & theme
+    scale_x_continuous(
+      limits = c(0, 100),
+      expand = expansion(mult = c(0.03, 0.03))
+    ) +
+    scale_y_discrete() +           # uses levels of metric factor
+    coord_cartesian(clip = "off") +
+    labs(x = "Metric value (%)", y = NULL, title = title) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title         = element_text(hjust = 0.5, face = "bold", size = 16),
+      plot.margin        = margin(t = 5, r = 20, b = 5, l = 20, unit = "pt"),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor   = element_blank(),
+      panel.background   = element_rect(fill = "white", color = NA),
+      axis.text          = element_text(size = 10),
+      axis.text.y        = element_text(face = "bold", size = 10),
+      axis.title         = element_text(size = 12),
+      legend.position    = "right", # Only shape legend will appear
+      legend.title       = element_text(size = 14, face = "bold"),
+      legend.text        = element_text(size = 12)
+    )
+  
+  return(p)
+}
 
 ```
 
@@ -506,9 +636,13 @@ for (tusco_type in c("tusco_full", "tusco_brain", "tusco_kidney")){
         # 2) preprocess and build plot
         metrics_long <- preprocess_metrics(concat_df, tama_df)
         p            <- build_dumbbell_plot(metrics_long, pretty_tool)
+        ps           <- build_indiv_dumbbell_plot(metrics_long, pretty_tool, "sirv")
+        pt           <- build_indiv_dumbbell_plot(metrics_long, pretty_tool, "tusco")
         
         # 3) assign back into the list
         tusco_renamed[[tusco_type]][[datatype]][[tool]][[tissue]]$dumbbell_plot <- p
+        tusco_renamed[[tusco_type]][[datatype]][[tool]][[tissue]]$db_sirv_plot <- ps
+        tusco_renamed[[tusco_type]][[datatype]][[tool]][[tissue]]$db_tusco_plot <- pt
       }
     }
   }
@@ -517,17 +651,17 @@ for (tusco_type in c("tusco_full", "tusco_brain", "tusco_kidney")){
 ```
 
 ```{r}
-tusco_renamed$tusco_full$isoseq$isoseq$B100K0$dumbbell_plot
+tusco_renamed$tusco_full$isoseq$isoseq$B100K0$db_tusco_plot
 ```
 
 ```{r}
 
-assemble_dumbbell_plots <- function(results, tissue, tusco_type) {
+assemble_dumbbell_plots <- function(results, tissue, tusco_type, plot_name="dumbbell_plot") {
   
   if (tissue == "B100K0") {
-    tissue_name <- "Brain"
+    tissue_name <- "brain"
   } else if (tissue == "B0K100") {
-    tissue_name <- "Kidney"
+    tissue_name <- "kidney"
   } else {
     stop("Error: unknown tissue code '", tissue, "'")
   }
@@ -542,48 +676,57 @@ assemble_dumbbell_plots <- function(results, tissue, tusco_type) {
     stop("Error: unknown tusco_type code '", tusco_type, "'")
   }
   
+  if (plot_name == "dumbbell_plot"){
+    plot_title <- paste0("SIRV and ", tusco_type_name, " evaluation", "; ", tissue_name)
+  } else if (plot_name == "db_sirv_plot"){
+    plot_title <- paste0("SIRV evaluation", "; ", tissue_name)
+  } else if (plot_name == "db_tusco_plot"){
+    plot_title <- paste0(tusco_type_name, " evaluation", "; ", tissue_name)
+  } else {
+    stop("Error: unknown plot_name '", plot_name, "'")
+  }
+  
   raw_legend   <- get_legend(
-    results[[tusco_type]]$isoseq$isoquant[[tissue]]$dumbbell_plot
+    results[[tusco_type]]$isoseq$isoquant[[tissue]][[plot_name]]
   )
   legend_panel <- as_ggplot(raw_legend)
   
-  db_1_1 <- results[[tusco_type]]$isoseq$isoquant[[tissue]]$dumbbell_plot +
+  db_1_1 <- results[[tusco_type]]$isoseq$isoquant[[tissue]][[plot_name]] +
     theme(legend.position = "none")
-  db_1_2 <- results[[tusco_type]]$isoseq$flair_ar_sr[[tissue]]$dumbbell_plot +
+  db_1_2 <- results[[tusco_type]]$isoseq$flair_ar_sr[[tissue]][[plot_name]] +
     theme(legend.position = "none")
-  db_1_3 <- results[[tusco_type]]$isoseq$bambu[[tissue]]$dumbbell_plot +
+  db_1_3 <- results[[tusco_type]]$isoseq$bambu[[tissue]][[plot_name]] +
     theme(
       legend.position = "none", 
       axis.title.x = element_blank(),
       axis.text.x = element_blank(),
       axis.ticks.x = element_blank()
       )
-  db_1_4 <- results[[tusco_type]]$isoseq$talon[[tissue]]$dumbbell_plot +
+  db_1_4 <- results[[tusco_type]]$isoseq$talon[[tissue]][[plot_name]] +
     theme(
       legend.position = "none", 
       axis.title.x = element_blank(),
       axis.text.x = element_blank(),
       axis.ticks.x = element_blank()
       )
-  db_2_1 <- results[[tusco_type]]$isoseq$mandalorion[[tissue]]$dumbbell_plot +
+  db_2_1 <- results[[tusco_type]]$isoseq$mandalorion[[tissue]][[plot_name]] +
     theme(legend.position = "none")
-  db_2_2 <- results[[tusco_type]]$isoseq$isoseq[[tissue]]$dumbbell_plot +
+  db_2_2 <- results[[tusco_type]]$isoseq$isoseq[[tissue]][[plot_name]] +
     theme(legend.position = "none")
-  db_3_1 <- results[[tusco_type]]$ont$isoquant[[tissue]]$dumbbell_plot +
+  db_3_1 <- results[[tusco_type]]$ont$isoquant[[tissue]][[plot_name]] +
     theme(legend.position = "none")
-  db_3_2 <- results[[tusco_type]]$ont$flair_ar_sr[[tissue]]$dumbbell_plot +
+  db_3_2 <- results[[tusco_type]]$ont$flair_ar_sr[[tissue]][[plot_name]] +
     theme(legend.position = "none")
-  db_3_3 <- results[[tusco_type]]$ont$bambu[[tissue]]$dumbbell_plot +
+  db_3_3 <- results[[tusco_type]]$ont$bambu[[tissue]][[plot_name]] +
     theme(
       legend.position = "none", 
       axis.title.x = element_blank()
       )
-  db_3_4 <- results[[tusco_type]]$ont$talon[[tissue]]$dumbbell_plot +
+  db_3_4 <- results[[tusco_type]]$ont$talon[[tissue]][[plot_name]] +
     theme(
       legend.position = "none", 
       axis.title.x = element_blank()
       )
-  
   
   db_plot <- (
     db_1_1 + db_1_2 + db_1_3 + db_1_4 +
@@ -602,19 +745,19 @@ assemble_dumbbell_plots <- function(results, tissue, tusco_type) {
       axes         = "collect"
     ) +
     plot_annotation(
-      title = paste0("SIRV and ", tusco_type_name, " evaluation", "; ", tissue_name),
+      title = plot_title,
       theme = theme(
-        plot.title = element_text(size = 15, face = "bold", hjust = 0.5)
+        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
       )
     )
   
   
   # add inset labels (a/b)
   label_a <- ggplot() +
-    annotate("text", x = .5, y = .5, label = "a", size = 6, fontface = "bold") +
+    annotate("text", x = .5, y = .5, label = "a", size = 10, fontface = "bold") +
     theme_void()
   label_b <- ggplot() +
-    annotate("text", x = .5, y = .5, label = "b", size = 6, fontface = "bold") +
+    annotate("text", x = .5, y = .5, label = "b", size = 10, fontface = "bold") +
     theme_void()
   
   final <- wrap_elements(db_plot) +
@@ -634,27 +777,78 @@ assemble_dumbbell_plots <- function(results, tissue, tusco_type) {
 brain_db_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_full")
 brain_db_plot
 
-ggsave("brain_db_full_plot.pdf", device = cairo_pdf, plot = brain_db_plot, width = 12, height = 8, unit = "in")
+ggsave("plot_creation/brain_db_full_plot.pdf", device = cairo_pdf, plot = brain_db_plot, width = 18, height = 12, unit = "in")
 ```
 
 ```{r}
 kidney_db_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_full")
 kidney_db_plot
 
-ggsave("kidney_db_full_plot.pdf", device = cairo_pdf, plot = kidney_db_plot, width = 12, height = 8, unit = "in")
+ggsave("plot_creation/kidney_db_full_plot.pdf", device = cairo_pdf, plot = kidney_db_plot, width = 18, height = 12, unit = "in")
 ```
 
 ```{r}
 brain_db_tissue_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_brain")
 brain_db_tissue_plot
 
-ggsave("brain_db_tissue_plot.pdf", device = cairo_pdf, plot = brain_db_tissue_plot, width = 12, height = 8, unit = "in")
+ggsave("plot_creation/brain_db_tissue_plot.pdf", device = cairo_pdf, plot = brain_db_tissue_plot, width = 18, height = 12, unit = "in")
 ```
 
 ```{r}
 kidney_db_tissue_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_kidney")
 kidney_db_tissue_plot
 
-ggsave("kidney_db_tissue_plot.pdf", device = cairo_pdf, plot = kidney_db_tissue_plot, width = 12, height = 8, unit = "in")
+ggsave("plot_creation/kidney_db_tissue_plot.pdf", device = cairo_pdf, plot = kidney_db_tissue_plot, width = 18, height = 12, unit = "in")
 ```
+
+
+```{r}
+brain_sirv_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_full", "db_sirv_plot")
+brain_sirv_plot
+
+ggsave("plot_creation/brain_sirv_plot.pdf", device = cairo_pdf, plot = brain_sirv_plot, width = 18, height = 12, unit = "in")
+```
+
+```{r}
+brain_tusco_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_full", "db_tusco_plot")
+brain_tusco_plot
+
+ggsave("plot_creation/brain_tusco_plot.pdf", device = cairo_pdf, plot = brain_tusco_plot, width = 18, height = 12, unit = "in")
+```
+
+```{r}
+brain_tusco_tissue_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_brain", "db_tusco_plot")
+brain_tusco_tissue_plot
+
+ggsave("plot_creation/brain_tusco_tissue_plot.pdf", device = cairo_pdf, plot = brain_tusco_tissue_plot, width = 18, height = 12, unit = "in")
+```
+
+
+
+```{r}
+kidney_sirv_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_full", "db_sirv_plot")
+kidney_sirv_plot
+
+ggsave("plot_creation/kidney_sirv_plot.pdf", device = cairo_pdf, plot = kidney_sirv_plot, width = 18, height = 12, unit = "in")
+```
+
+```{r}
+kidney_tusco_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_full", "db_tusco_plot")
+kidney_tusco_plot
+
+ggsave("plot_creation/kidney_tusco_plot.pdf", device = cairo_pdf, plot = kidney_tusco_plot, width = 18, height = 12, unit = "in")
+```
+
+```{r}
+kidney_tusco_tissue_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_kidney", "db_tusco_plot")
+kidney_tusco_tissue_plot
+
+ggsave("plot_creation/kidney_tusco_tissue_plot.pdf", device = cairo_pdf, plot = kidney_tusco_tissue_plot, width = 18, height = 12, unit = "in")
+```
+
+```{r}
+
+
+```
+
 

@@ -14,15 +14,6 @@ git -C "$tools_dir/SQANTI3_dev" checkout 5f182ae54b3decf65f18bd8099cdd22e0914ad6
 git clone https://github.com/GenomeRIK/tama.git "$tools_dir/tama"
 git -C "$tools_dir/tama" checkout 2fa3c308282190c413e9bf0e0b49e63086eef7d4 # latest commit as of 2025-02-05 (commit from 2023-04-12)
 
-# for FLAIR, personal fork with v2.0 + cherrypicked fix for gtf parsing issue
-git clone https://github.com/FabianJetzinger/flair.git "$tools_dir/flair"
-
-# for FLAIR official with specific commit
-# git clone https://github.com/BrooksLabUCSC/flair "$tools_dir/flair"
-# git -C "$tools_dir/flair" checkout e0ef84cb50d998692bdb1aae2d85dc88e7a88573 # commit that fixes annotation issue
-# git -C "$tools_dir/flair" checkout bb126d9be804512bff048aafeb292f680b1d20fb # commit of 2.0.0 release
-# if using 2.0.0 release, manually fix annotation issue!!
-
 # for TranscriptClean (needed by TALON)
 # git clone https://github.com/mortazavilab/TranscriptClean "$tools_dir/TranscriptClean"
 # git -C "$tools_dir/TranscriptClean" checkout 56fe8f25fe3ededc1f8f048b7cc00139a55ef15c # latest commit as of 2025-02-05 (commit from 2024-01-31)
