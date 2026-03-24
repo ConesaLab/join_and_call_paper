@@ -58,8 +58,7 @@ if (!dir.exists("plot_creation")) {
 
 ```{r read_sqanti_stacked_bar, echo=FALSE, message=FALSE, warning=FALSE}
 # Read multiple classification files (helpers + reusable pipeline)
-# base_dir <- "/mnt/c/data/nih/sqanti_reads"
-base_dir <- "C:/data/nih/sqanti_reads"
+base_dir <- "/mnt/c/data/nih/sqanti_reads"
 pacbio_dir <- paste0(base_dir, "/pacbio")
 ont_dir    <- paste0(base_dir, "/ont")
 
@@ -88,7 +87,7 @@ category_map <- c(
   "genic_intron" = "Genic\nIntron"
 )
 
-display_levels <- c("FSM","ISM","NIC","NNC","Genic\nGenomic","Antisense","Fusion","Intergenic","Genic\nIntron")
+display_levels <- c("FSM","ISM","NIC","NNC","Genic\nGenomic","Antisense","Fusion","Intergenic","Genic\nIntron","Unaligned")
 
 # Helper: read one file, summarize, and discard raw data immediately
 # Memory-optimized: only reads the structural_category column
@@ -112,15 +111,40 @@ summarize_sqanti <- function(dir_path, file_vec, label_vec, tech_value) {
 }
 
 # Build aggregated table for a tissue (prefix 'B'/'K', label base 'Brain'/'Kidney')
-build_category_counts <- function(prefix, label_base) {
+# Includes an "Unaligned" category computed from read_numbers totals.
+build_category_counts <- function(prefix, label_base, read_numbers) {
   sample_labels <- paste(label_base, 1:5)
-  pacbio_files <- paste0(prefix, 31:35, "_reads_classification.txt")
-  ont_files    <- paste0(prefix, 31:35, "_classification.txt")
+  sample_codes  <- paste0(prefix, 31:35)
+  pacbio_files  <- paste0(prefix, 31:35, "_reads_classification.txt")
+  ont_files     <- paste0(prefix, 31:35, "_classification.txt")
 
-  dplyr::bind_rows(
+  counts <- dplyr::bind_rows(
     summarize_sqanti(pacbio_dir, pacbio_files, sample_labels, "pacbio"),
     summarize_sqanti(ont_dir,    ont_files,    sample_labels, "ont")
+  )
+
+  # Total reads per sample from read_numbers
+  rn <- read_numbers %>%
+    dplyr::filter(sample %in% sample_codes) %>%
+    dplyr::mutate(sample_label = paste(label_base, as.integer(stringr::str_sub(sample, -1, -1))))
+
+  assigned <- counts %>%
+    dplyr::group_by(sample, technology) %>%
+    dplyr::summarise(assigned = sum(num_reads), .groups = "drop")
+
+  unaligned <- dplyr::bind_rows(
+    rn %>% dplyr::transmute(sample = sample_label, technology = "pacbio", total = pb_fastq),
+    rn %>% dplyr::transmute(sample = sample_label, technology = "ont",    total = ont_fastq)
   ) %>%
+    dplyr::left_join(assigned, by = c("sample", "technology")) %>%
+    dplyr::mutate(
+      assigned   = dplyr::coalesce(assigned, 0),
+      num_reads  = pmax(0, total - assigned),
+      category_label = "Unaligned"
+    ) %>%
+    dplyr::select(category_label, num_reads, sample, technology)
+
+  dplyr::bind_rows(counts, unaligned) %>%
     dplyr::mutate(
       category_label = factor(category_label, levels = display_levels),
       sample = factor(sample, levels = sample_labels),
@@ -130,30 +154,45 @@ build_category_counts <- function(prefix, label_base) {
 }
 
 # Plot helper: one-row, five boxes, two bars per box
+# "Unaligned" bars get white fill with a black border.
 plot_sqanti_faceted <- function(counts_df, title = NULL) {
-  ggplot(
-    counts_df,
-    aes(x = technology, y = num_reads, fill = category_label)
-  ) +
-    geom_col(width = 0.8) +
+  extended_fill  <- c(cat.palette, "Unaligned" = "white")
+  extended_color <- c(setNames(rep(NA, length(cat.palette)), names(cat.palette)),
+                      "Unaligned" = "black")
+
+  legend_breaks <- c("Unaligned", display_levels[display_levels != "Unaligned"])
+  legend_labels <- c(
+    "Unaligned",
+    "Full\nSplice Match",
+    "Incomplete\nSplice Match",
+    "Novel\nIn Catalog",
+    "Novel Not\nIn Catalog",
+    "Genic\nGenomic",
+    "Antisense",
+    "Fusion",
+    "Intergenic",
+    "Genic\nIntron"
+  )
+
+  ggplot(counts_df, aes(x = technology, y = num_reads,
+                        fill = category_label, color = category_label)) +
+    geom_col(width = 0.8, linewidth = 0.3, position = position_stack(reverse = TRUE)) +
     scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
     scale_fill_manual(
-      values = cat.palette,
-      breaks = display_levels,
-      labels = c(
-        "Full\nSplice Match",
-        "Incomplete\nSplice Match",
-        "Novel\nIn Catalog",
-        "Novel Not\nIn Catalog",
-        "Genic\nGenomic",
-        "Antisense",
-        "Fusion",
-        "Intergenic",
-        "Genic\nIntron"
-      )
+      name   = "Structural Category",
+      values = extended_fill,
+      breaks = legend_breaks,
+      labels = legend_labels
+    ) +
+    scale_color_manual(
+      name   = "Structural Category",
+      values = extended_color,
+      breaks = legend_breaks,
+      labels = legend_labels,
+      na.value = NA
     ) +
     facet_grid(. ~ sample, switch = "x") +
-    labs(x = NULL, y = "Number of reads", fill = "Structural Category", title = title) +
+    labs(x = NULL, y = "Number of reads", title = title) +
     theme(
       plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
       panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
@@ -176,9 +215,12 @@ plot_sqanti_faceted <- function(counts_df, title = NULL) {
 
 ```{r build_category_counts, echo=FALSE, message=FALSE, warning=FALSE}
 
-# Build both tissues
-category_counts_brain  <- build_category_counts("B", "Brain")
-category_counts_kidney <- build_category_counts("K", "Kidney")
+read_number_file <- paste0(base_dir, "/read_numbers_joint.tsv")
+read_numbers <- read.table(read_number_file, header = TRUE, sep = "\t")
+
+# Build both tissues (includes Unaligned reads computed from read_numbers)
+category_counts_brain  <- build_category_counts("B", "Brain", read_numbers)
+category_counts_kidney <- build_category_counts("K", "Kidney", read_numbers)
 
 ```
 
@@ -371,8 +413,7 @@ ggsave("plot_creation/kidney_readnum_plot.pdf", device = cairo_pdf, plot = kidne
 
 ```{r read_length_files_once, echo=FALSE, message=FALSE, warning=FALSE}
 
-# lengths_base_dir <- "/mnt/c/data/nih/sqanti_reads/lengths_seq_only"
-lengths_base_dir <- "C:/data/nih/sqanti_reads/lengths_seq_only"
+lengths_base_dir <- "/mnt/c/data/nih/sqanti_reads/lengths_seq_only"
 
 read_lengths_file <- function(file_path, sample_code, technology) {
   if (!file.exists(file_path)) return(tibble())
@@ -469,12 +510,10 @@ ggsave("plot_creation/kidney_lengths_violin.pdf", device = cairo_pdf, plot = kid
 
 ```{r combine_brain_plots, echo=FALSE, message=FALSE, warning=FALSE}
 
-# Arrange into 2x2 grid with violin spanning the right column
 brain_combined <- patchwork::wrap_plots(
-  L = brain_readnum_plot + theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12, b = 24)),
-  R = brain_lengths_violin + theme(plot.title = element_blank(), plot.margin = margin(l = 12, b = 24)),
-  B = brain_sq_reads_plot + theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12, t = 24)),
-  design = "LR\nBR"
+  L = brain_sq_reads_plot + theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12)),
+  R = brain_lengths_violin + theme(plot.title = element_blank(), plot.margin = margin(l = 12)),
+  design = "LR"
 )
 
 brain_combined
@@ -486,10 +525,9 @@ ggsave("plot_creation/brain_combined_plots.pdf", device = cairo_pdf, plot = brai
 ```{r combine_kidney_plots, echo=FALSE, message=FALSE, warning=FALSE}
 
 kidney_combined <- patchwork::wrap_plots(
-  L = kidney_readnum_plot + theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12, b = 24)),
-  R = kidney_lengths_violin + theme(plot.title = element_blank(), plot.margin = margin(l = 12, b = 24)),
-  B = kidney_sq_reads_plot + theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12, t = 24)),
-  design = "LR\nBR"
+  L = kidney_sq_reads_plot + theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12)),
+  R = kidney_lengths_violin + theme(plot.title = element_blank(), plot.margin = margin(l = 12)),
+  design = "LR"
 )
 
 kidney_combined
@@ -582,8 +620,7 @@ ggplot(fsm_counts, aes(x = technology, y = expression, fill = technology)) +
 ```{r tusco_overlap_counts, echo=FALSE, message=FALSE, warning=FALSE}
 
 # Read Tusco results and extract transcript IDs from the second column
-# tusco_path <- "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/tusco_results/tusco_mmu_brain.tsv"
-tusco_path <- "C:/Users/jetzi/other_repos/documenting_NIH/fabian/reports/tusco_results/tusco_mmu_brain.tsv"
+tusco_path <- "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/tusco_results/tusco_mmu_brain.tsv"
 tusco_tbl  <- readr::read_tsv(tusco_path, show_col_types = FALSE, comment = "#", col_names = FALSE)
 tusco_ids  <- tusco_tbl[[2]] %>% as.character() %>% unique()
 
