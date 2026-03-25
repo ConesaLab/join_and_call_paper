@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=concat_ont_r10
-#SBATCH --output=../analysis/logs/concat_samples_%j.out
+#SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/concat_samples_%j.log
+#SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/concat_samples_%j.log
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=40gb
@@ -10,6 +11,8 @@
 source ~/.bashrc
 
 module load samtools
+
+echo "=== Job ${SLURM_JOB_ID} | Task ${SLURM_ARRAY_TASK_ID:-N/A} | $(hostname) | $(date) ==="
 
 base_dir="/storage/gge/Fabian/ont_r10_sy5y"
 fastq_dir="${base_dir}/fastq"

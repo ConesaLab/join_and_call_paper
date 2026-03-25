@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=sqanti_reads_merge_ont_r10
-#SBATCH --output=../analysis/logs/sqanti_reads_merge_%j.out
+#SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/sqanti_reads_merge_%j.log
+#SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/sqanti_reads_merge_%j.log
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=20gb
@@ -12,6 +13,8 @@ source ~/.bashrc
 module load samtools
 conda deactivate
 conda activate SQANTI3.env
+
+echo "=== Job ${SLURM_JOB_ID} | Task ${SLURM_ARRAY_TASK_ID:-N/A} | $(hostname) | $(date) ==="
 
 sqanti_dir="/home/cmonzo/software/SQANTI3-5.2"
 

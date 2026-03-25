@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=mapQC_ont_r10
-#SBATCH --output=../analysis/logs/mapQC_%A_%a.out
+#SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/mapQC_%A_%a.log
+#SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/mapQC_%A_%a.log
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=10gb
@@ -13,6 +14,8 @@ source ~/.bashrc
 module load samtools
 conda deactivate
 conda activate SQANTI3.env
+
+echo "=== Job ${SLURM_JOB_ID} | Task ${SLURM_ARRAY_TASK_ID:-N/A} | $(hostname) | $(date) ==="
 
 readarray myarray < list_fastqs.fof
 
