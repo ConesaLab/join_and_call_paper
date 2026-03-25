@@ -699,6 +699,65 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
 }
 
 
+assemble_tama_st_upset_plots <- function(results, tissue, fl_filter_level, title) {
+
+  fl_filter_level <- as.character(fl_filter_level)
+  plot_name <- paste0(tissue, "_tama_st_upset")
+
+  upset_1_1 <- wrap_elements(full = results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]])
+  upset_1_2 <- wrap_elements(full = results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]])
+  upset_1_3 <- wrap_elements(full = results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]])
+  upset_1_4 <- wrap_elements(full = results$IsoSeq$TALON[[fl_filter_level]][[plot_name]])
+
+  upset_2_1 <- wrap_elements(full = results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]])
+  upset_2_2 <- wrap_elements(full = results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]])
+
+  upset_3_1 <- wrap_elements(full = results$ONT$IsoQuant[[fl_filter_level]][[plot_name]])
+  upset_3_2 <- wrap_elements(full = results$ONT$FLAIR[[fl_filter_level]][[plot_name]])
+  upset_3_3 <- wrap_elements(full = results$ONT$Bambu[[fl_filter_level]][[plot_name]])
+  upset_3_4 <- wrap_elements(full = results$ONT$TALON[[fl_filter_level]][[plot_name]])
+
+  upset_plot <- (
+    upset_1_1 + upset_1_2 + upset_1_3 + upset_1_4 +
+    upset_2_1 + upset_2_2 + plot_spacer() +
+    plot_spacer() +
+    upset_3_1 + upset_3_2 + upset_3_3 + upset_3_4
+  ) +
+    plot_layout(
+      design = "
+        ABCD
+        EFGG
+        HHHH
+        IJKM
+      ",
+      heights = c(1, 1, 0.1, 1)
+    ) +
+    plot_annotation(
+      title = title,
+      theme = theme(
+        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
+      )
+    )
+
+  label_a <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
+             size = 10, fontface = "bold") +
+    theme_void()
+
+  label_b <- ggplot() +
+    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
+             size = 10, fontface = "bold") +
+    theme_void()
+
+  final_plot <- wrap_elements(full = upset_plot)
+  final_plot <- final_plot +
+    inset_element(label_a, left = -0.02, bottom = 0.94, right = 0.05, top = 1) +
+    inset_element(label_b, left = -0.02, bottom = 0.25, right = 0.05, top = 0.40)
+
+  return(final_plot)
+}
+
+
 assemble_compare_plots <- function(results, tissue, fl_filter_level) {
   
   fl_filter_level = as.character(fl_filter_level)

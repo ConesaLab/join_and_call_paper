@@ -38,6 +38,12 @@ check_st_merge_paths(st_merge_dirs)
 
 
 ```{r load-and-process}
+helper_dir <- if (dir.exists("../reports/empty_report/helper_functions")) {
+  "../reports/empty_report/helper_functions"
+} else {
+  "reports/empty_report/helper_functions"
+}
+
 all_results <- list()
 
 for (platform in names(src_dirs)) {
@@ -64,9 +70,21 @@ for (platform in names(src_dirs)) {
     brain_plots  <- plot_classification_data(ext_brain_combined,  ext_sample_labels_Brain)
     kidney_plots <- plot_classification_data(ext_kidney_combined, ext_sample_labels_Kidney)
 
+    # TAMA vs ST upset: compare C&J UJCs between TAMA merge and StringTie merge
+    tama_brain_df  <- filtered$Bclass_df_list$`Call&Join`
+    tama_kidney_df <- filtered$Kclass_df_list$`Call&Join`
+
+    st_brain_full  <- load_st_classification_with_ujc(st_dir, "brain",  helper_dir)
+    st_kidney_full <- load_st_classification_with_ujc(st_dir, "kidney", helper_dir)
+
+    brain_tama_st_upset  <- create_tama_vs_st_upset(tama_brain_df,  st_brain_full,  method = method)
+    kidney_tama_st_upset <- create_tama_vs_st_upset(tama_kidney_df, st_kidney_full, method = method)
+
     all_results[[platform]][[method]][["1"]] <- list(
       brain_plots  = brain_plots,
-      kidney_plots = kidney_plots
+      kidney_plots = kidney_plots,
+      brain_tama_st_upset  = brain_tama_st_upset,
+      kidney_tama_st_upset = kidney_tama_st_upset
     )
   }
 }
@@ -115,6 +133,29 @@ kidney_plot_1
 ```
 
 
-```{r}
-x = 0
+```{r assemble-brain-tama-st-upset, fig.width=18, fig.height=14}
+brain_upset_1 <- assemble_tama_st_upset_plots(
+  all_results, "brain", 1,
+  title = "C&J (TAMA) vs C&J (ST) UJC overlap; brain"
+)
+
+ggsave("plot_creation/brain_tama_st_upset.pdf",
+       device = cairo_pdf, plot = brain_upset_1,
+       width = 18, height = 14, unit = "in")
+
+brain_upset_1
+```
+
+
+```{r assemble-kidney-tama-st-upset, fig.width=18, fig.height=14}
+kidney_upset_1 <- assemble_tama_st_upset_plots(
+  all_results, "kidney", 1,
+  title = "C&J (TAMA) vs C&J (ST) UJC overlap; kidney"
+)
+
+ggsave("plot_creation/kidney_tama_st_upset.pdf",
+       device = cairo_pdf, plot = kidney_upset_1,
+       width = 18, height = 14, unit = "in")
+
+kidney_upset_1
 ```

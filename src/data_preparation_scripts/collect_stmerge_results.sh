@@ -1,10 +1,10 @@
 #!/bin/bash
 # Checks that all StringTie merge + SQANTI3 results exist, then collects the
-# classification files into a flat directory structure suitable for plotting:
+# classification and junctions files into a flat directory structure for plotting:
 #
 #   stringtie_merge_results/
-#   ├── pacbio/{tool}/{B100K0,B0K100}_STMERGE_classification.txt
-#   └── ont/{tool}/{B100K0,B0K100}_STMERGE_classification.txt
+#   ├── pacbio/{tool}/{B100K0,B0K100}_STMERGE_{classification.txt,junctions.txt}
+#   └── ont/{tool}/{B100K0,B0K100}_STMERGE_{classification.txt,junctions.txt}
 #
 # Usage (on cluster):
 #   bash collect_stmerge_results.sh [--dry-run]
@@ -60,12 +60,19 @@ for result_name in "${!TOOL_MAP[@]}"; do
         total=$((total + 1))
         sq3_dir="${stmerge_link}/${cond}_STMERGE/${cond}_STMERGE_sq3"
         class_file="${sq3_dir}/${cond}_STMERGE_classification.txt"
+        junc_file="${sq3_dir}/${cond}_STMERGE_junctions.txt"
 
         if [[ -f "$class_file" ]]; then
             found=$((found + 1))
             echo "  OK: ${cond}_STMERGE_classification.txt ($(wc -l < "$class_file") lines)"
         else
             echo "  MISSING: ${class_file}"
+            all_ok=false
+        fi
+        if [[ -f "$junc_file" ]]; then
+            echo "  OK: ${cond}_STMERGE_junctions.txt ($(wc -l < "$junc_file") lines)"
+        else
+            echo "  MISSING: ${junc_file}"
             all_ok=false
         fi
     done
@@ -98,11 +105,14 @@ for result_name in "${!TOOL_MAP[@]}"; do
     mkdir -p "$dest_dir"
 
     for cond in "${CONDITIONS[@]}"; do
-        class_file="${stmerge_link}/${cond}_STMERGE/${cond}_STMERGE_sq3/${cond}_STMERGE_classification.txt"
-        if [[ -f "$class_file" ]]; then
-            cp "$class_file" "$dest_dir/"
-            echo "  Copied: ${dest_subdir}/${cond}_STMERGE_classification.txt"
-        fi
+        sq3_dir="${stmerge_link}/${cond}_STMERGE/${cond}_STMERGE_sq3"
+        for suffix in classification.txt junctions.txt; do
+            src_file="${sq3_dir}/${cond}_STMERGE_${suffix}"
+            if [[ -f "$src_file" ]]; then
+                cp "$src_file" "$dest_dir/"
+                echo "  Copied: ${dest_subdir}/${cond}_STMERGE_${suffix}"
+            fi
+        done
     done
 done
 

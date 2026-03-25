@@ -1,6 +1,7 @@
 # 07_st_merge_helpers.R
 # StringTie-merge specific configuration, data loading, and combination helpers
 # Depends on: 01_config.R (base_path), 02_themes.R (xaxislevelsF1, xaxislabelsF1)
+# UJC generation depends on: reports/empty_report/helper_functions/sqanti_generateUJC.R
 
 isoseq_st_merge_path <- file.path(base_path, "data", "output", "stringtie_merge_results", "pacbio")
 ont_st_merge_path    <- file.path(base_path, "data", "output", "stringtie_merge_results", "ont")
@@ -116,4 +117,77 @@ build_extended_combined_df <- function(filtered_df_list, st_df) {
   combined <- do.call(rbind, c(existing_dfs, list(st_df[, cols])))
   combined$sample <- factor(combined$sample, levels = extended_levels)
   combined
+}
+
+
+load_st_classification_with_ujc <- function(st_dir, tissue, helper_dir) {
+  cond <- if (tissue == "brain") "B100K0" else "B0K100"
+  class_file <- file.path(st_dir, paste0(cond, "_STMERGE_classification.txt"))
+  junc_file  <- file.path(st_dir, paste0(cond, "_STMERGE_junctions.txt"))
+
+  source(file.path(helper_dir, "sqanti_generateUJC.R"), local = TRUE)
+
+  df <- read.delim(class_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+  df$structural_category <- sqanti_category_map[df$structural_category]
+  df <- df[!is.na(df$structural_category), ]
+
+  ujc_df <- sqanti_generateUJC(junc_file)
+  df <- merge(df, ujc_df, by = "isoform", all.x = TRUE)
+  df$UJC <- paste(df$UJC, df$structural_category, sep = "_")
+
+  df
+}
+
+
+create_tama_vs_st_upset <- function(tama_df, st_df, method = "") {
+  tama_ujcs <- tama_df %>%
+    filter(!grepl("^NA", UJC)) %>%
+    select(structural_category, UJC) %>%
+    distinct()
+
+  st_ujcs <- st_df %>%
+    filter(!is.na(UJC), !grepl("^NA", UJC)) %>%
+    select(structural_category, UJC) %>%
+    distinct()
+
+  all_ujcs <- bind_rows(tama_ujcs, st_ujcs) %>%
+    distinct(UJC, .keep_all = TRUE)
+
+  all_ujcs$`C&J (TAMA)` <- as.integer(all_ujcs$UJC %in% tama_ujcs$UJC)
+  all_ujcs$`C&J (ST)`   <- as.integer(all_ujcs$UJC %in% st_ujcs$UJC)
+
+  category_colors <- c(
+    "FSM" = "#6BAED6", "ISM" = "#FC8D59", "NIC" = "#78C679", "NNC" = "#EE6A50",
+    "Genic\nGenomic" = "#969696", "Antisense" = "#66C2A4", "Fusion" = "goldenrod1",
+    "Intergenic" = "darksalmon", "Genic\nIntron" = "#41B6C4"
+  )
+
+  set_names <- c("C&J (TAMA)", "C&J (ST)")
+
+  intersection_size_annotation <- intersection_size(
+    counts = FALSE,
+    mapping = aes(fill = structural_category)
+  ) +
+    scale_fill_manual(values = category_colors, name = "Structural Category") +
+    ggtitle(method) +
+    theme(
+      axis.title.y = element_blank(),
+      axis.text.y = element_text(size = 10),
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+    )
+
+  upset_plot <- ComplexUpset::upset(
+    all_ujcs,
+    intersect = rev(set_names),
+    sort_sets = FALSE,
+    name = element_blank(),
+    base_annotations = list(
+      "Intersection size" = intersection_size_annotation
+    ),
+    width_ratio = 0.1,
+    set_sizes = FALSE
+  )
+
+  upset_plot
 }
