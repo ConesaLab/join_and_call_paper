@@ -57,12 +57,12 @@ for result_name in "${!TOOL_MAP[@]}"; do
     fi
 
     for cond in "${CONDITIONS[@]}"; do
-        ((total++))
+        total=$((total + 1))
         sq3_dir="${stmerge_link}/${cond}_STMERGE/${cond}_STMERGE_sq3"
         class_file="${sq3_dir}/${cond}_STMERGE_classification.txt"
 
         if [[ -f "$class_file" ]]; then
-            ((found++))
+            found=$((found + 1))
             echo "  OK: ${cond}_STMERGE_classification.txt ($(wc -l < "$class_file") lines)"
         else
             echo "  MISSING: ${class_file}"
