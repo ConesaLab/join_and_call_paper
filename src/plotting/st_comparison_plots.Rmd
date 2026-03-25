@@ -1,0 +1,120 @@
+---
+title: "StringTie-Merge Comparison Plots"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE, echo = FALSE, warning = FALSE, fig.align="center"}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, results='hide', fig.pos = "h", fig.align = "center")
+
+library(grid)
+library(ggthemes)
+library(ggpubr)
+library(tidyverse)
+library(cowplot)
+library(ComplexUpset)
+library(patchwork)
+library(scales)
+library(RColorConesa)
+
+r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
+
+source(file.path(r_source_dir, "01_config.R"))
+source(file.path(r_source_dir, "02_themes.R"))
+source(file.path(r_source_dir, "03_plot_functions.R"))
+source(file.path(r_source_dir, "04_data_loading.R"))
+source(file.path(r_source_dir, "05_assembly_functions.R"))
+source(file.path(r_source_dir, "06_sirv_analysis.R"))
+source(file.path(r_source_dir, "07_st_merge_helpers.R"))
+```
+
+
+```{r check-paths}
+check_paths(src_dirs)
+check_st_merge_paths(st_merge_dirs)
+```
+
+
+```{r load-and-process}
+all_results <- list()
+
+for (platform in names(src_dirs)) {
+  all_results[[platform]] <- list()
+  for (method in names(src_dirs[[platform]])) {
+    all_results[[platform]][[method]] <- list()
+    cat(platform, method, "\n")
+
+    src_dir <- src_dirs[[platform]][[method]]
+    paths <- get_paths(src_dir)
+    df_lists <- load_df_lists(paths)
+
+    filtered <- process_classification_only(
+      df_lists$Bclass_df_list, df_lists$Kclass_df_list, fl_threshold = 1
+    )
+
+    st_dir <- st_merge_dirs[[platform]][[method]]
+    st_brain_df  <- load_st_classification(st_dir, "brain")
+    st_kidney_df <- load_st_classification(st_dir, "kidney")
+
+    ext_brain_combined  <- build_extended_combined_df(filtered$Bclass_df_list, st_brain_df)
+    ext_kidney_combined <- build_extended_combined_df(filtered$Kclass_df_list, st_kidney_df)
+
+    brain_plots  <- plot_classification_data(ext_brain_combined,  ext_sample_labels_Brain)
+    kidney_plots <- plot_classification_data(ext_kidney_combined, ext_sample_labels_Kidney)
+
+    all_results[[platform]][[method]][["1"]] <- list(
+      brain_plots  = brain_plots,
+      kidney_plots = kidney_plots
+    )
+  }
+}
+```
+
+
+```{r assemble-brain-bar}
+if (!dir.exists("plot_creation")) {
+  dir.create("plot_creation")
+}
+
+pb_ylims  <- c(0, 160000)
+ont_ylims <- c(0, 80000)
+
+brain_plot_1 <- assemble_bar_plots(
+  all_results, "brain", 1,
+  title    = "Transcripts per structural category; brain",
+  subtitle = "Filter: >=1 read",
+  pb_ylims = pb_ylims, ont_ylims = ont_ylims
+)
+
+ggsave("plot_creation/brain_bar_filter1_st.pdf",
+       device = cairo_pdf, plot = brain_plot_1,
+       width = 18, height = 12, unit = "in")
+
+brain_plot_1
+```
+
+
+```{r assemble-kidney-bar}
+pb_ylims  <- c(0, 140000)
+ont_ylims <- c(0, 70000)
+
+kidney_plot_1 <- assemble_bar_plots(
+  all_results, "kidney", 1,
+  title    = "Transcripts per structural category; kidney",
+  subtitle = "Filter: >=1 read",
+  pb_ylims = pb_ylims, ont_ylims = ont_ylims
+)
+
+ggsave("plot_creation/kidney_bar_filter1_st.pdf",
+       device = cairo_pdf, plot = kidney_plot_1,
+       width = 18, height = 12, unit = "in")
+
+kidney_plot_1
+```
+
+
+```{r}
+x = 0
+```

@@ -1,0 +1,11 @@
+# cond	sample_id	pool	bam_file	fastq_file	gtf	count
+B100K0	B31	NA	NA	NA	/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/B100K0/B31/collapse/B31_sq3_filter/B31.filtered.gtf	NA
+B100K0	B32	NA	NA	NA	/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/B100K0/B32/collapse/B32_sq3_filter/B32.filtered.gtf	NA
+B100K0	B33	NA	NA	NA	/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/B100K0/B33/collapse/B33_sq3_filter/B33.filtered.gtf	NA
+B100K0	B34	NA	NA	NA	/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/B100K0/B34/collapse/B34_sq3_filter/B34.filtered.gtf	NA
+B100K0	B35	NA	NA	NA	/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/B100K0/B35/collapse/B35_sq3_filter/B35.filtered.gtf	NA
+B0K100	K31	NA	NA	NA	/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/B0K100/K31/collapse/K31_sq3_filter/K31.filtered.gtf	NA
+B0K100	K32	NA	NA	NA	/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/B0K100/K32/collapse/K32_sq3_filter/K32.filtered.gtf	NA
+B0K100	K33	NA	NA	NA	/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/B0K100/K33/collapse/K33_sq3_filter/K33.filtered.gtf	NA
+B0K100	K34	NA	NA	NA	/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/B0K100/K34/collapse/K34_sq3_filter/K34.filtered.gtf	NA
+B0K100	K35	NA	NA	NA	/storage/gge/Alejandro/for_fabian/paper_stuff/isoseq_isoseq_new_filter_data/isoseq/isoform_detection/isoseq/B0K100/K35/collapse/K35_sq3_filter/K35.filtered.gtf	NA

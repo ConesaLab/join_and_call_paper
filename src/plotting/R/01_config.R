@@ -1,6 +1,12 @@
 # 01_config.R
 # Paths, constants, sample labels, read numbers, FL filter levels
 
+# base_path <- "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian"
+base_path <- "C:/Users/jetzi/other_repos/documenting_NIH/fabian"
+
+isoseq_report_path <- file.path(base_path, "reports", "isoseq")
+ont_report_path    <- file.path(base_path, "reports", "ont")
+
 get_paths <- function(src_dir) {
   data_dir <- file.path(src_dir, "data")
   list(
@@ -16,7 +22,6 @@ get_paths <- function(src_dir) {
     quant_concat = file.path(data_dir, "concat_tama.counts.tsv"),
     class_ind = file.path(data_dir, "ind_TAMA_classification.txt"),
     class_concat = file.path(data_dir, "concat_TAMA_classification.txt"),
-    ref_genome = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39_SIRV.fa",
     annot_ind_quantification = file.path(data_dir, "ind_TAMA.gtf"),
     annot_concat_quantification = file.path(data_dir, "concat_TAMA.gtf"),
     class_ind_quantification = file.path(data_dir, "ind_TAMA_classification.txt"),
@@ -27,18 +32,18 @@ get_paths <- function(src_dir) {
 # Directory structure for all platform/method combinations
 src_dirs <- list(
   IsoSeq = list(
-    IsoQuant = "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/isoquant/run3_report",
-    FLAIR = "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/flair_ar_sr/run7_report",
-    TALON = "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/talon/run3_report",
-    Mandalorion = "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/mandalorion/run1_report",
-    Bambu = "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/bambu/run3_report",
-    isoseq_sqanti = "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/isoseq/isoseq_isoseq_new_filter_data/report"
+    IsoQuant      = file.path(isoseq_report_path, "isoquant", "run3_report"),
+    FLAIR         = file.path(isoseq_report_path, "flair_ar_sr", "run7_report"),
+    TALON         = file.path(isoseq_report_path, "talon", "run3_report"),
+    Mandalorion   = file.path(isoseq_report_path, "mandalorion", "run1_report"),
+    Bambu         = file.path(isoseq_report_path, "bambu", "run3_report"),
+    isoseq_sqanti = file.path(isoseq_report_path, "isoseq_isoseq_new_filter_data", "report")
   ),
   ONT = list(
-    IsoQuant = "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/ont/isoquant/run2_report",
-    FLAIR = "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/ont/flair_ar_sr/run2_report",
-    TALON = "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/ont/talon/run1_report",
-    Bambu = "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian/reports/ont/bambu/run2_report"
+    IsoQuant = file.path(ont_report_path, "isoquant", "run2_report"),
+    FLAIR    = file.path(ont_report_path, "flair_ar_sr", "run2_report"),
+    TALON    = file.path(ont_report_path, "talon", "run1_report"),
+    Bambu    = file.path(ont_report_path, "bambu", "run2_report")
   )
 )
 

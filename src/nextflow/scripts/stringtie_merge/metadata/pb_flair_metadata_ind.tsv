@@ -1,0 +1,11 @@
+# cond	sample_id	pool	bam_file	fastq_file	gtf	count
+B100K0	B31	NA	NA	NA	/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse/B100K0/B31/B31.isoforms.gtf	NA
+B100K0	B32	NA	NA	NA	/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse/B100K0/B32/B32.isoforms.gtf	NA
+B100K0	B33	NA	NA	NA	/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse/B100K0/B33/B33.isoforms.gtf	NA
+B100K0	B34	NA	NA	NA	/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse/B100K0/B34/B34.isoforms.gtf	NA
+B100K0	B35	NA	NA	NA	/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse/B100K0/B35/B35.isoforms.gtf	NA
+B0K100	K31	NA	NA	NA	/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse/B0K100/K31/K31.isoforms.gtf	NA
+B0K100	K32	NA	NA	NA	/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse/B0K100/K32/K32.isoforms.gtf	NA
+B0K100	K33	NA	NA	NA	/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse/B0K100/K33/K33.isoforms.gtf	NA
+B0K100	K34	NA	NA	NA	/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse/B0K100/K34/K34.isoforms.gtf	NA
+B0K100	K35	NA	NA	NA	/home/fabianje/repos/documenting_NIH/fabian/data/output/isoseq/flair_ar_sr/run7_data/flair/isoform_detection/flair_collapse/B0K100/K35/K35.isoforms.gtf	NA
