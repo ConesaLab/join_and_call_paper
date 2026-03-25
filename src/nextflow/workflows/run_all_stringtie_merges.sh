@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=all_stmerge
-#SBATCH --qos long
+#SBATCH --qos short
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mail-type=ALL
 #SBATCH --mem-per-cpu=2gb
-#SBATCH -t 15-00:00:00
+#SBATCH -t 1-00:00:00
 #SBATCH -o log/all_stmerge_%A.out
 
 # Submits the StringTie merge + SQANTI3 workflow for all 10 data/algorithm
