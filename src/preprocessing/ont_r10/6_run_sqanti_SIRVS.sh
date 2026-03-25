@@ -1,0 +1,50 @@
+#!/bin/bash
+#SBATCH --job-name=sqanti_SIRV_ont_r10
+#SBATCH --output=../analysis/logs/sqanti_SIRV_%A_%a.out
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=20gb
+#SBATCH --qos=short
+#SBATCH --time=10:00:00
+#SBATCH --array=0-3
+
+source ~/.bashrc
+
+module load samtools
+conda deactivate
+conda activate SQANTI3.env
+
+# SIRV GFF subsets are extracted during 3_map.sh:
+#   head -n1 ${gff} > ${sirv_gff}; grep SIRV ${gff} >> ${sirv_gff}
+
+readarray myarray < list_fastqs.fof
+
+file=${myarray[$SLURM_ARRAY_TASK_ID]}
+
+echo $file
+
+ori_name=$(basename $file)
+filename="${ori_name%.fastq}"
+
+echo $filename
+
+base_dir="/storage/gge/Fabian/ont_r10_sy5y"
+ref_dir="${base_dir}/ref"
+gff_dir="${base_dir}/gff"
+qc_dir="${base_dir}/analysis"
+
+ref_annotation="${ref_dir}/gencode.v49_SIRV.gtf"
+assembly="${ref_dir}/GRCh38_SIRV.fa"
+
+isoforms_gff="${gff_dir}/${filename}_SIRV.gff"
+
+mkdir -p ${qc_dir}/run_SQANTI/${filename}_SIRV
+
+export PYTHONPATH=$PYTHONPATH:/home/cmonzo/software/cDNA_Cupcake/sequence/
+export PYTHONPATH=$PYTHONPATH:/home/cmonzo/software/cDNA_Cupcake/
+
+python3 /home/cmonzo/software/SQANTI3-5.2/sqanti3_qc.py \
+    --min_ref_len 0 --skipORF \
+    --dir "${qc_dir}/run_SQANTI/${filename}_SIRV" \
+    --output "${filename}_SIRV" \
+    ${isoforms_gff} ${ref_annotation} ${assembly}

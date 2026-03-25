@@ -1,0 +1,5 @@
+file_acc,sampleID,condition,classification_file,junction_file
+SRR31732191,SRR31732191,SY5Y,/storage/gge/Fabian/ont_r10_sy5y/analysis/sqanti_reads/SRR31732191/SRR31732191_reads_classification.txt,/storage/gge/Fabian/ont_r10_sy5y/analysis/sqanti_reads/SRR31732191/SRR31732191_junctions.txt
+SRR31732198,SRR31732198,SY5Y,/storage/gge/Fabian/ont_r10_sy5y/analysis/sqanti_reads/SRR31732198/SRR31732198_reads_classification.txt,/storage/gge/Fabian/ont_r10_sy5y/analysis/sqanti_reads/SRR31732198/SRR31732198_junctions.txt
+SRR31732209,SRR31732209,SY5Y,/storage/gge/Fabian/ont_r10_sy5y/analysis/sqanti_reads/SRR31732209/SRR31732209_reads_classification.txt,/storage/gge/Fabian/ont_r10_sy5y/analysis/sqanti_reads/SRR31732209/SRR31732209_junctions.txt
+SRR31732210,SRR31732210,SY5Y,/storage/gge/Fabian/ont_r10_sy5y/analysis/sqanti_reads/SRR31732210/SRR31732210_reads_classification.txt,/storage/gge/Fabian/ont_r10_sy5y/analysis/sqanti_reads/SRR31732210/SRR31732210_junctions.txt
