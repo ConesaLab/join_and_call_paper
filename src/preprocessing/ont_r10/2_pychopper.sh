@@ -4,9 +4,9 @@
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/pychopper_%A_%a.log
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=100gb
-#SBATCH --qos=short
-#SBATCH --time=24:00:00
+#SBATCH --mem=120gb
+#SBATCH --qos=medium
+#SBATCH --time=7-00:00:00
 #SBATCH --array=0-3
 
 source ~/.bashrc
