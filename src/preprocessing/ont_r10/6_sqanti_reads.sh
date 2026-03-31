@@ -4,9 +4,9 @@
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/sqanti_reads_%A_%a.log
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=40gb
-#SBATCH --qos=short
-#SBATCH --time=24:00:00
+#SBATCH --mem=50gb
+#SBATCH --qos=medium
+#SBATCH --time=2-00:00:00
 #SBATCH --array=0-3
 
 source ~/.bashrc

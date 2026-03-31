@@ -3,10 +3,10 @@
 #SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/sqanti_reads_merge_%j.log
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/sqanti_reads_merge_%j.log
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
-#SBATCH --mem=20gb
-#SBATCH --qos=short
-#SBATCH --time=24:00:00
+#SBATCH --cpus-per-task=12
+#SBATCH --mem=40gb
+#SBATCH --qos=medium
+#SBATCH --time=2-00:00:00
 
 source ~/.bashrc
 

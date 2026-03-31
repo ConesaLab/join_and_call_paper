@@ -3,7 +3,7 @@
 #SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/mapQC_%A_%a.log
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/mapQC_%A_%a.log
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=2
 #SBATCH --mem=10gb
 #SBATCH --qos=short
 #SBATCH --time=5:00:00

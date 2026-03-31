@@ -3,10 +3,10 @@
 #SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/map_%A_%a.log
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/map_%A_%a.log
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=50gb
-#SBATCH --qos=short
-#SBATCH --time=12:00:00
+#SBATCH --qos=medium
+#SBATCH --time=2-00:00:00
 #SBATCH --array=0-3
 
 source ~/.bashrc
@@ -23,11 +23,11 @@ file=${myarray[$SLURM_ARRAY_TASK_ID]}
 
 echo $file
 
+file_dir=$(dirname $file)
 ori_name=$(basename $file)
 filename="${ori_name%.fastq}"
 
 base_dir="/storage/gge/Fabian/ont_r10_sy5y"
-pychopper_dir="${base_dir}/fastq/pychopper"
 bam_dir="${base_dir}/bam"
 gff_dir="${base_dir}/gff"
 
@@ -37,10 +37,15 @@ mkdir -p ${bam_dir} ${gff_dir}
 
 echo "Mapping ${filename}"
 
-# Same minimap2 settings as R9 pipeline (src/preprocessing/ont/4_map.sh)
-minimap2 -ax splice -uf --MD -t 4 ${assembly} ${pychopper_dir}/${filename}_fl_rescued.fastq \
-    > ${bam_dir}/${filename}_splice.sam
+# Parameters from source paper; adapters already trimmed by Dorado, no pychopper
+# -ub: both strands (reads not pre-oriented)
+# --secondary=no: no secondary alignments
+# -k 14 -w 4: sensitive junction detection
+# --MD: mismatch info for downstream tools
+minimap2 -ax splice -ub --secondary=no --MD -t 8 -k 14 -w 4 \
+    ${assembly} ${file_dir}/${filename}.fastq > ${bam_dir}/${filename}_splice.sam
 
+# Filter supplementary alignments, convert to sorted BAM
 samtools view -bS -F0x900 ${bam_dir}/${filename}_splice.sam \
     | samtools sort -o ${bam_dir}/${filename}_primary_aln_sorted.bam
 

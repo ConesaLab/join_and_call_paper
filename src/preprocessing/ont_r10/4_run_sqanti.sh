@@ -5,8 +5,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=45gb
-#SBATCH --qos=short
-#SBATCH --time=10:00:00
+#SBATCH --qos=medium
+#SBATCH --time=2-00:00:00
 #SBATCH --array=0-3
 
 source ~/.bashrc
