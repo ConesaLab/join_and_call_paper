@@ -74,8 +74,8 @@ params.isoseq_trimmed_old_metadata_2samples_concat="/storage/gge/Fabian/nih/data
 params.isoseq_trimmed_old_metadata_3samples_concat="/storage/gge/Fabian/nih/data/metadata/old_mice/partial_joins/isoseq_trimmed/isoseq_trimmed_old_concat_3samples.tsv"
 
 // brain-only subset (single condition test)
-params.ont_brain_only_metadata_samples="/storage/gge/Fabian/nih/data/metadata/ont_brain_only_samples.tsv"
-params.ont_brain_only_metadata_concat="/storage/gge/Fabian/nih/data/metadata/ont_brain_only_concat_samples.tsv"
+params.ont_brain_only_metadata_samples="${projectDir}/../../../data/metadata/ont_brain_only/ont_brain_only_samples.tsv"
+params.ont_brain_only_metadata_concat="${projectDir}/../../../data/metadata/ont_brain_only/ont_brain_only_concat_samples.tsv"
 
 // human neuroblastoma
 params.human_metadata_samples="/DUMMY/PATH/human_nb_samples.tsv"
