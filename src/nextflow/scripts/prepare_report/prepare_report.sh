@@ -30,38 +30,39 @@ fi
 SCRIPT_DIR=$(dirname "$(realpath $0)")
 
 data_dir="${WD}/data"
-class_brain="${data_dir}/classification_brain"
-class_kidney="${data_dir}/classification_kidney"
-junc_brain="${data_dir}/junctions_brain"
-junc_kidney="${data_dir}/junctions_kidney"
 
-for dir in "$class_brain" "$class_kidney" "$junc_brain" "$junc_kidney"; do
-    if [ ! -d "$dir" ]; then
-        mkdir -p "$dir"
+# Discover conditions dynamically from merged metadata
+# Individual samples have sample_id != "concat" and != "TAMA"; strip _TAMA suffix to find base condition
+readarray -t conditions < <(grep -v '^#' "$metadata_merged" | while IFS=$'\t' read -r line; do
+    line="${line//$'\t'/';'}"
+    IFS=';' read -r cond sample_id rest <<< "$line"
+    if [[ "$sample_id" != "concat" && "$sample_id" != "TAMA" ]]; then
+        echo "$cond"
     fi
+done | sort -u)
+
+# Create per-condition classification and junction directories
+for cond in "${conditions[@]}"; do
+    mkdir -p "${data_dir}/classification_${cond}"
+    mkdir -p "${data_dir}/junctions_${cond}"
 done
 
-# read relevant information from metadata
+# Route SQANTI3 output files into per-condition directories
 while IFS=$'\t' read -r line; do
-    # need to switch to semicolon-delimited because multiple whitespace (e.g. tab) delimiters are treated as a single delimiter rather than empty fields
     line="${line//$'\t'/';'}"
     IFS=';' read -r cond sample_id pool bam_file fastq_file gtf count merge sq3dir <<< "$line"
 
     if [[ "$cond" != "ind_TAMA" && "$cond" != "concat_TAMA" ]]; then
-        if [[ "$cond" == "B100K0" || "$cond" == "B100K0_TAMA" ]]; then
-            class_target="$class_brain"
-            junc_target="$junc_brain"
-        elif [[ "$cond" == "B0K100" || "$cond" == "B0K100_TAMA" ]]; then
-            class_target="$class_kidney"
-            junc_target="$junc_kidney"
-        fi
+        base_cond="${cond%_TAMA}"
+        class_target="${data_dir}/classification_${base_cond}"
+        junc_target="${data_dir}/junctions_${base_cond}"
+
         id=0
-        # define order of class and junc files for .fofn
         if [ "$sample_id" == "concat" ]; then
             id=1
         elif [ "$sample_id" == "TAMA" ]; then
             id=2
-        else # for individual samples
+        else
             id=3
         fi
 
@@ -74,27 +75,25 @@ while IFS=$'\t' read -r line; do
     fi
 done < <(grep -v '^#' "$metadata_merged")
 
-# while IFS=$'\t' read -r quant_fofn merge out_mat; do
-#     cp "$out_mat" "$data_dir"
-# done < "$merge_counts_array_config"
+# Build per-condition .fofn files and a conditions_config.tsv for the R script
+conditions_config="${data_dir}/conditions_config.tsv"
+> "$conditions_config"
 
-for folder in "$class_brain" "$class_kidney" "$junc_brain" "$junc_kidney"; do
-    fofn="${folder}.fofn"
-    # Empty the .fofn file if it already exists
-    > "$fofn"
-    # List all files in the directory write their absolute paths to the .fofn file
-    for file in "$folder"/*; do
-        realpath "$file" >> "$fofn"
+for cond in "${conditions[@]}"; do
+    for dtype in "classification" "junctions"; do
+        folder="${data_dir}/${dtype}_${cond}"
+        fofn="${folder}.fofn"
+        > "$fofn"
+        for file in "$folder"/*; do
+            [ -e "$file" ] && realpath "$file" >> "$fofn"
+        done
+        sort "$fofn" -o "$fofn"
     done
-    # Sort the file paths in the .fofn file alphabetically
-    sort "$fofn" -o "$fofn"
+    echo -e "${cond}\t${data_dir}/classification_${cond}.fofn\t${data_dir}/junctions_${cond}.fofn" >> "$conditions_config"
 done
 
 Rscript $SCRIPT_DIR/generate_report_rdata.R "${WD}/helper_functions" \
-    "${class_brain}.fofn" \
-    "${class_kidney}.fofn" \
-    "${junc_brain}.fofn" \
-    "${junc_kidney}.fofn" \
+    "${conditions_config}" \
     "${data_dir}/ind_TAMA.counts.tsv" \
     "${data_dir}/concat_TAMA.counts.tsv" \
     "${data_dir}/ind_TAMA_classification.txt" \
@@ -103,4 +102,3 @@ Rscript $SCRIPT_DIR/generate_report_rdata.R "${WD}/helper_functions" \
     "${data_dir}/ind_TAMA.gtf" \
     "${data_dir}/concat_TAMA.gtf" \
     "${WD}/"
-    

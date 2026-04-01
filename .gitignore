@@ -1,2 +1,6 @@
 /ont_subset_data/
 /plot_creation/
+/src/plotting/plot_creation/*.pdf
+/*.csv
+/*.zip
+/src/plotting/*.csv

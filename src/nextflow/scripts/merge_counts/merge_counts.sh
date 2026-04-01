@@ -44,25 +44,29 @@ for metadata_file in $metadata_tama $metadata_tama_full; do
 done
 
 
-# perform twice: once for ind, once for concat;
+# Discover conditions dynamically from individual metadata (column 1)
+readarray -t conditions < <(cut -f 1 "$metadata_ind" | grep -v '^#' | sort -u)
 
-brain_quant_fofn="${WD}/B100K0_quant.fofn"
-> $brain_quant_fofn
-kidney_quant_fofn="${WD}/B0K100_quant.fofn"
-> $kidney_quant_fofn
+# Create per-condition quant fofn files and associative arrays for TAMA merge/count
+declare -A cond_quant_fofn
+declare -A cond_merge
+declare -A cond_out_mat
+for cond in "${conditions[@]}"; do
+    cond_quant_fofn[$cond]="${WD}/${cond}_quant.fofn"
+    > "${cond_quant_fofn[$cond]}"
+done
+
 ind_quant_fofn="${WD}/ind_quant.fofn"
-> $ind_quant_fofn
+> "$ind_quant_fofn"
 concat_quant_fofn="${WD}/concat_quant.fofn"
-> $concat_quant_fofn
-
-brain_merge=""
-kidney_merge=""
+> "$concat_quant_fofn"
 ind_merge=""
+ind_out_mat=""
 concat_merge=""
+concat_out_mat=""
 
-# read relevant information from metadata
+# Route samples from merged metadata into the appropriate fofn files
 while IFS=$'\t' read -r line; do
-    # need to switch to semicolon-delimited because multiple whitespace (e.g. tab) delimiters are treated as a single delimiter rather than empty fields
     line="${line//$'\t'/';'}"
     IFS=';' read -r sample_cond sample_id pool bam_file fastq_file gtf count merge <<< "$line"
 
@@ -70,42 +74,50 @@ while IFS=$'\t' read -r line; do
         echo -e "$sample_cond\t$count" >> "$concat_quant_fofn"
     elif [ "$sample_id" != "TAMA" ]; then
         echo -e "$sample_id\t$count" >> "$ind_quant_fofn"
-        if [[ $sample_id == B* ]]; then
-            echo -e "$sample_id\t$count" >> "$brain_quant_fofn"
-        elif [[ $sample_id == K* ]]; then
-            echo -e "$sample_id\t$count" >> "$kidney_quant_fofn"
-        fi
-    else # sample_id == "TAMA"
-        if [ "$sample_cond" == "B100K0_TAMA" ]; then
-            brain_merge=$merge
-            brain_out_mat=$count
-        elif [ "$sample_cond" == "B0K100_TAMA" ]; then
-            kidney_merge=$merge
-            kidney_out_mat=$count
-        elif [ "$sample_cond" == "ind_TAMA" ]; then
+        for cond in "${conditions[@]}"; do
+            if [ "$sample_cond" == "$cond" ]; then
+                echo -e "$sample_id\t$count" >> "${cond_quant_fofn[$cond]}"
+            fi
+        done
+    else
+        if [ "$sample_cond" == "ind_TAMA" ]; then
             ind_merge=$merge
             ind_out_mat=$count
         elif [ "$sample_cond" == "concat_TAMA" ]; then
             concat_merge=$merge
             concat_out_mat=$count
+        else
+            for cond in "${conditions[@]}"; do
+                if [ "$sample_cond" == "${cond}_TAMA" ]; then
+                    cond_merge[$cond]=$merge
+                    cond_out_mat[$cond]=$count
+                fi
+            done
         fi
     fi
 done < <(grep -v '^#' "$metadata_merged")
 
-# Sort quant_fofn by the second column: B0K100/K31 < B100K0/B31 --> Kidney first
-sort -k2,2 $ind_quant_fofn -o $ind_quant_fofn
-sort -k2,2 $concat_quant_fofn -o $concat_quant_fofn
+sort -k2,2 "$ind_quant_fofn" -o "$ind_quant_fofn"
+sort -k2,2 "$concat_quant_fofn" -o "$concat_quant_fofn"
 
-> $brain_out_mat
-> $kidney_out_mat
-> $ind_out_mat
-> $concat_out_mat
+# Build the merge_counts array config: one line per condition + ind + concat
+> "$ind_out_mat"
+> "$concat_out_mat"
 
 merge_array_config="${WD}/merge_counts_array_config.tsv"
-echo -e "${brain_quant_fofn}\t${brain_merge}\t${brain_out_mat}" > $merge_array_config
-echo -e "${kidney_quant_fofn}\t${kidney_merge}\t${kidney_out_mat}" >> $merge_array_config
-echo -e "${ind_quant_fofn}\t${ind_merge}\t${ind_out_mat}" >> $merge_array_config
-echo -e "${concat_quant_fofn}\t${concat_merge}\t${concat_out_mat}" >> $merge_array_config
+> "$merge_array_config"
 
-jobid=$(sbatch --wait --array=1-4 "${SCRIPT_DIR}/merge_counts.sbatch" $merge_array_config $SCRIPT_DIR | awk '{print $NF}')
+for cond in "${conditions[@]}"; do
+    if [ -z "${cond_out_mat[$cond]}" ] || [ -z "${cond_merge[$cond]}" ]; then
+        echo "WARNING: No TAMA condition entry found for condition '$cond' -- skipping per-condition merge"
+        continue
+    fi
+    > "${cond_out_mat[$cond]}"
+    echo -e "${cond_quant_fofn[$cond]}\t${cond_merge[$cond]}\t${cond_out_mat[$cond]}" >> "$merge_array_config"
+done
+echo -e "${ind_quant_fofn}\t${ind_merge}\t${ind_out_mat}" >> "$merge_array_config"
+echo -e "${concat_quant_fofn}\t${concat_merge}\t${concat_out_mat}" >> "$merge_array_config"
+
+nTasks=$(wc -l < "$merge_array_config")
+jobid=$(sbatch --wait --array=1-$nTasks "${SCRIPT_DIR}/merge_counts.sbatch" "$merge_array_config" "$SCRIPT_DIR" | awk '{print $NF}')
 echo -e "MERGE_COUNTS\t${jobid}" >> $joblog

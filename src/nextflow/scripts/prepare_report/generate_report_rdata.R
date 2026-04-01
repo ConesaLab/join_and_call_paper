@@ -18,32 +18,20 @@ source(file.path(helper_dir, "gc_content_and_length.R")) # BioToyBox GitHub
 source(file.path(helper_dir, "sqanti_generateUJC.R")) # BioToyBox GitHub
 
 
-# Bclass_fofn <- file.path("classification_brain.fofn")
-# Kclass_fofn <- file.path("classification_kidney.fofn")
-# Bjunc_fofn <- file.path("junctions_brain.fofn")
-# Kjunc_fofn <- file.path("junctions_kidney.fofn")
-# quant_ind <- file.path("mouse_isoseq_ind_BK_rules.counts.tsv")
-# quant_concat <- file.path("mouse_isoseq_jc_BK_rules_jc.counts.tsv")
-# class_ind <- file.path("BK_rules_classification.txt")
-# class_concat <- file.path("BK_rules_jc_classification.txt")
-# ref_genome <- file.path(src_dir, "mm39_SIRV.fa")
-# annot_ind_quantification <- file.path("BK_rules.gtf")
-# annot_concat_quantification <- file.path("BK_rules_jc.gtf")
-
-Bclass_fofn <- file.path(args[2])
-Kclass_fofn <- file.path(args[3])
-Bjunc_fofn <- file.path(args[4])
-Kjunc_fofn <- file.path(args[5])
-quant_ind <- file.path(args[6])
-quant_concat <- file.path(args[7])
-class_ind <- file.path(args[8])
-class_concat <- file.path(args[9])
-ref_genome <- file.path(args[10])
-annot_ind_quantification <- file.path(args[11])
-annot_concat_quantification <- file.path(args[12])
-out_dir <- file.path(args[13])
+conditions_config_file <- file.path(args[2])
+quant_ind <- file.path(args[3])
+quant_concat <- file.path(args[4])
+class_ind <- file.path(args[5])
+class_concat <- file.path(args[6])
+ref_genome <- file.path(args[7])
+annot_ind_quantification <- file.path(args[8])
+annot_concat_quantification <- file.path(args[9])
+out_dir <- file.path(args[10])
 class_ind_quantification <- class_ind
 class_concat_quantification <- class_concat
+
+conditions_config <- read.table(conditions_config_file, header = FALSE, sep = "\t",
+                                col.names = c("cond_name", "class_fofn", "junc_fofn"))
 
 # Themes and colors
 xaxislevelsF1 <- c("full-splice_match", "incomplete-splice_match", "novel_in_catalog", "novel_not_in_catalog", "genic", "antisense", "fusion", "intergenic", "genic_intron")
@@ -63,7 +51,7 @@ read_and_process_data <- function(class_fofn, junc_fofn) {
     print(i)
     print(junc_file)
     file_name_without_ext <- sub("\\.[^.]+$", "", basename(class_file))
-    file_name_without_ext <- paste0("B", i) # sample name is not used as real names, sample labels are always used
+    file_name_without_ext <- paste0("S", i)
     class_df <- read.table(class_file, header = TRUE, sep = "\t")
     class_df$sample <- file_name_without_ext
     class_df$structural_category <- factor(
@@ -85,27 +73,43 @@ read_and_process_data <- function(class_fofn, junc_fofn) {
 
   return(class_df_list)
 }
-print("Processing brain samples")
-# Process Brain data
-Bclass_df_list <- read_and_process_data(Bclass_fofn, Bjunc_fofn)
+all_class_df_lists <- list()
+all_sample_labels <- list()
+all_class_combined <- list()
 
-print("Processing kidney samples")
-# Process Kidney data
-Kclass_df_list <- read_and_process_data(Kclass_fofn, Kjunc_fofn)
+for (j in 1:nrow(conditions_config)) {
+  cond_name <- conditions_config$cond_name[j]
+  class_fofn <- conditions_config$class_fofn[j]
+  junc_fofn <- conditions_config$junc_fofn[j]
 
-# Save processed data
-save(Bclass_df_list, file = paste0(out_dir, "Bclass_df_list.RData"))
-save(Kclass_df_list, file = paste0(out_dir, "Kclass_df_list.RData"))
+  print(paste("Processing condition:", cond_name))
+  cond_list <- read_and_process_data(class_fofn, junc_fofn)
+  all_class_df_lists[[cond_name]] <- cond_list
 
-# Combine and plot classification files for Brain samples
-class_combined_df_Brain <- do.call(rbind, lapply(Bclass_df_list, function(class_df) class_df[, c("sample", "structural_category", "chrom")]))
-sample_labels_Brain <- c('Concat\nReads',  'TAMA\nisoforms', paste0("B3", 1:5))
-#plots_Brain <- plot_classification_data(class_combined_df_Brain, sample_labels_Brain)
+  var_name <- paste0(cond_name, "_class_df_list")
+  assign(var_name, cond_list)
+  save(list = var_name, file = paste0(out_dir, var_name, ".RData"))
 
-# Combine and plot classification files for Kidney samples
-class_combined_df_Kidney <- do.call(rbind, lapply(Kclass_df_list, function(class_df) class_df[, c("sample", "structural_category", "chrom")]))
-sample_labels_Kidney <- c('Concat\nReads',  'TAMA\nisoforms', paste0("K3", 1:5))
-#plots_Kidney <- plot_classification_data(class_combined_df_Kidney, sample_labels_Kidney)
+  class_combined <- do.call(rbind, lapply(cond_list, function(df) df[, c("sample", "structural_category", "chrom")]))
+  all_class_combined[[cond_name]] <- class_combined
+
+  n_replicates <- length(cond_list) - 2  # subtract concat + TAMA entries
+  sample_labels <- c('Concat\nReads', 'TAMA\nisoforms', paste0(cond_name, "_", seq_len(n_replicates)))
+  all_sample_labels[[cond_name]] <- sample_labels
+}
+
+save(all_class_df_lists, all_sample_labels, all_class_combined,
+     file = paste0(out_dir, "all_class_data.RData"))
+
+# Backward-compatible aliases for the mouse dataset (B100K0 = brain, B0K100 = kidney)
+if ("B100K0" %in% names(all_class_df_lists)) {
+  Bclass_df_list <- all_class_df_lists[["B100K0"]]
+  save(Bclass_df_list, file = paste0(out_dir, "Bclass_df_list.RData"))
+}
+if ("B0K100" %in% names(all_class_df_lists)) {
+  Kclass_df_list <- all_class_df_lists[["B0K100"]]
+  save(Kclass_df_list, file = paste0(out_dir, "Kclass_df_list.RData"))
+}
 
 # Get length, GC content, chrom, exons from reconstructed transcripts
 # Function can be found in BioToyBox GitHub

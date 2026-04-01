@@ -73,6 +73,14 @@ params.isoseq_trimmed_old_metadata_3samples="/storage/gge/Fabian/nih/data/metada
 params.isoseq_trimmed_old_metadata_2samples_concat="/storage/gge/Fabian/nih/data/metadata/old_mice/partial_joins/isoseq_trimmed/isoseq_trimmed_old_concat_2samples.tsv"
 params.isoseq_trimmed_old_metadata_3samples_concat="/storage/gge/Fabian/nih/data/metadata/old_mice/partial_joins/isoseq_trimmed/isoseq_trimmed_old_concat_3samples.tsv"
 
+// brain-only subset (single condition test)
+params.ont_brain_only_metadata_samples="/storage/gge/Fabian/nih/data/metadata/ont_brain_only_samples.tsv"
+params.ont_brain_only_metadata_concat="/storage/gge/Fabian/nih/data/metadata/ont_brain_only_concat_samples.tsv"
+
+// human neuroblastoma
+params.human_metadata_samples="/DUMMY/PATH/human_nb_samples.tsv"
+params.human_metadata_concat="/DUMMY/PATH/human_nb_concat_samples.tsv"
+
 // short reads via STAR output SJ.out.tab
 params.sr_junctions_star="/storage/gge/Fabian/nih/data/metadata/flair/star/flair_sr_junc_config.tsv"
 params.sr_junctions_star_concat="/storage/gge/Fabian/nih/data/metadata/flair/star/flair_sr_junc_concat_config.tsv"
@@ -108,12 +116,19 @@ params.src_dir = "${projectDir}/../scripts"
 // params.empty_report = "/storage/gge/Fabian/nih/empty_report"
 // params.src_dir = "/home/apadepe/documenting_NIH/fabian/src/nextflow/scripts"
 
-// files
+// files -- mouse (default)
 params.genome = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39_SIRV.fa"
 params.annotation = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq_SIRV.gtf"
 params.annotation_db = "/storage/gge/Fabian/nih/data/metadata/isoquant/mm39.ncbiRefSeq_SIRV.db"
 params.cage = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/lft_mm39_CAGE.bed"
 params.polyA = "/home/apadepe/polyA_site.bed"
+
+// files -- human (used when params.data starts with a human dataset)
+params.human_genome = "/DUMMY/PATH/human_genome/hg38_SIRV.fa"
+params.human_annotation = "/DUMMY/PATH/human_genome/hg38.refseq_SIRV.gtf"
+params.human_annotation_db = "/DUMMY/PATH/human_genome/hg38.refseq_SIRV.db"
+params.human_cage = "/DUMMY/PATH/human_genome/hg38_CAGE.bed"
+params.human_polyA = "/DUMMY/PATH/human_genome/hg38_polyA.bed"
 
 // tools
 params.base_tools_location = "$HOME/tools"
@@ -140,6 +155,13 @@ workflow {
     if ( params.data == "ont_subset" ) {
         input_ind = params.ont_metadata_samples_subset
         input_concat = params.ont_metadata_concat_subset
+
+        data_type = "nanopore"
+        fl_data = false
+    }
+    else if ( params.data == "ont_subset_brain" ) {
+        input_ind = params.ont_brain_only_metadata_samples
+        input_concat = params.ont_brain_only_metadata_concat
 
         data_type = "nanopore"
         fl_data = false
@@ -312,6 +334,19 @@ workflow {
 
         data_type = "pacbio_ccs"
         fl_data = true
+    }
+    else if ( params.data == "ont_r10_human" ) {
+        input_ind = params.human_metadata_samples
+        input_concat = params.human_metadata_concat
+
+        data_type = "nanopore"
+        fl_data = false
+
+        params.genome = params.human_genome
+        params.annotation = params.human_annotation
+        params.annotation_db = params.human_annotation_db
+        params.cage = params.human_cage
+        params.polyA = params.human_polyA
     }
     else {
         error "Invalid data argument: ${params.data}"

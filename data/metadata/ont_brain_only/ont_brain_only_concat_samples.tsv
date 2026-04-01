@@ -1,0 +1,2 @@
+# condition	sample	pool	bam	fastq
+B100K0	Bconcat	pool1	bams/B100K0_concat_subset.bam	fastqs/B100K0_concat_subset.fastq

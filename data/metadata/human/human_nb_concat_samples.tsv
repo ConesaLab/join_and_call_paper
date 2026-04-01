@@ -1,0 +1,2 @@
+# cond	sample_id	pool	bam_file	fastq_file
+NB	NBconcat	pool1	/DUMMY/PATH/NB_concat.bam	/DUMMY/PATH/NB_concat.fastq.gz

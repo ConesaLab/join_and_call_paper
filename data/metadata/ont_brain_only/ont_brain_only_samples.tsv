@@ -1,0 +1,6 @@
+# condition	sample	pool	bam	fastq
+B100K0	B31	pool1	bams/B31_primary_aln_sorted_subset.bam	fastqs/B31_subset.fastq
+B100K0	B32	pool1	bams/B32_primary_aln_sorted_subset.bam	fastqs/B32_subset.fastq
+B100K0	B33	pool1	bams/B33_primary_aln_sorted_subset.bam	fastqs/B33_subset.fastq
+B100K0	B34	pool1	bams/B34_primary_aln_sorted_subset.bam	fastqs/B34_subset.fastq
+B100K0	B35	pool1	bams/B35_primary_aln_sorted_subset.bam	fastqs/B35_subset.fastq
