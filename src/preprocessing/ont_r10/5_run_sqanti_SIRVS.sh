@@ -43,10 +43,9 @@ isoforms_gff="${gff_dir}/${filename}_SIRV.gff"
 
 mkdir -p ${qc_dir}/run_SQANTI/${filename}_SIRV
 
-export PYTHONPATH=$PYTHONPATH:/home/cmonzo/software/cDNA_Cupcake/sequence/
-export PYTHONPATH=$PYTHONPATH:/home/cmonzo/software/cDNA_Cupcake/
+sqanti_dir="$HOME/tools/SQANTI3_dev"
 
-python3 /home/cmonzo/software/SQANTI3-5.2/sqanti3_qc.py \
+python3 ${sqanti_dir}/sqanti3_qc.py \
     --min_ref_len 0 --skipORF \
     --dir "${qc_dir}/run_SQANTI/${filename}_SIRV" \
     --output "${filename}_SIRV" \

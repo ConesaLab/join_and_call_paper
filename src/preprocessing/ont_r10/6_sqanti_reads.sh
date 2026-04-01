@@ -17,7 +17,7 @@ conda activate SQANTI3.env
 
 echo "=== Job ${SLURM_JOB_ID} | Task ${SLURM_ARRAY_TASK_ID:-N/A} | $(hostname) | $(date) ==="
 
-sqanti_dir="/home/cmonzo/software/SQANTI3-5.2"
+sqanti_dir="$HOME/tools/SQANTI3_dev"
 
 base_dir="/storage/gge/Fabian/ont_r10_sy5y"
 ref_dir="${base_dir}/ref"
@@ -47,9 +47,6 @@ spliced_bam2gff -t 1000000 -M ${bam} > ${outdir}/${filename}.gff
 gffread ${outdir}/${filename}.gff -T -o ${outdir}/${filename}.gtf
 
 rm ${outdir}/${filename}.gff
-
-export PYTHONPATH=$PYTHONPATH:/home/cmonzo/software/cDNA_Cupcake/sequence/
-export PYTHONPATH=$PYTHONPATH:/home/cmonzo/software/cDNA_Cupcake/
 
 python3 ${sqanti_dir}/sqanti3_qc.py \
     --skipORF --dir "${outdir}/${filename}" \

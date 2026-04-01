@@ -40,10 +40,9 @@ isoforms_gff="${gff_dir}/${filename}_primary_aln.gff"
 
 mkdir -p ${qc_dir}/run_SQANTI/${filename}
 
-export PYTHONPATH=$PYTHONPATH:/home/cmonzo/software/cDNA_Cupcake/sequence/
-export PYTHONPATH=$PYTHONPATH:/home/cmonzo/software/cDNA_Cupcake/
+sqanti_dir="$HOME/tools/SQANTI3_dev"
 
-python3 /home/cmonzo/software/SQANTI3-5.2/sqanti3_qc.py \
+python3 ${sqanti_dir}/sqanti3_qc.py \
     --min_ref_len 0 --skipORF \
     --dir "${qc_dir}/run_SQANTI/${filename}" \
     --output "${filename}" \
