@@ -37,7 +37,13 @@ ref_annotation="${ref_dir}/gencode.v49_SIRV.gtf"
 assembly="${ref_dir}/GRCh38_SIRV.fa"
 
 isoforms_gff="${gff_dir}/${filename}_primary_aln.gff"
+isoforms_gtf="${gff_dir}/${filename}_primary_aln.gtf"
 
+# Convert GFF to GTF -- SQANTI3_dev's gtfToGenePred chokes on GFF input
+gffread ${isoforms_gff} -T -o ${isoforms_gtf}
+
+# Clean previous output to avoid stale cached files
+rm -rf ${qc_dir}/run_SQANTI/${filename}
 mkdir -p ${qc_dir}/run_SQANTI/${filename}
 
 sqanti_dir="$HOME/tools/SQANTI3_dev"
@@ -46,4 +52,4 @@ python3 ${sqanti_dir}/sqanti3_qc.py \
     --min_ref_len 0 --skipORF \
     --dir "${qc_dir}/run_SQANTI/${filename}" \
     --output "${filename}" \
-    ${isoforms_gff} ${ref_annotation} ${assembly}
+    ${isoforms_gtf} ${ref_annotation} ${assembly}
