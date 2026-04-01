@@ -1,5 +1,5 @@
 {
-    "data": "isoseq",
+    "data": "isoseq_tirmmed",
     "algorithm": "mandalorion",
     "tama_location": "/home/apadepe/lr_pipelines/tama",
     "sqanti_location": "/home/apadepe/lr_pipelines/SQANTI3",
@@ -11,6 +11,7 @@
     "annotation": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq.gtf",
     "genome": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/SIRV/SIRV_isoforms_multi-fasta_170612a.fasta",
     "projectDir": "/home/apadepe/join_and_call_paper/src/nextflow/workflows",
+    "base_tools_location": "/home/apadepe/jc_tools",
     "isoseq_trimmed_metadata_samples":"/storage/gge/Alejandro/review_nih/sirv_reads/isoseq_flnc/isoseq_trimmed_sirv_only.tsv",
     "isoseq_trimmed_metadata_concat":"/storage/gge/Alejandro/review_nih/sirv_reads/isoseq_flnc/isoseq_trimmed_concat_sirv_only.tsv"
 }
