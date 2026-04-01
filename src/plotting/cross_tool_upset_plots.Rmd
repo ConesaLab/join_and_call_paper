@@ -1,0 +1,132 @@
+---
+title: "Cross-Tool UJC Overlap Upset Plots"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE, echo = FALSE, warning = FALSE, fig.align="center"}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, results='hide', fig.pos = "h", fig.align = "center")
+
+library(grid)
+library(ggthemes)
+library(ggpubr)
+library(tidyverse)
+library(cowplot)
+library(ComplexUpset)
+library(patchwork)
+library(scales)
+library(RColorConesa)
+
+r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
+
+source(file.path(r_source_dir, "01_config.R"))
+source(file.path(r_source_dir, "02_themes.R"))
+source(file.path(r_source_dir, "03_plot_functions.R"))
+source(file.path(r_source_dir, "04_data_loading.R"))
+source(file.path(r_source_dir, "05_assembly_functions.R"))
+source(file.path(r_source_dir, "08_cross_tool_upset.R"))
+```
+
+
+```{r check-paths}
+check_paths(src_dirs)
+```
+
+
+```{r load-and-process}
+all_results <- list()
+
+for (platform in names(src_dirs)) {
+  all_results[[platform]] <- list()
+  for (method in names(src_dirs[[platform]])) {
+    all_results[[platform]][[method]] <- list()
+    cat(platform, method, "\n")
+    src_dir <- src_dirs[[platform]][[method]]
+    paths <- get_paths(src_dir)
+
+    df_lists <- load_df_lists(paths)
+
+    for (fl_filter_level in fl_filter_levels) {
+      results <- process_and_plot(
+        df_lists$Bclass_df_list, df_lists$Kclass_df_list,
+        technology = platform, fl_threshold = fl_filter_level
+      )
+      all_results[[platform]][[method]][[as.character(fl_filter_level)]] <- results
+    }
+  }
+}
+```
+
+
+```{r brain-cross-tool-upset, fig.width=18, fig.height=16}
+if (!dir.exists("plot_creation")) {
+  dir.create("plot_creation")
+}
+
+isoseq_brain_upset <- create_cross_tool_upset(all_results, "IsoSeq", "brain")
+ont_brain_upset    <- create_cross_tool_upset(all_results, "ONT",    "brain")
+
+brain_cross_tool_figure <- assemble_cross_tool_figure(
+  isoseq_brain_upset, ont_brain_upset,
+  title = "Cross-tool UJC overlap; brain"
+)
+
+ggsave("plot_creation/brain_cross_tool_upset.pdf",
+       device = cairo_pdf, plot = brain_cross_tool_figure,
+       width = 18, height = 16, unit = "in")
+
+brain_cross_tool_figure
+```
+
+
+```{r kidney-cross-tool-upset, fig.width=18, fig.height=16}
+isoseq_kidney_upset <- create_cross_tool_upset(all_results, "IsoSeq", "kidney")
+ont_kidney_upset    <- create_cross_tool_upset(all_results, "ONT",    "kidney")
+
+kidney_cross_tool_figure <- assemble_cross_tool_figure(
+  isoseq_kidney_upset, ont_kidney_upset,
+  title = "Cross-tool UJC overlap; kidney"
+)
+
+ggsave("plot_creation/kidney_cross_tool_upset.pdf",
+       device = cairo_pdf, plot = kidney_cross_tool_figure,
+       width = 18, height = 16, unit = "in")
+
+kidney_cross_tool_figure
+```
+
+
+```{r brain-cross-tool-bar, fig.width=14, fig.height=8}
+isoseq_brain_bar <- create_cross_tool_bar(all_results, "IsoSeq", "brain")
+ont_brain_bar    <- create_cross_tool_bar(all_results, "ONT",    "brain")
+
+brain_cross_tool_bar_figure <- assemble_cross_tool_bar_figure(
+  isoseq_brain_bar, ont_brain_bar,
+  title = "UJCs by number of detecting tools; brain"
+)
+
+ggsave("plot_creation/brain_cross_tool_bar.pdf",
+       device = cairo_pdf, plot = brain_cross_tool_bar_figure,
+       width = 14, height = 8, unit = "in")
+
+brain_cross_tool_bar_figure
+```
+
+
+```{r kidney-cross-tool-bar, fig.width=14, fig.height=8}
+isoseq_kidney_bar <- create_cross_tool_bar(all_results, "IsoSeq", "kidney")
+ont_kidney_bar    <- create_cross_tool_bar(all_results, "ONT",    "kidney")
+
+kidney_cross_tool_bar_figure <- assemble_cross_tool_bar_figure(
+  isoseq_kidney_bar, ont_kidney_bar,
+  title = "UJCs by number of detecting tools; kidney"
+)
+
+ggsave("plot_creation/kidney_cross_tool_bar.pdf",
+       device = cairo_pdf, plot = kidney_cross_tool_bar_figure,
+       width = 14, height = 8, unit = "in")
+
+kidney_cross_tool_bar_figure
+```

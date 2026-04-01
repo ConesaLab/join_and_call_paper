@@ -38,8 +38,8 @@ check_st_merge_paths(st_merge_dirs)
 
 
 ```{r load-and-process}
-helper_dir <- if (dir.exists("../reports/empty_report/helper_functions")) {
-  "../reports/empty_report/helper_functions"
+helper_dir <- if (dir.exists("../../reports/empty_report/helper_functions")) {
+  "../../reports/empty_report/helper_functions"
 } else {
   "reports/empty_report/helper_functions"
 }
