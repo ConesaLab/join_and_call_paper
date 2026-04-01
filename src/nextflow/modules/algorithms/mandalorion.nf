@@ -15,7 +15,7 @@ process mandalorion {
     script:
     """
     echo "data_type: ${data_type}"
-    if ["${data_type}" != "pacbio_ccs"]; then
+    if [ "${data_type}" != "pacbio_ccs" ]; then
         echo "Mandalorion should only be used on PacBio or R2C2 reads"
         exit 1
     fi
