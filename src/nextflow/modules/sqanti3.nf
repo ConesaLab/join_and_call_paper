@@ -10,11 +10,12 @@ process sqanti3{
     beforeScript 'mkdir log'
 
     script:
+    def sq3_annotation = params.sqanti_annotation ?: params.annotation
     """
     ${params.src_dir}/sqanti3/run_sqanti3_qc.sh \\
         --wd "." \\
         --genome "${params.genome}" \\
-        --annotation "${params.annotation}" \\
+        --annotation "${sq3_annotation}" \\
         --metadata_merged "${metadata_merged}" \\
         --sqanti_path "${params.sqanti_location}" \\
         --joblog "${joblog}"
@@ -37,11 +38,12 @@ process sqanti3_orthogonal {
     beforeScript 'mkdir log'
 
     script:
+    def sq3_annotation = params.sqanti_annotation ?: params.annotation
     """
     ${params.src_dir}/sqanti3/run_sqanti3_qc_orthogonal.sh \\
         --wd "." \\
         --genome "${params.genome}" \\
-        --annotation "${params.annotation}" \\
+        --annotation "${sq3_annotation}" \\
         --metadata_ind "${metadata_ind}" \\
         --metadata_concat "${metadata_concat}" \\
         --cage "${params.cage}" \\

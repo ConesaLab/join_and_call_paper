@@ -1,11 +1,10 @@
 {
     "data": "ont_subset_brain",
-    "algorithm": "isoquant",
-    "result_name": "ont_sirv/isoquant/brain",
+    "algorithm": "flair",
+    "result_name": "ont_sirv/flair/brain",
     "ont_brain_only_metadata_samples": "/storage/gge/Alejandro/review_nih/sirv_reads/ont/ont_sirv_only.tsv",
     "ont_brain_only_metadata_concat": "/storage/gge/Alejandro/review_nih/sirv_reads/ont/ont_fl_concat_sirv_only.tsv",
     "genome": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/SIRV/SIRV_isoforms_multi-fasta_170612a.fasta",
     "annotation": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq.gtf",
-    "sqanti_annotation": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq_SIRV.gtf",
-    "annotation_db": "/storage/gge/Fabian/nih/mm39.ncbiRefSeq.db"
+    "sqanti_annotation": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq_SIRV.gtf"
 }
