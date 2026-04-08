@@ -27,6 +27,13 @@ output_location=$(dirname "$gtf")/"${output_prefix}_sq3_filter"
 python3 ${src}/define_ml_sets.py ${sq3dir}/${output_prefix}_classification.txt \
 	--output_dir ${output_location}
 
+# Prepare arguments for sqanti3_filter.py
+# Only provide TP and TN if both files exist and are not empty
+sqanti_args=""
+if [ -s "${output_location}/TP_list.txt" ] && [ -s "${output_location}/TN_list.txt" ]; then
+    sqanti_args="-p ${output_location}/TP_list.txt -n ${output_location}/TN_list.txt"
+fi
+
 # Run the filter
 python3 ${sqanti_location}/sqanti3_filter.py ml \
 	-d ${output_location} \
@@ -35,8 +42,7 @@ python3 ${sqanti_location}/sqanti3_filter.py ml \
 	-o ${output_prefix} \
 	--skip_report \
 	${sq3dir}/${output_prefix}_classification.txt \
-	-p ${output_location}/TP_list.txt \
-	-n ${output_location}/TN_list.txt \
+	${sqanti_args} \
 	-r ${output_location}/exclusion_list.txt
 	
 python3 ${src}/rever_9th_gtf.py ${output_location}/$(basename "$gtf" .gtf).filtered.gtf
