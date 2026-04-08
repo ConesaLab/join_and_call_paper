@@ -18,6 +18,7 @@ annotation="$2"
 metadata="$3"
 out_iso_detect="$4"
 out_quant="$5"
+denovo="${6:-false}"
 
 
 line_number_metadata=$((SLURM_ARRAY_TASK_ID + 1)) # Add 1 because of header
@@ -57,7 +58,7 @@ for directory in "${directories[@]}"; do
 done
 
 # Run bambu
-Rscript $SCRIPT_DIR/bambu.R $genome $annotation $bam_file $out_bambu $n_cores
+Rscript $SCRIPT_DIR/bambu.R $genome $annotation $bam_file $out_bambu $n_cores $denovo
 echo "bambu finished writing the outputs"
 
 # Move counts to final location

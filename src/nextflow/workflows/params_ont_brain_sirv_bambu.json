@@ -6,5 +6,6 @@
     "ont_brain_only_metadata_concat": "/storage/gge/Alejandro/review_nih/sirv_reads/ont/ont_fl_concat_sirv_only.tsv",
     "genome": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/SIRV/SIRV_isoforms_multi-fasta_170612a.fasta",
     "annotation": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq.gtf",
-    "sqanti_annotation": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq_SIRV.gtf"
+    "sqanti_annotation": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq_SIRV.gtf",
+    "bambu_denovo": true
 }

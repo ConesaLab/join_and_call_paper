@@ -75,27 +75,28 @@ annotation = args[[2]]
 reads = args[[3]]
 out_dir = args[[4]]
 n_cores = args[[5]]
+denovo = ifelse(length(args) >= 6 && args[[6]] == "true", TRUE, FALSE)
 
 # Options
 print("Running bambu with inputs...")
-print("Genome:")
-print(genome)
-print("Annotation:")
-print(annotation)
-print("Reads:")
-print(reads)
-print("Out dir:")
-print(out_dir)
+print(paste("Genome:", genome))
+print(paste("Annotation:", annotation))
+print(paste("Reads:", reads))
+print(paste("Out dir:", out_dir))
+print(paste("De novo mode:", denovo))
 
 # Prepare the path to write the outputs
 path <- dirname(out_dir)
 prefix <- basename(out_dir)
 
-# Prepare the referecne annotation
-annotation <- prepareAnnotations(annotation)
-
-# Run bambu
-se <- bambu(reads = reads, annotations = annotation, genome = genome, trackReads = TRUE, ncore = n_cores)
+if (denovo) {
+  se <- bambu(reads = reads, annotations = NULL, genome = genome,
+              NDR = 0.5, trackReads = TRUE, ncore = n_cores)
+} else {
+  annotation <- prepareAnnotations(annotation)
+  se <- bambu(reads = reads, annotations = annotation, genome = genome,
+              trackReads = TRUE, ncore = n_cores)
+}
 
 # save se
 print("save se")

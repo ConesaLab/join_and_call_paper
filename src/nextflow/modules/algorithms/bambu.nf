@@ -20,6 +20,7 @@ process bambu {
         --metadata_samples "${in_metadata_samples}" \\
         --metadata_concat "${in_metadata_concat}" \\
         --joblog "${joblog}" \\
+        --denovo ${params.bambu_denovo}
 
     ln -s "\$PWD" ${wd}/bambu
     """

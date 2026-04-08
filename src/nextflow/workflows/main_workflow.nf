@@ -120,6 +120,7 @@ params.src_dir = "${projectDir}/../scripts"
 params.genome = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39_SIRV.fa"
 params.annotation = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq_SIRV.gtf"
 params.sqanti_annotation = null // if set, SQANTI3 uses this instead of params.annotation
+params.bambu_denovo = false // if true, bambu runs in de novo mode (annotations=NULL, NDR=0.5)
 params.annotation_db = "/storage/gge/Fabian/nih/data/metadata/isoquant/mm39.ncbiRefSeq_SIRV.db"
 params.cage = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/lft_mm39_CAGE.bed"
 params.polyA = "/home/apadepe/polyA_site.bed"
