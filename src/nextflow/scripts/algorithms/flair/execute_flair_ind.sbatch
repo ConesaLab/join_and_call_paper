@@ -122,7 +122,14 @@ else
 		-f $annotation \
 		-g $genome \
 		--output "$out_align"/"$sample_id" \
-		--threads $n_cores
+		--threads $n_cores || true
+fi
+
+# If flair correct produced no output (e.g. no annotation matches), use raw BED
+corrected_bed="$out_align/${sample_id}_all_corrected.bed"
+if [ ! -s "$corrected_bed" ]; then
+	echo "[FLAIR] WARNING: flair correct produced no output, using raw BED"
+	cp "$out_align/${sample_id}.aln.bed" "$corrected_bed"
 fi
 
 if [ "$stringent" = true ]; then
