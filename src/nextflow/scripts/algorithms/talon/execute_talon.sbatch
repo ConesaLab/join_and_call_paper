@@ -79,6 +79,13 @@ echo -n "${cond},${sample_id},X,${labeled_sam_file}" > $config_file
 
 source activate transcriptclean
 
+# Convert BAM to SAM if SAM doesn't exist
+if [ ! -f "$sam_file" ]; then
+	sam_file="${out_transcriptclean}/${sample_id}.sam"
+	echo "Converting BAM to SAM: $bam_file -> $sam_file"
+	samtools view -h "$bam_file" > "$sam_file"
+fi
+
 echo "running TranscriptClean ..."
 
 # run TranscriptClean
