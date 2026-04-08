@@ -10,7 +10,7 @@
 #SBATCH -o log/flair_junc_%A_%a.out
 
 module load anaconda
-source activate flair_basic_conda_env
+source activate flair_conda_env
 
 flair_location="$1"
 config_file="$2"
