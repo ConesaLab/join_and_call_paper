@@ -5,6 +5,8 @@ channels:
   - defaults
 dependencies:
   - r-base>=4.3,<4.5
-  - bioconductor-bambu=3.5.1
+  - r-biocmanager
+  - r-devtools
+  - r-data.table
   - gffread
   - python>=3.8
