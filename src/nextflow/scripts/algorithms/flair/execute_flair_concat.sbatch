@@ -49,11 +49,18 @@ echo $fastq_list
 echo "${out_dir}/${cond}_split_${SLURM_ARRAY_TASK_ID}"
 echo $n_cores
 
+gtf_flag=""
+if [ -s "$chrom_annotation" ]; then
+	gtf_flag="--gtf $chrom_annotation"
+else
+	echo "[FLAIR] WARNING: Per-chromosome GTF is empty, running without --gtf"
+fi
+
 if [ "$stringent" = true ]; then
 	echo "[FLAIR] Running FLAIR collapse stringent"
 	flair collapse \
 		-g $genome \
-		--gtf $chrom_annotation \
+		$gtf_flag \
 		-q $bed_file \
 		-r $fastq_list \
 		--output "${out_dir}/${cond}_split_${SLURM_ARRAY_TASK_ID}" \
@@ -66,7 +73,7 @@ else
 	echo "[FLAIR] Running FLAIR collapse"
 	flair collapse \
 		-g $genome \
-		--gtf $chrom_annotation \
+		$gtf_flag \
 		-q $bed_file \
 		-r $fastq_list \
 		--output "${out_dir}/${cond}_split_${SLURM_ARRAY_TASK_ID}" \
