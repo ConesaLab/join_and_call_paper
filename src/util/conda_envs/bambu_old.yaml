@@ -1,0 +1,10 @@
+name: bambu_old
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - r-base>=4.3,<4.5
+  - bioconductor-bambu=3.5.1
+  - gffread
+  - python>=3.8

@@ -9,7 +9,8 @@
 #SBATCH -o log/bambu_quant_%A_%a.out
 
 module load anaconda
-source activate bambu_env
+BAMBU_ENV="${BAMBU_ENV:-bambu_env}"
+source activate "$BAMBU_ENV"
 # Input
 genome="$1"
 metadata_concat="$2"

@@ -7,5 +7,7 @@
     "genome": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/SIRV/SIRV_isoforms_multi-fasta_170612a.fasta",
     "annotation": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq.gtf",
     "sqanti_annotation": "/storage/gge/genomes/mouse_ref_NIH/reference_genome/mm39.ncbiRefSeq_SIRV.gtf",
-    "bambu_denovo": true
+    "bambu_denovo": true,
+    "bambu_ndr": 1,
+    "bambu_env": "bambu_old"
 }

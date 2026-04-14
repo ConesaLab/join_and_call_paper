@@ -9,7 +9,8 @@
 #SBATCH -o log/bambu_%A_%a.out
 
 module load anaconda
-source activate bambu_env
+BAMBU_ENV="${BAMBU_ENV:-bambu_env}"
+source activate "$BAMBU_ENV"
 
 
 # Input
@@ -58,7 +59,8 @@ for directory in "${directories[@]}"; do
 done
 
 # Run bambu
-Rscript $SCRIPT_DIR/bambu.R $genome $annotation $bam_file $out_bambu $n_cores $denovo
+BAMBU_NDR="${BAMBU_NDR:-0.5}"
+Rscript $SCRIPT_DIR/bambu.R $genome $annotation $bam_file $out_bambu $n_cores $denovo $BAMBU_NDR
 echo "bambu finished writing the outputs"
 
 # Move counts to final location

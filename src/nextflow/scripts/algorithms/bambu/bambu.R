@@ -76,6 +76,7 @@ reads = args[[3]]
 out_dir = args[[4]]
 n_cores = args[[5]]
 denovo = ifelse(length(args) >= 6 && args[[6]] == "true", TRUE, FALSE)
+ndr = ifelse(length(args) >= 7, as.numeric(args[[7]]), 0.5)
 
 # Options
 print("Running bambu with inputs...")
@@ -84,6 +85,7 @@ print(paste("Annotation:", annotation))
 print(paste("Reads:", reads))
 print(paste("Out dir:", out_dir))
 print(paste("De novo mode:", denovo))
+print(paste("NDR:", ndr))
 
 # Prepare the path to write the outputs
 path <- dirname(out_dir)
@@ -91,7 +93,7 @@ prefix <- basename(out_dir)
 
 if (denovo) {
   se <- bambu(reads = reads, annotations = NULL, genome = genome,
-              NDR = 0.5, trackReads = TRUE, ncore = n_cores)
+              NDR = ndr, trackReads = TRUE, ncore = n_cores)
 } else {
   annotation <- prepareAnnotations(annotation)
   se <- bambu(reads = reads, annotations = annotation, genome = genome,

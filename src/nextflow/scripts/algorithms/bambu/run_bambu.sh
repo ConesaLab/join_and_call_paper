@@ -2,6 +2,8 @@
 
 # Input
 denovo=false
+ndr=0.5
+bambu_env="bambu_env"
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --wd) WD="$2"; shift ;;
@@ -11,6 +13,8 @@ while [[ "$#" -gt 0 ]]; do
         --metadata_concat) metadata_concat="$2"; shift ;;
         --joblog) joblog="$2"; shift ;;
         --denovo) denovo="$2"; shift ;;
+        --ndr) ndr="$2"; shift ;;
+        --bambu_env) bambu_env="$2"; shift ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
@@ -64,16 +68,16 @@ echo "[bambu] nConditions: $nConditions"
 
 # call execute_bambu for each sample
 if [ $nSamples -ge 1 ]; then
-    jobid=$(sbatch --wait --array=1-$nSamples --export=SCRIPT_DIR=$SCRIPT_DIR,REFORMAT_SCRIPT="${SCRIPT_DIR}/../../sqanti3/rever_9th_gtf.py" $SCRIPT_DIR/execute_bambu.sbatch $genome $annotation $metadata_samples $out_iso_detect $out_quant $denovo | awk '{print $NF}')
+    jobid=$(sbatch --wait --array=1-$nSamples --export=SCRIPT_DIR=$SCRIPT_DIR,REFORMAT_SCRIPT="${SCRIPT_DIR}/../../sqanti3/rever_9th_gtf.py",BAMBU_ENV=$bambu_env,BAMBU_NDR=$ndr $SCRIPT_DIR/execute_bambu.sbatch $genome $annotation $metadata_samples $out_iso_detect $out_quant $denovo | awk '{print $NF}')
 	echo -e "bambu_IND\t${jobid}" >> $joblog
 fi
 
 # run bambu for each concatenated file (per condition)
 if [ $nConditions -ge 1 ]; then
     # assign extra resources for concat runs
-    jobid=$(sbatch --qos short -t 1-00:00:00 --mem 80gb --wait --array=1-$nConditions --export=SCRIPT_DIR=$SCRIPT_DIR,REFORMAT_SCRIPT="${SCRIPT_DIR}/../../sqanti3/rever_9th_gtf.py" $SCRIPT_DIR/execute_bambu.sbatch $genome $annotation $metadata_concat $out_iso_detect $out_quant $denovo | awk '{print $NF}')
+    jobid=$(sbatch --qos short -t 1-00:00:00 --mem 80gb --wait --array=1-$nConditions --export=SCRIPT_DIR=$SCRIPT_DIR,REFORMAT_SCRIPT="${SCRIPT_DIR}/../../sqanti3/rever_9th_gtf.py",BAMBU_ENV=$bambu_env,BAMBU_NDR=$ndr $SCRIPT_DIR/execute_bambu.sbatch $genome $annotation $metadata_concat $out_iso_detect $out_quant $denovo | awk '{print $NF}')
     echo -e "bambu_CONCAT\t${jobid}" >> $joblog
-	jobid=$(sbatch --qos short -t 1-00:00:00 --mem 32gb --wait --array=1-$nConditions --export=SCRIPT_DIR=$SCRIPT_DIR $SCRIPT_DIR/execute_bambu_quant.sbatch $genome $metadata_concat $metadata_samples $out_iso_detect $out_quant | awk '{print $NF}')
+	jobid=$(sbatch --qos short -t 1-00:00:00 --mem 32gb --wait --array=1-$nConditions --export=SCRIPT_DIR=$SCRIPT_DIR,BAMBU_ENV=$bambu_env $SCRIPT_DIR/execute_bambu_quant.sbatch $genome $metadata_concat $metadata_samples $out_iso_detect $out_quant | awk '{print $NF}')
     echo -e "bambu_quant_CONCAT\t${jobid}" >> $joblog
 fi
 
