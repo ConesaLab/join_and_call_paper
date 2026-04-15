@@ -50,6 +50,6 @@ rm ${outdir}/${filename}.gff
 
 python3 ${sqanti_dir}/sqanti3_qc.py \
     --skipORF --dir "${outdir}/${filename}" \
-    --output "${filename}" --min_ref_len "0" \
+    --output "${filename}_reads" --min_ref_len "0" \
     --report "skip" --force_id_ignore \
     ${outdir}/${filename}.gtf ${ref_annotation} ${assembly}
