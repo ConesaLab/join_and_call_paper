@@ -1,0 +1,699 @@
+---
+title: "SIRV Discovery Comparison: With vs. Without SIRV Annotation"
+author: "Fabian Jetzinger"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_download: false
+    toc: TRUE
+    toc_depth: 2
+    theme: spacelab
+    self_contained: true
+    highlight: tango
+    fig_width: 12
+    fig_height: 8
+    fig_caption: true
+    df_print: kable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.pos = "h", fig.align = "center")
+
+library(tidyverse)
+library(ggthemes)
+library(patchwork)
+library(scales)
+library(ggstats)
+library(cowplot)
+library(ggpubr)
+
+r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
+
+source(file.path(r_source_dir, "01_config.R"))
+source(file.path(r_source_dir, "02_themes.R"))
+source(file.path(r_source_dir, "06_sirv_analysis.R"))
+```
+
+
+```{r config}
+sirv_base <- if (dir.exists("data/sirv_results")) {
+  "data/sirv_results"
+} else {
+  "../../data/sirv_results"
+}
+
+sirv_dirs <- list(
+  IsoSeq = list(
+    IsoQuant      = file.path(sirv_base, "isoseq/isoquant"),
+    FLAIR         = file.path(sirv_base, "isoseq/flair"),
+    TALON         = file.path(sirv_base, "isoseq/talon"),
+    Bambu         = file.path(sirv_base, "isoseq/bambu"),
+    Mandalorion   = file.path(sirv_base, "isoseq/mandalorion"),
+    `IsoSeq + SQANTI3` = file.path(sirv_base, "isoseq/isoseq_sqanti")
+  ),
+  ONT = list(
+    IsoQuant = file.path(sirv_base, "ont/isoquant"),
+    FLAIR    = file.path(sirv_base, "ont/flair"),
+    TALON    = file.path(sirv_base, "ont/talon"),
+    Bambu    = file.path(sirv_base, "ont/bambu")
+  )
+)
+
+annotation_palette <- c("With SIRV GTF" = "#15918A", "Without SIRV GTF" = "#F58A53")
+
+load_sirv_df_list <- function(dir) {
+  rdata_path <- file.path(dir, "Bclass_df_list.RData")
+  if (!file.exists(rdata_path)) {
+    warning(paste("File not found:", rdata_path))
+    return(NULL)
+  }
+  env <- new.env()
+  load(rdata_path, envir = env)
+  env$Bclass_df_list
+}
+
+load_original_df_list <- function(dir) {
+  rdata_path <- file.path(dir, "Bclass_df_list.RData")
+  if (!file.exists(rdata_path)) {
+    warning(paste("File not found:", rdata_path))
+    return(NULL)
+  }
+  env <- new.env()
+  load(rdata_path, envir = env)
+  env$Bclass_df_list
+}
+```
+
+
+# Data Loading & Metrics Calculation
+
+```{r load-and-compute, results='hide'}
+samples_of_interest <- c("Join&Call", "Call&Join")
+
+compute_metrics_for_dirs <- function(dirs, condition_label) {
+  results <- list()
+  for (platform in names(dirs)) {
+    for (method in names(dirs[[platform]])) {
+      df_list <- load_sirv_df_list(dirs[[platform]][[method]])
+      if (is.null(df_list)) next
+
+      names(df_list) <- sample_names_Brain[seq_along(df_list)]
+
+      for (sample_name in names(df_list)) {
+        sirv_result <- tryCatch(
+          calculate_sirv_metrics(df_list[[sample_name]]),
+          error = function(e) NULL
+        )
+        if (is.null(sirv_result)) next
+
+        metrics_wide <- sirv_result$metrics %>%
+          mutate(Value = as.numeric(gsub("%", "", Value))) %>%
+          pivot_wider(names_from = Metric, values_from = Value)
+
+        row <- tibble(
+          platform = platform,
+          method = method,
+          sample = sample_name,
+          condition = condition_label,
+          n_transcripts = nrow(sirv_result$sirv_df),
+          n_missing = length(sirv_result$sirv_fn),
+          missing_sirvs = list(sirv_result$sirv_fn)
+        ) %>% bind_cols(metrics_wide)
+
+        results[[length(results) + 1]] <- row
+      }
+    }
+  }
+  bind_rows(results)
+}
+
+without_annot_df <- compute_metrics_for_dirs(sirv_dirs, "Without SIRV GTF")
+
+with_annot_df <- compute_metrics_for_dirs(src_dirs, "With SIRV GTF")
+
+comparison_df <- bind_rows(with_annot_df, without_annot_df) %>%
+  mutate(
+    method = recode(method, "isoseq_sqanti" = "IsoSeq + SQANTI3"),
+    condition = factor(condition, levels = c("With SIRV GTF", "Without SIRV GTF")),
+    method = factor(method, levels = c("IsoQuant", "FLAIR", "Bambu", "TALON",
+                                       "Mandalorion", "IsoSeq + SQANTI3"))
+  )
+
+cat(sprintf("Loaded %d rows: %d with annotation, %d without\n",
+            nrow(comparison_df), sum(comparison_df$condition == "With SIRV GTF"),
+            sum(comparison_df$condition == "Without SIRV GTF")))
+```
+
+
+# Overview Table {.tabset}
+
+## Join&Call
+
+```{r table-jc, results='asis'}
+comparison_df %>%
+  filter(sample == "Join&Call") %>%
+  select(platform, method, condition, Sensitivity, Precision,
+         `Positive Detection Rate`, `False Discovery Rate`,
+         `False Detection Rate`, Redundancy, n_transcripts, n_missing) %>%
+  arrange(platform, method, condition) %>%
+  knitr::kable(digits = 2, caption = "SIRV metrics comparison: Join&Call")
+```
+
+## Call&Join
+
+```{r table-cj, results='asis'}
+comparison_df %>%
+  filter(sample == "Call&Join") %>%
+  select(platform, method, condition, Sensitivity, Precision,
+         `Positive Detection Rate`, `False Discovery Rate`,
+         `False Detection Rate`, Redundancy, n_transcripts, n_missing) %>%
+  arrange(platform, method, condition) %>%
+  knitr::kable(digits = 2, caption = "SIRV metrics comparison: Call&Join")
+```
+
+
+# Metric Comparison Plots {.tabset}
+
+```{r metric-comparison-plots, fig.width=14, fig.height=10, results='asis'}
+key_metrics <- c("Sensitivity", "Positive Detection Rate", "Precision",
+                 "False Discovery Rate", "False Detection Rate", "Redundancy")
+
+for (sample_name in samples_of_interest) {
+  cat(sprintf("\n\n## %s\n\n", sample_name))
+
+  plot_df <- comparison_df %>%
+    filter(sample == sample_name) %>%
+    select(platform, method, condition, all_of(key_metrics)) %>%
+    pivot_longer(cols = all_of(key_metrics), names_to = "Metric", values_to = "Value") %>%
+    mutate(Metric = factor(Metric, levels = key_metrics))
+
+  p <- ggplot(plot_df, aes(x = method, y = Value, fill = condition)) +
+    geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+    geom_text(aes(label = round(Value, 1)),
+              position = position_dodge(width = 0.8),
+              vjust = -0.3, size = 2.5) +
+    facet_grid(Metric ~ platform, scales = "free", space = "free_x") +
+    scale_fill_manual(values = annotation_palette, name = "Annotation") +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+    labs(x = NULL, y = "Value (%)",
+         title = paste("SIRV Metrics Comparison:", sample_name)) +
+    theme_Publication() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
+      strip.text = element_text(size = 10),
+      legend.position = "bottom"
+    )
+
+  print(p)
+}
+```
+
+
+# Sensitivity & Detection Rate (Focused) {.tabset}
+
+```{r sensitivity-focused, fig.width=12, fig.height=5, results='asis'}
+for (sample_name in samples_of_interest) {
+  cat(sprintf("\n\n## %s\n\n", sample_name))
+
+  plot_df <- comparison_df %>%
+    filter(sample == sample_name) %>%
+    select(platform, method, condition, Sensitivity, `Positive Detection Rate`) %>%
+    pivot_longer(cols = c(Sensitivity, `Positive Detection Rate`),
+                 names_to = "Metric", values_to = "Value")
+
+  p <- ggplot(plot_df, aes(x = method, y = Value, fill = condition)) +
+    geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+    geom_hline(yintercept = 100, linetype = "dashed", color = "grey40") +
+    facet_grid(Metric ~ platform, scales = "free_x", space = "free_x") +
+    scale_fill_manual(values = annotation_palette, name = "Annotation") +
+    coord_cartesian(ylim = c(0, 105)) +
+    labs(x = NULL, y = "Value (%)",
+         title = paste("SIRV Sensitivity & Detection Rate:", sample_name)) +
+    theme_Publication() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+      strip.text = element_text(size = 11),
+      legend.position = "bottom"
+    )
+
+  print(p)
+}
+```
+
+
+# Difference Plot (Without - With)
+
+```{r difference-plot, fig.width=12, fig.height=8}
+diff_metrics <- c("Sensitivity", "Positive Detection Rate", "Precision",
+                  "False Discovery Rate", "Redundancy")
+
+lower_is_better <- c("False Discovery Rate", "Redundancy")
+
+diff_df <- comparison_df %>%
+  filter(sample %in% samples_of_interest) %>%
+  select(platform, method, sample, condition, all_of(diff_metrics)) %>%
+  pivot_longer(cols = all_of(diff_metrics), names_to = "Metric", values_to = "Value") %>%
+  pivot_wider(names_from = condition, values_from = Value) %>%
+  mutate(
+    Difference = `Without SIRV GTF` - `With SIRV GTF`,
+    improved = ifelse(Metric %in% lower_is_better, Difference < 0, Difference > 0),
+    Metric = factor(Metric, levels = diff_metrics)
+  )
+
+ggplot(diff_df, aes(x = method, y = Difference, fill = improved)) +
+  geom_col(width = 0.7) +
+  geom_hline(yintercept = 0, linewidth = 0.4) +
+  facet_grid(Metric ~ platform + sample, scales = "free", space = "free_x") +
+  scale_fill_manual(values = c("TRUE" = "#78C679", "FALSE" = "#EE6A50"),
+                    labels = c("TRUE" = "Improved", "FALSE" = "Degraded"),
+                    name = NULL) +
+  labs(x = NULL, y = "Difference (pp)",
+       title = "Change in SIRV metrics: Without annotation vs. With annotation",
+       subtitle = "Green = improved without annotation (lower is better for FDR & Redundancy)") +
+  theme_Publication() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+    strip.text = element_text(size = 9),
+    legend.position = "bottom"
+  )
+```
+
+
+# Per-Transcript Detection Heatmap
+
+```{r detection-heatmap, fig.width=14, fig.height=12}
+src_dirs_key <- c("IsoSeq + SQANTI3" = "isoseq_sqanti")
+
+detection_rows <- list()
+
+for (platform in names(sirv_dirs)) {
+  for (method in names(sirv_dirs[[platform]])) {
+    sirv_list <- load_sirv_df_list(sirv_dirs[[platform]][[method]])
+    orig_key <- ifelse(method %in% names(src_dirs_key), src_dirs_key[[method]], method)
+    orig_list <- load_original_df_list(src_dirs[[platform]][[orig_key]])
+
+    if (is.null(sirv_list) || is.null(orig_list)) next
+
+    names(sirv_list) <- sample_names_Brain[seq_along(sirv_list)]
+    names(orig_list) <- sample_names_Brain[seq_along(orig_list)]
+
+    for (sample_name in samples_of_interest) {
+      if (!(sample_name %in% names(sirv_list)) || !(sample_name %in% names(orig_list))) next
+
+      orig_metrics <- tryCatch(calculate_sirv_metrics(orig_list[[sample_name]]), error = function(e) NULL)
+      sirv_metrics <- tryCatch(calculate_sirv_metrics(sirv_list[[sample_name]]), error = function(e) NULL)
+      if (is.null(orig_metrics) || is.null(sirv_metrics)) next
+
+      orig_detected <- setdiff(real_sirvs, orig_metrics$sirv_fn)
+      sirv_detected <- setdiff(real_sirvs, sirv_metrics$sirv_fn)
+
+      for (sirv in real_sirvs) {
+        detection_rows[[length(detection_rows) + 1]] <- tibble(
+          platform = platform, method = method, sample = sample_name,
+          sirv = sirv,
+          with_annot = sirv %in% orig_detected,
+          without_annot = sirv %in% sirv_detected
+        )
+      }
+    }
+  }
+}
+
+detection_df <- bind_rows(detection_rows) %>%
+  mutate(
+    status = case_when(
+      with_annot & without_annot   ~ "Both",
+      with_annot & !without_annot  ~ "Only with annotation",
+      !with_annot & without_annot  ~ "Only without annotation",
+      TRUE                         ~ "Neither"
+    ),
+    status = factor(status, levels = c("Both", "Only with annotation", "Only without annotation", "Neither")),
+    tool_label = paste(platform, method, sep = "\n")
+  )
+
+status_palette <- c(
+  "Both"                      = "#4DAF4A",
+  "Only with annotation"      = "#FF7F00",
+  "Only without annotation"   = "#E41A1C",
+  "Neither"                   = "#D9D9D9"
+)
+
+detection_both <- detection_df %>%
+  filter(sample %in% samples_of_interest) %>%
+  mutate(sample = factor(sample, levels = c("Join&Call", "Call&Join")))
+
+if (nrow(detection_both) > 0) {
+  ggplot(detection_both, aes(x = tool_label, y = sirv, fill = status)) +
+    geom_tile(color = "white", linewidth = 0.3) +
+    facet_grid(~ sample) +
+    scale_fill_manual(values = status_palette, name = "Detection") +
+    labs(x = NULL, y = NULL,
+         title = "Per-SIRV transcript detection") +
+    theme_minimal(base_size = 10) +
+    theme(
+      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
+      axis.text.y = element_text(size = 6),
+      plot.title = element_text(face = "bold", hjust = 0.5),
+      strip.text = element_text(face = "bold", size = 11),
+      legend.position = "bottom"
+    )
+}
+
+method_levels <- levels(comparison_df$method)
+
+xpos_map <- detection_both %>%
+  distinct(platform, method) %>%
+  arrange(factor(platform, levels = c("IsoSeq", "ONT")),
+          factor(method, levels = method_levels)) %>%
+  mutate(method_idx = row_number())
+
+platform_gap <- 1.5
+tool_gap <- 0.4
+pair_width <- 1.0
+
+xpos_map <- xpos_map %>%
+  mutate(
+    platform_offset = cumsum(c(0, diff(as.numeric(factor(platform))) * platform_gap)),
+    base_x = (method_idx - 1) * (pair_width * 2 + tool_gap) + platform_offset
+  )
+
+detection_by_method <- detection_both %>%
+  mutate(sample_short = ifelse(sample == "Join&Call", "J&C", "C&J")) %>%
+  left_join(xpos_map, by = c("platform", "method")) %>%
+  mutate(
+    x_pos = base_x + ifelse(sample == "Join&Call", 0, pair_width),
+    x_label = paste0(method, "\n", sample_short)
+  )
+
+tick_df <- detection_by_method %>%
+  distinct(platform, method, sample_short, x_pos, x_label)
+
+method_label_df <- xpos_map %>%
+  mutate(label_x = base_x + pair_width / 2)
+
+if (nrow(detection_by_method) > 0) {
+  ggplot(detection_by_method, aes(x = x_pos, y = sirv, fill = status)) +
+    geom_tile(color = "white", linewidth = 0.3, width = pair_width * 0.95) +
+    scale_x_continuous(
+      breaks = tick_df$x_pos,
+      labels = tick_df$sample_short,
+      expand = expansion(add = 0.8)
+    ) +
+    geom_text(data = method_label_df,
+              aes(x = label_x, y = -Inf, label = method),
+              inherit.aes = FALSE, vjust = 2.5, size = 3, fontface = "bold") +
+    scale_fill_manual(values = status_palette, name = "Detection") +
+    labs(x = NULL, y = NULL,
+         title = "Per-SIRV transcript detection by method") +
+    theme_minimal(base_size = 10) +
+    coord_cartesian(clip = "off") +
+    theme(
+      axis.text.x = element_text(size = 7),
+      axis.text.y = element_text(size = 6),
+      plot.title = element_text(face = "bold", hjust = 0.5),
+      plot.margin = margin(t = 5, r = 10, b = 30, l = 10),
+      legend.position = "bottom"
+    )
+}
+```
+
+
+# Detection Summary
+
+```{r detection-summary, results='asis'}
+detection_summary <- detection_df %>%
+  group_by(platform, method, sample, status) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  pivot_wider(names_from = status, values_from = n, values_fill = 0)
+
+knitr::kable(detection_summary,
+             caption = paste("Per-transcript detection status across",
+                             n_sirvs, "real SIRV transcripts"))
+```
+
+
+# Individual Samples {.tabset}
+
+```{r individual-samples, fig.width=14, fig.height=6, results='asis'}
+individual_samples <- setdiff(unique(comparison_df$sample), samples_of_interest)
+
+if (length(individual_samples) > 0) {
+  ind_df <- comparison_df %>%
+    filter(sample %in% individual_samples) %>%
+    select(platform, method, sample, condition, Sensitivity, `Positive Detection Rate`) %>%
+    pivot_longer(cols = c(Sensitivity, `Positive Detection Rate`),
+                 names_to = "Metric", values_to = "Value")
+
+  for (plt in unique(ind_df$platform)) {
+    cat(sprintf("\n\n## %s\n\n", plt))
+
+    p <- ind_df %>%
+      filter(platform == plt) %>%
+      ggplot(aes(x = sample, y = Value, fill = condition)) +
+      geom_col(position = position_dodge2(width = 0.8, preserve = "single"), width = 0.7) +
+      geom_hline(yintercept = 100, linetype = "dashed", color = "grey40") +
+      facet_grid(Metric ~ method, scales = "free_x", space = "free_x") +
+      scale_fill_manual(values = annotation_palette, name = "Annotation") +
+      coord_cartesian(ylim = c(0, 105)) +
+      labs(x = NULL, y = "Value (%)",
+           title = paste("Individual sample SIRV metrics:", plt)) +
+      theme_Publication() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        strip.text = element_text(size = 10),
+        legend.position = "bottom"
+      )
+
+    print(p)
+  }
+}
+```
+
+
+# Dumbbell Plots
+
+```{r dumbbell-functions}
+dumbbell_metric_order <- c("Sn", "PDR", "nrPre", "rPre", "1/red", "1-FDR")
+
+to_dumbbell_metrics <- function(df) {
+  tibble(
+    Sn      = df$Sensitivity,
+    PDR     = df$`Positive Detection Rate`,
+    nrPre   = df$`Non-redundant Precision`,
+    rPre    = df$Precision,
+    `1/red` = ifelse(df$Redundancy == 0, NA_real_, 10000 / df$Redundancy),
+    `1-FDR` = 100 - df$`False Discovery Rate`
+  )
+}
+
+build_sirv_comparison_dumbbell <- function(comparison_df, platform_filter, method_filter,
+                                           title,
+                                           metric_order = dumbbell_metric_order,
+                                           show_x_axis = TRUE) {
+  jc_with <- comparison_df %>%
+    filter(platform == platform_filter, method == method_filter,
+           sample == "Join&Call", condition == "With SIRV GTF")
+  jc_without <- comparison_df %>%
+    filter(platform == platform_filter, method == method_filter,
+           sample == "Join&Call", condition == "Without SIRV GTF")
+  cj_with <- comparison_df %>%
+    filter(platform == platform_filter, method == method_filter,
+           sample == "Call&Join", condition == "With SIRV GTF")
+  cj_without <- comparison_df %>%
+    filter(platform == platform_filter, method == method_filter,
+           sample == "Call&Join", condition == "Without SIRV GTF")
+
+  if (any(sapply(list(jc_with, jc_without, cj_with, cj_without), nrow) == 0)) return(NULL)
+
+  jc_with_m    <- to_dumbbell_metrics(jc_with)
+  jc_without_m <- to_dumbbell_metrics(jc_without)
+  cj_with_m    <- to_dumbbell_metrics(cj_with)
+  cj_without_m <- to_dumbbell_metrics(cj_without)
+
+  metrics_long <- bind_rows(
+    tibble(method_dataset = "concat_with",    metric = names(jc_with_m),    value = as.numeric(jc_with_m[1, ])),
+    tibble(method_dataset = "concat_without", metric = names(jc_without_m), value = as.numeric(jc_without_m[1, ])),
+    tibble(method_dataset = "tama_with",      metric = names(cj_with_m),    value = as.numeric(cj_with_m[1, ])),
+    tibble(method_dataset = "tama_without",   metric = names(cj_without_m), value = as.numeric(cj_without_m[1, ]))
+  ) %>%
+    mutate(metric = factor(metric, levels = rev(metric_order)))
+
+  metrics_wide <- metrics_long %>%
+    separate(method_dataset, into = c("method", "dataset"), sep = "_") %>%
+    pivot_wider(names_from = method, values_from = value)
+
+  points_df <- metrics_wide %>%
+    pivot_longer(cols = c(concat, tama), names_to = "method", values_to = "value")
+
+  p <- ggplot() +
+    ggstats::geom_stripped_rows(
+      data = metrics_wide, aes(y = metric), width = 1, nudge_y = 0
+    ) +
+    geom_segment(
+      data = metrics_wide,
+      aes(x = concat, xend = tama, y = metric, yend = metric, color = dataset),
+      size = 1.2,
+      position = position_nudge(
+        y = ifelse(metrics_wide$dataset == "with", 0.15, -0.15)
+      )
+    ) +
+    geom_point(
+      data = points_df,
+      aes(x = value, y = metric, shape = method, fill = dataset, color = dataset),
+      size = 3, stroke = 0.8,
+      position = position_nudge(
+        y = ifelse(points_df$dataset == "with", 0.15, -0.15)
+      )
+    ) +
+    scale_color_manual(
+      name   = "Annotation",
+      values = c("with" = "#15918A", "without" = "#F58A53"),
+      labels = c("with" = "With SIRV annotation", "without" = "Without SIRV annotation"),
+      guide  = guide_legend(
+        override.aes = list(shape = 22, size = 5, linetype = 0, stroke = 0,
+                            fill = c("#15918A", "#F58A53")),
+        order = 1
+      )
+    ) +
+    scale_fill_manual(
+      values = c("with" = "#15918A", "without" = "#F58A53"),
+      guide  = "none"
+    ) +
+    scale_shape_manual(
+      name   = "Strategy",
+      values = c("concat" = 16, "tama" = 17),
+      labels = c("concat" = "Join & Call", "tama" = "Call & Join"),
+      guide  = guide_legend(
+        override.aes = list(fill = "black", size = 3),
+        order = 2
+      )
+    ) +
+    coord_cartesian(xlim = c(0, 100), clip = "off") +
+    labs(x = NULL, y = NULL, title = title) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title         = element_text(hjust = 0.5, face = "bold", size = 16),
+      plot.margin        = margin(t = 5, r = 20, b = 5, l = 20, unit = "pt"),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor   = element_blank(),
+      panel.background   = element_rect(fill = "white", color = NA),
+      axis.text          = element_text(size = 10),
+      axis.text.y        = element_text(face = "bold", size = 10),
+      axis.title         = element_text(size = 12),
+      legend.box         = "horizontal",
+      legend.position    = "right",
+      legend.title       = element_text(size = 14, face = "bold"),
+      legend.text        = element_text(size = 12)
+    )
+
+  if (!show_x_axis) {
+    p <- p + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+  }
+
+  p
+}
+
+assemble_sirv_comparison_dumbbells <- function(comparison_df) {
+  tool_grid <- list(
+    list(platform = "IsoSeq", method = "IsoQuant",      label = "IsoQuant",          bottom = FALSE),
+    list(platform = "IsoSeq", method = "FLAIR",          label = "FLAIR",             bottom = FALSE),
+    list(platform = "IsoSeq", method = "Bambu",          label = "Bambu",             bottom = FALSE),
+    list(platform = "IsoSeq", method = "TALON",          label = "TALON",             bottom = FALSE),
+    list(platform = "IsoSeq", method = "Mandalorion",    label = "Mandalorion",       bottom = FALSE),
+    list(platform = "IsoSeq", method = "IsoSeq + SQANTI3",  label = "IsoSeq + SQANTI3",  bottom = FALSE),
+    list(platform = "ONT",    method = "IsoQuant",       label = "IsoQuant",          bottom = TRUE),
+    list(platform = "ONT",    method = "FLAIR",           label = "FLAIR",             bottom = TRUE),
+    list(platform = "ONT",    method = "Bambu",           label = "Bambu",             bottom = TRUE),
+    list(platform = "ONT",    method = "TALON",           label = "TALON",             bottom = TRUE)
+  )
+
+  plots <- list()
+  for (entry in tool_grid) {
+    p <- build_sirv_comparison_dumbbell(
+      comparison_df, entry$platform, entry$method, entry$label,
+      show_x_axis = entry$bottom
+    )
+    if (!is.null(p)) plots[[paste(entry$platform, entry$label)]] <- p
+  }
+  plots
+}
+```
+
+
+```{r dumbbell-assembled, fig.width=18, fig.height=12}
+db_plots <- assemble_sirv_comparison_dumbbells(comparison_df)
+
+if (length(db_plots) > 0) {
+  legend_grob <- cowplot::get_legend(db_plots[[1]])
+  legend_panel <- ggpubr::as_ggplot(legend_grob)
+
+  no_legend <- lapply(db_plots, function(p) p + theme(legend.position = "none"))
+
+  isoseq_names <- grep("^IsoSeq", names(no_legend), value = TRUE)
+  ont_names    <- grep("^ONT", names(no_legend), value = TRUE)
+
+  isoseq_plots <- no_legend[isoseq_names]
+  ont_plots    <- no_legend[ont_names]
+
+  while (length(isoseq_plots) < 6) isoseq_plots[[length(isoseq_plots) + 1]] <- plot_spacer()
+  while (length(ont_plots) < 4) ont_plots[[length(ont_plots) + 1]] <- plot_spacer()
+
+  x_label <- ggplot() +
+    annotate("text", x = 0.5, y = 0.5, label = "Metric value (%)",
+             size = 5, fontface = "plain") +
+    theme_void()
+
+  db_assembled <- (
+    isoseq_plots[[1]] + isoseq_plots[[2]] + isoseq_plots[[3]] + isoseq_plots[[4]] +
+    isoseq_plots[[5]] + isoseq_plots[[6]] + legend_panel +
+    plot_spacer() +
+    ont_plots[[1]] + ont_plots[[2]] + ont_plots[[3]] + ont_plots[[4]] +
+    x_label
+  ) +
+    plot_layout(
+      design = "
+        ABCD
+        EFGG
+        HHHH
+        IJKM
+        NNNN
+      ",
+      heights = c(1, 1, 0.15, 1, 0.08)
+    ) +
+    plot_annotation(
+      title = "SIRV evaluation: With vs. Without SIRV annotation",
+      theme = theme(plot.title = element_text(size = 22, face = "bold", hjust = 0.5))
+    )
+
+  label_a <- ggplot() +
+    annotate("text", x = .5, y = .5, label = "a", size = 10, fontface = "bold") +
+    theme_void()
+  label_b <- ggplot() +
+    annotate("text", x = .5, y = .5, label = "b", size = 10, fontface = "bold") +
+    theme_void()
+
+  final_db <- wrap_elements(db_assembled) +
+    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
+    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.40)
+
+  print(final_db)
+
+  ggsave("plot_creation/sirv_comparison_dumbbell.pdf",
+         device = cairo_pdf, plot = final_db, width = 18, height = 12, unit = "in")
+}
+```
+
+
+# Export
+
+```{r export}
+if (!dir.exists("plot_creation")) dir.create("plot_creation")
+
+export_df <- comparison_df %>%
+  select(-missing_sirvs)
+
+write_csv(export_df, "plot_creation/sirv_comparison_metrics.csv")
+
+cat(sprintf("Exported %d rows to plot_creation/sirv_comparison_metrics.csv\n", nrow(export_df)))
+```
