@@ -4,9 +4,9 @@
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs/sqanti_reads_merge_%j.log
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=12
-#SBATCH --mem=40gb
+#SBATCH --mem=100gb
 #SBATCH --qos=medium
-#SBATCH --time=2-00:00:00
+#SBATCH --time=7-00:00:00
 
 source ~/.bashrc
 
@@ -34,4 +34,4 @@ python3 ${sqanti_dir}/sqanti_reads.py \
     -p "ONT_R10" \
     -d ${sqanti_out_dir}/out \
     --force_id_ignore \
-    -t 12 -n 1 --skip_hash
+    -t 12 -n 1
