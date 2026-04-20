@@ -1,0 +1,8 @@
+{
+    "data": "ont_r10_human",
+    "algorithm": "bambu",
+    "result_name": "ont_r10/bambu",
+    "bambu_denovo": true,
+    "bambu_ndr": 1,
+    "bambu_env": "bambu_old"
+}

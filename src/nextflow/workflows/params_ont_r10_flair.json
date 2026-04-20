@@ -1,0 +1,5 @@
+{
+    "data": "ont_r10_human",
+    "algorithm": "flair",
+    "result_name": "ont_r10/flair"
+}

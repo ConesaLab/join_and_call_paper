@@ -1,5 +1,5 @@
-# cond	sample_id	pool	bam_file	fastq_file
-NB	NB1	pool1	/DUMMY/PATH/NB1.bam	/DUMMY/PATH/NB1.fastq.gz
-NB	NB2	pool1	/DUMMY/PATH/NB2.bam	/DUMMY/PATH/NB2.fastq.gz
-NB	NB3	pool1	/DUMMY/PATH/NB3.bam	/DUMMY/PATH/NB3.fastq.gz
-NB	NB4	pool1	/DUMMY/PATH/NB4.bam	/DUMMY/PATH/NB4.fastq.gz
+# condition	sample	pool	bam	fastq
+SY5Y	SRR31732191	pool1	/storage/gge/Fabian/ont_r10_sy5y/bam/SRR31732191_primary_aln_sorted.bam	/storage/gge/Fabian/ont_r10_sy5y/fastq/SRR31732191.fastq
+SY5Y	SRR31732198	pool1	/storage/gge/Fabian/ont_r10_sy5y/bam/SRR31732198_primary_aln_sorted.bam	/storage/gge/Fabian/ont_r10_sy5y/fastq/SRR31732198.fastq
+SY5Y	SRR31732209	pool1	/storage/gge/Fabian/ont_r10_sy5y/bam/SRR31732209_primary_aln_sorted.bam	/storage/gge/Fabian/ont_r10_sy5y/fastq/SRR31732209.fastq
+SY5Y	SRR31732210	pool1	/storage/gge/Fabian/ont_r10_sy5y/bam/SRR31732210_primary_aln_sorted.bam	/storage/gge/Fabian/ont_r10_sy5y/fastq/SRR31732210.fastq

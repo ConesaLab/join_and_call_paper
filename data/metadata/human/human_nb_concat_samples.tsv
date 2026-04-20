@@ -1,2 +1,2 @@
-# cond	sample_id	pool	bam_file	fastq_file
-NB	NBconcat	pool1	/DUMMY/PATH/NB_concat.bam	/DUMMY/PATH/NB_concat.fastq.gz
+# condition	sample	pool	bam	fastq
+SY5Y	SY5Yconcat	pool1	/storage/gge/Fabian/ont_r10_sy5y/bam/SY5Y_concat_aln_sorted.bam	/storage/gge/Fabian/ont_r10_sy5y/fastq/SY5Y_concat.fastq

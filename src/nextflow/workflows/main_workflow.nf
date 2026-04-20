@@ -77,9 +77,9 @@ params.isoseq_trimmed_old_metadata_3samples_concat="/storage/gge/Fabian/nih/data
 params.ont_brain_only_metadata_samples="${projectDir}/../../../data/metadata/ont_brain_only/ont_brain_only_samples.tsv"
 params.ont_brain_only_metadata_concat="${projectDir}/../../../data/metadata/ont_brain_only/ont_brain_only_concat_samples.tsv"
 
-// human neuroblastoma
-params.human_metadata_samples="/DUMMY/PATH/human_nb_samples.tsv"
-params.human_metadata_concat="/DUMMY/PATH/human_nb_concat_samples.tsv"
+// human neuroblastoma (ONT R10, SY5Y cell line)
+params.human_metadata_samples="${projectDir}/../../../data/metadata/human/human_nb_samples.tsv"
+params.human_metadata_concat="${projectDir}/../../../data/metadata/human/human_nb_concat_samples.tsv"
 
 // short reads via STAR output SJ.out.tab
 params.sr_junctions_star="/storage/gge/Fabian/nih/data/metadata/flair/star/flair_sr_junc_config.tsv"
@@ -128,11 +128,11 @@ params.cage = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/lft_mm39_CAGE
 params.polyA = "/home/apadepe/polyA_site.bed"
 
 // files -- human (used when params.data starts with a human dataset)
-params.human_genome = "/DUMMY/PATH/human_genome/hg38_SIRV.fa"
-params.human_annotation = "/DUMMY/PATH/human_genome/hg38.refseq_SIRV.gtf"
-params.human_annotation_db = "/DUMMY/PATH/human_genome/hg38.refseq_SIRV.db"
-params.human_cage = "/DUMMY/PATH/human_genome/hg38_CAGE.bed"
-params.human_polyA = "/DUMMY/PATH/human_genome/hg38_polyA.bed"
+params.human_genome = "/storage/gge/Fabian/ont_r10_sy5y/ref/GRCh38_SIRV.fa"
+params.human_annotation = "/storage/gge/Fabian/ont_r10_sy5y/ref/gencode.v49_SIRV.gtf"
+params.human_annotation_db = "/storage/gge/Fabian/ont_r10_sy5y/ref/gencode.v49_SIRV.db"
+params.human_cage = null
+params.human_polyA = null
 
 // tools
 params.base_tools_location = "$HOME/tools"
