@@ -1,5 +1,7 @@
 {
     "data": "ont_r10_human",
     "algorithm": "talon",
-    "result_name": "ont_r10/talon"
+    "result_name": "ont_r10/talon",
+    "genome": "/storage/gge/Fabian/ont_r10_sy5y/ref/GRCh38_SIRV.fa",
+    "annotation": "/storage/gge/Fabian/ont_r10_sy5y/ref/gencode.v49_SIRV.gtf"
 }
