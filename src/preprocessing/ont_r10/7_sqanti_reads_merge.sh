@@ -34,4 +34,4 @@ python3 ${sqanti_dir}/sqanti_reads.py \
     -p "ONT_R10" \
     -d ${sqanti_out_dir}/out \
     --force_id_ignore \
-    -t 12 -n 1 --skip_hash
+    -t 12 -n 1
