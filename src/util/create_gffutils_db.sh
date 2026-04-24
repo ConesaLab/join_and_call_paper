@@ -8,8 +8,6 @@
 #SBATCH --qos=short
 #SBATCH --time=5:00:00
 
-set -euo pipefail
-
 if [ $# -ne 2 ]; then
     echo "Usage: sbatch create_gffutils_db.sh <input.gtf> <output.db>"
     exit 1
@@ -19,6 +17,7 @@ INPUT_GTF="$1"
 OUTPUT_DB="$2"
 
 source ~/.bashrc
+set -euo pipefail
 conda deactivate
 conda activate isoquant
 
