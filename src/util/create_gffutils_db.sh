@@ -5,8 +5,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=20gb
-#SBATCH --qos=short
-#SBATCH --time=5:00:00
+#SBATCH --qos=medium
+#SBATCH --time=7-00:00:00
 
 if [ $# -ne 2 ]; then
     echo "Usage: sbatch create_gffutils_db.sh <input.gtf> <output.db>"
