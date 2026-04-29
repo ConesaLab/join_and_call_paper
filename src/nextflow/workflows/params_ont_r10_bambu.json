@@ -6,5 +6,5 @@
     "annotation": "/storage/gge/Fabian/ont_r10_sy5y/ref/gencode.v49_SIRV.gtf",
     "bambu_denovo": true,
     "bambu_ndr": 1,
-    "bambu_env": "bambu_old"
+    "bambu_env": "bambu_env"
 }
