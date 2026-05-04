@@ -129,8 +129,8 @@ params.polyA = "/home/apadepe/polyA_site.bed"
 
 // files -- human (used when params.data starts with a human dataset)
 params.human_genome = "/storage/gge/Fabian/ont_r10_sy5y/ref/GRCh38_SIRV.fa"
-params.human_annotation = "/storage/gge/Fabian/ont_r10_sy5y/ref/gencode.v49_SIRV.gtf"
-params.human_annotation_db = "/storage/gge/Fabian/ont_r10_sy5y/ref/gencode.v49_SIRV.db"
+params.human_annotation = "/storage/gge/Fabian/ont_r10_sy5y/ref/gencode.v49_SIRV_fixed.gtf"
+params.human_annotation_db = "/storage/gge/Fabian/ont_r10_sy5y/ref/gencode.v49_SIRV_fixed.db"
 params.human_cage = null
 params.human_polyA = null
 
