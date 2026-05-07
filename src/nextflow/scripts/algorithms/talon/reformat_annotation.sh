@@ -8,6 +8,7 @@
 
 # Default values
 delete_tmp=false
+skip_gene_id_gene_name=false
 
 # Parse command line options
 while [[ "$#" -gt 0 ]]; do
@@ -22,6 +23,10 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     -d|--delete_tmp)
       delete_tmp=true
+      shift
+      ;;
+    --skip_gene_id_gene_name)
+      skip_gene_id_gene_name=true
       shift
       ;;
     *)
@@ -130,17 +135,21 @@ if [ ! -f "$final_gtf" ]; then
 
   cp $tmp_out $annotation_deduplicated
 
-  # for gene entries, copy gene_name content into gene_id as well
-  awk -F'\t' '
-    $3 == "gene" {
-      if (match($9, /gene_name "([^"]*)"/, gene_name_match)) {
-        gene_name_content = gene_name_match[1];
-        gsub(/gene_id "[^"]*"/, "gene_id \"" gene_name_content "\"", $9);
+  # for gene entries, copy gene_name content into gene_id as well (optional; skip to keep Ensembl gene_id aligned with transcripts/exons)
+  if [ "$skip_gene_id_gene_name" = true ]; then
+    cp "$annotation_deduplicated" "$annotation_deduplicated2"
+  else
+    awk -F'\t' '
+      $3 == "gene" {
+        if (match($9, /gene_name "([^"]*)"/, gene_name_match)) {
+          gene_name_content = gene_name_match[1];
+          gsub(/gene_id "[^"]*"/, "gene_id \"" gene_name_content "\"", $9);
+        }
       }
-    }
-    { print }
-  ' OFS='\t' "$annotation_deduplicated" > "$annotation_deduplicated2"
-  
+      { print }
+    ' OFS='\t' "$annotation_deduplicated" > "$annotation_deduplicated2"
+  fi
+
   # add gene_name and exon_number entries to SIRV data
   awk -F'\t' 'BEGIN {exon_number=0; last_gene_id=""} 
   {

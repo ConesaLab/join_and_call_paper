@@ -1,5 +1,7 @@
 #!/bin/bash
 
+skip_gene_id_gene_name=false
+
 # Input
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -9,6 +11,7 @@ while [[ "$#" -gt 0 ]]; do
         --metadata_samples) metadata_samples="$2"; shift ;;
         --metadata_concat) metadata_concat="$2"; shift ;;
         --joblog) joblog="$2"; shift ;;
+        --skip_gene_id_gene_name) skip_gene_id_gene_name=true ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
@@ -69,6 +72,7 @@ echo "[TALON] nConditions: $nConditions"
 echo "[TALON] annotation_talon: $annotation_talon"
 echo "[TALON] empty_database: $empty_database"
 echo "[TALON] empty_database_file: $empty_database_file"
+echo "[TALON] skip_gene_id_gene_name (reformat): $skip_gene_id_gene_name"
 
 sort_script=$(realpath "$SCRIPT_DIR/../../util/sort_gtf.sh")
 
@@ -84,7 +88,11 @@ for metadata_file in $metadata_samples $metadata_concat; do
 done
 
 # reformat and clean gtf file
-bash $SCRIPT_DIR/reformat_annotation.sh -a $annotation --delete_tmp --annotation_talon $annotation_talon
+if [ "$skip_gene_id_gene_name" = true ]; then
+    bash $SCRIPT_DIR/reformat_annotation.sh -a $annotation --delete_tmp --annotation_talon $annotation_talon --skip_gene_id_gene_name
+else
+    bash $SCRIPT_DIR/reformat_annotation.sh -a $annotation --delete_tmp --annotation_talon $annotation_talon
+fi
 
 # create talon database from gtf
 if [ ! -f "$empty_database_file" ]; then

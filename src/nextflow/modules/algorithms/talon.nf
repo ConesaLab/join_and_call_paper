@@ -19,7 +19,7 @@ process talon {
         --annotation "${params.annotation}" \\
         --metadata_samples "${in_metadata_samples}" \\
         --metadata_concat "${in_metadata_concat}" \\
-        --joblog "${joblog}"
+        --joblog "${joblog}"${params.talon_reformat_skip_gene_id_gene_name ? ' --skip_gene_id_gene_name' : ''}
 
     ln -s "\$PWD" ${wd}/talon
     """

@@ -124,6 +124,8 @@ params.bambu_denovo = false // if true, bambu runs in de novo mode (annotations=
 params.bambu_ndr = 0.5 // Novel Discovery Rate threshold for bambu de novo mode
 params.bambu_env = "bambu_env" // conda environment name for bambu
 params.annotation_db = "/storage/gge/Fabian/nih/data/metadata/isoquant/mm39.ncbiRefSeq_SIRV.db"
+// TALON reformat_annotation.sh: skip rewriting gene-line gene_id from gene_name (keeps Ensembl IDs aligned with transcripts/exons)
+params.talon_reformat_skip_gene_id_gene_name = false
 params.cage = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/lft_mm39_CAGE.bed"
 params.polyA = "/home/apadepe/polyA_site.bed"
 
