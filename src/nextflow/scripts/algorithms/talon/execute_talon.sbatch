@@ -101,6 +101,7 @@ conda deactivate
 source activate talon
 
 echo "running talon_label_reads ..."
+echo "talon_label_reads threads: 1 (avoid multi-thread heap crashes; TranscriptClean/talon still use \$n_cores=$n_cores)"
 
 # run TALON steps
 talon_label_reads \
@@ -108,7 +109,7 @@ talon_label_reads \
 	--g $genome \
 	--tmpDir "${out_label_reads}/tmp" \
 	--deleteTmp \
-	--t $n_cores \
+	--t 1 \
 	--o $out_label_reads
 
 echo "running talon ..."
