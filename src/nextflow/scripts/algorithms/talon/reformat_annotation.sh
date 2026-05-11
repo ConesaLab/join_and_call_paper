@@ -126,10 +126,18 @@ if [ ! -f "$final_gtf" ]; then
   tmp_out="${formatted_annotation%.gtf}_out.gtf"
   cp "$formatted_annotation" "$tmp_in"
 
-  # rename duplicate genes
-  while read -r gene_id; do
-    echo "renaming entries with duplicate gene_id ${gene_id}"
-    awk -v gene_id="$gene_id" 'BEGIN {OFS="\t"} { chr = $1; gsub(gene_id, gene_id "-" chr, $0); } { print }' $tmp_in > $tmp_out
+  # rename duplicate gene_names across chromosomes (dup_genes lines are gene_name tokens).
+  # Replace only full quoted attributes in column 9 — never raw gsub on $0 (e.g. token "DDX11"
+  # would corrupt "DDX11L16" and break talon_reformat / talon_initialize_database).
+  while read -r dup_token; do
+    [ -z "$dup_token" ] && continue
+    echo "renaming duplicate gene_name token: ${dup_token}"
+    awk -v token="$dup_token" 'BEGIN {FS=OFS="\t"} {
+      chr = $1
+      gsub("gene_name \"" token "\"", "gene_name \"" token "-" chr "\"", $9)
+      gsub("gene_id \"" token "\"", "gene_id \"" token "-" chr "\"", $9)
+      print
+    }' $tmp_in > $tmp_out
     cp $tmp_out $tmp_in
   done < $dup_genes
 

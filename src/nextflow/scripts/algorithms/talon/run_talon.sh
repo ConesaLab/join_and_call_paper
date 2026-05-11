@@ -94,14 +94,17 @@ else
     bash $SCRIPT_DIR/reformat_annotation.sh -a $annotation --delete_tmp --annotation_talon $annotation_talon
 fi
 
-# create talon database from gtf
-if [ ! -f "$empty_database_file" ]; then
-    talon_initialize_database \
-        --f ${annotation_talon} \
-        --g ${genome_name} \
-        --a ${annotation_name} \
-        --o ${empty_database}
-fi
+# create talon database from GTF: always rebuild the empty template DB on each run_talon
+# invocation (fresh Nextflow work dirs, and safe re-runs after annotation/script fixes).
+# talon_initialize_database refuses to overwrite an existing file, so remove it first.
+echo "[TALON] removing any prior empty database and re-running talon_initialize_database"
+rm -f "${empty_database_file}" "${empty_database_file}-wal" "${empty_database_file}-shm"
+
+talon_initialize_database \
+    --f ${annotation_talon} \
+    --g ${genome_name} \
+    --a ${annotation_name} \
+    --o ${empty_database}
 
 # call execute_talon for each sample
 if [ $nSamples -ge 1 ]; then
