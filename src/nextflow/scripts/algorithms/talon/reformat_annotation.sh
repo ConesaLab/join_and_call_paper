@@ -112,6 +112,19 @@ if [ ! -f "$final_gtf" ]; then
   echo "running talon_reformat_gtf"
   talon_reformat_gtf -gtf $annotation_fixedsirv
 
+  # talon_reformat_gtf can emit gene lines where the literal text "gene_name" is fused inside
+  # the gene_id value (missing closing quote + ';' before the real gene_name attribute), e.g.
+  # gene_id "ENSG00000290825.2gene_name";gene_name "DDX11L16"
+  # Transcript/exon lines are usually fine; repair gene features only (GNU awk gensub).
+  echo "repairing gene_id attribute fusion (gene_name inside gene_id quotes) on gene lines"
+  awk -F'\t' -v OFS='\t' '
+    $3 == "gene" {
+      $9 = gensub(/gene_id "([^"]*)gene_name"/, "gene_id \"\\1\"", "g", $9)
+    }
+    { print }
+  ' "$annotation_reformatted" > "${annotation_reformatted%.gtf}_gene_id_repair.tmp" \
+    && mv "${annotation_reformatted%.gtf}_gene_id_repair.tmp" "$annotation_reformatted"
+
 
   # Optional cleanup after talon_reformat_gtf. The first gsub targets a rare typo where
   # "gene_name" is wrongly concatenated inside the gene_id quotes. On normal GENCODE
