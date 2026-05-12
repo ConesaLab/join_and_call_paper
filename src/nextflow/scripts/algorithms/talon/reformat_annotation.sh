@@ -117,10 +117,30 @@ if [ ! -f "$final_gtf" ]; then
   awk '{ gsub("gene_id \"[^\"]*gene_name", "gene_id \""); gsub(";gene_name", "; gene_name"); print }' "$annotation_reformatted" > "$formatted_annotation"
 
 
-  # determine all duplicate genes
+  # Gene names that appear on more than one seqname ($1), using only gene features.
+  # (Do not count "same name on many gene lines on one chromosome" — that wrongly
+  # matched the old logic and could create a huge duplicate_genes.txt.)
   dup_genes="${tmp}/duplicate_genes.txt"
-  echo "determining duplicate gene_id entries on multiple chromosomes"
-  awk 'BEGIN {OFS="\t"} $3 == "gene" { gene_name = ""; match($0, /gene_name "[^"]+"/); if (RSTART) gene_name = substr($0, RSTART + 10, RLENGTH - 11); if (gene_name != "") genes[gene_name]++; } END { for (gene in genes) { if (genes[gene] > 1) { gsub(/^"/, "", gene); print gene; } } }' $formatted_annotation > $dup_genes
+  echo "determining gene_name tokens present on multiple chromosomes / contigs"
+  awk 'BEGIN {FS=OFS="\t"}
+  $3 == "gene" {
+    gene_name = ""
+    if (match($0, /gene_name "[^"]+"/)) {
+      gene_name = substr($0, RSTART + 10, RLENGTH - 11)
+      gsub(/^"/, "", gene_name)
+    }
+    if (gene_name != "") seen[gene_name SUBSEP $1] = 1
+  }
+  END {
+    for (k in seen) {
+      split(k, a, SUBSEP)
+      g = a[1]
+      nchr[g]++
+    }
+    for (g in nchr) {
+      if (nchr[g] > 1) print g
+    }
+  }' "$formatted_annotation" > $dup_genes
 
   tmp_in="${formatted_annotation%.gtf}_in.gtf"
   tmp_out="${formatted_annotation%.gtf}_out.gtf"
