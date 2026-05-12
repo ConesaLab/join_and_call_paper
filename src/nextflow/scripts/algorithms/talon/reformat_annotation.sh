@@ -113,8 +113,15 @@ if [ ! -f "$final_gtf" ]; then
   talon_reformat_gtf -gtf $annotation_fixedsirv
 
 
-  # fix formatting (the gene_id sometimes contains the suffix string "gene_name"; following the gene_id, the space after the semicolon before the gene_name is sometimes missing)
-  awk '{ gsub("gene_id \"[^\"]*gene_name", "gene_id \""); gsub(";gene_name", "; gene_name"); print }' "$annotation_reformatted" > "$formatted_annotation"
+  # Optional cleanup after talon_reformat_gtf. The first gsub targets a rare typo where
+  # "gene_name" is wrongly concatenated inside the gene_id quotes. On normal GENCODE
+  # lines that are missing a closing quote before '; gene_name', it can mis-match and
+  # wipe gene_id (--skip_gene_id_gene_name skips that risky fix; only normalizes ';gene_name').
+  if [ "$skip_gene_id_gene_name" = true ]; then
+    awk '{ gsub(";gene_name", "; gene_name"); print }' "$annotation_reformatted" > "$formatted_annotation"
+  else
+    awk '{ gsub("gene_id \"[^\"]*gene_name", "gene_id \""); gsub(";gene_name", "; gene_name"); print }' "$annotation_reformatted" > "$formatted_annotation"
+  fi
 
 
   # Gene names that appear on more than one seqname ($1), using only gene features.

@@ -25,10 +25,10 @@ source activate talon
 
 rm -f "${OUT_GTF}"
 
+# Omit --delete_tmp so annotation/tmp intermediates remain for validation.
 bash "${REFORMAT}" \
   -a "${REF_DIR}/gencode.v49_SIRV_fixed.gtf" \
   -o "${OUT_GTF}" \
-  --delete_tmp \
   --skip_gene_id_gene_name
 
 # rm -f "${DB_PREFIX}.db" "${DB_PREFIX}.db-wal" "${DB_PREFIX}.db-shm"
