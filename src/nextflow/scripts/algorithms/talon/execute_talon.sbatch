@@ -9,6 +9,7 @@
 #SBATCH -o log/talon_%A_%a.out
 
 module load anaconda
+module load samtools
 
 # Input
 WD="$1"
@@ -20,6 +21,7 @@ metadata="$6"
 empty_database="$7"
 out_iso_detect="$8"
 out_quant="$9"
+max_reads="${10:-0}"
 line_number_metadata=$((SLURM_ARRAY_TASK_ID + 1)) # Add 1 because of header
 n_cores="$SLURM_CPUS_PER_TASK"
 
@@ -51,6 +53,7 @@ echo "Out dir label_reads: $out_label_reads"
 echo "Out dir talon: $out_talon"
 echo "Out dir quant: $out_quant"
 echo "N cores: $n_cores"
+echo "talon_max_reads (0 = full SAM): ${max_reads:-0}"
 echo ""
 
 # Check if output directories exist
@@ -86,6 +89,21 @@ if [ ! -f "$sam_file" ]; then
 	samtools view -h "$bam_file" > "$sam_file"
 fi
 
+# Optional smoke test: first N primary alignments only (header + N data lines)
+if [[ "${max_reads}" =~ ^[0-9]+$ ]] && [ "${max_reads}" -gt 0 ]; then
+	subset_sam="${out_transcriptclean}/${sample_id}.maxreads${max_reads}.sam"
+	if [ -f "$subset_sam" ]; then
+		echo "Reusing subset SAM (${max_reads} reads): $subset_sam"
+	else
+		echo "Subsetting SAM to first ${max_reads} alignments -> $subset_sam"
+		{
+			samtools view -H "$sam_file"
+			samtools view "$sam_file" | head -n "${max_reads}"
+		} > "$subset_sam" || { echo "ERROR: SAM subset failed"; exit 1; }
+	fi
+	sam_file="$subset_sam"
+fi
+
 echo "running TranscriptClean ..."
 
 # run TranscriptClean
@@ -100,6 +118,9 @@ transcriptclean \
 conda deactivate
 source activate talon
 
+# Fail fast if main talon crashes (avoids misleading filter/GTF/abundance errors on empty DB).
+set -e
+
 echo "running talon_label_reads ..."
 echo "talon_label_reads threads: 1 (avoid multi-thread heap crashes; TranscriptClean/talon still use \$n_cores=$n_cores)"
 
@@ -113,12 +134,13 @@ talon_label_reads \
 	--o $out_label_reads
 
 echo "running talon ..."
+echo "talon main threads: 1 (avoid segfaults seen with multi-threaded talon on ONT)"
 talon \
 	--f $config_file \
 	--db $talon_database \
 	--build $genome_name \
 	--tmpDir "$(dirname $out_talon)/tmp" \
-	--threads $n_cores \
+	--threads 1 \
 	--o $out_talon
 
 echo "running talon_filter_transcripts ..."

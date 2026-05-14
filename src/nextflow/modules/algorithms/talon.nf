@@ -19,7 +19,7 @@ process talon {
         --annotation "${params.annotation}" \\
         --metadata_samples "${in_metadata_samples}" \\
         --metadata_concat "${in_metadata_concat}" \\
-        --joblog "${joblog}"${params.talon_reformat_skip_gene_id_gene_name ? ' --skip_gene_id_gene_name' : ''}
+        --joblog "${joblog}"${params.talon_reformat_skip_gene_id_gene_name ? ' --skip_gene_id_gene_name' : ''}${params.talon_max_reads > 0 ? " --talon_max_reads ${params.talon_max_reads}" : ''}
 
     ln -s "\$PWD" ${wd}/talon
     """
