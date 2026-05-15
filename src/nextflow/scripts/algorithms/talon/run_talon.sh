@@ -2,6 +2,8 @@
 
 skip_gene_id_gene_name=false
 talon_max_reads=0
+talon_main_threads=1
+talon_cap_blas_threads=false
 
 # Input
 while [[ "$#" -gt 0 ]]; do
@@ -14,6 +16,8 @@ while [[ "$#" -gt 0 ]]; do
         --joblog) joblog="$2"; shift ;;
         --skip_gene_id_gene_name) skip_gene_id_gene_name=true ;;
         --talon_max_reads) talon_max_reads="$2"; shift ;;
+        --talon_main_threads) talon_main_threads="$2"; shift ;;
+        --talon_cap_blas_threads) talon_cap_blas_threads=true ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
@@ -21,6 +25,10 @@ done
 
 if ! [[ "${talon_max_reads}" =~ ^[0-9]+$ ]]; then
     echo "[TALON] ERROR: --talon_max_reads must be a non-negative integer, got: ${talon_max_reads}" >&2
+    exit 1
+fi
+if ! [[ "${talon_main_threads}" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[TALON] ERROR: --talon_main_threads must be a positive integer, got: ${talon_main_threads}" >&2
     exit 1
 fi
 
@@ -81,6 +89,8 @@ echo "[TALON] empty_database: $empty_database"
 echo "[TALON] empty_database_file: $empty_database_file"
 echo "[TALON] skip_gene_id_gene_name (reformat): $skip_gene_id_gene_name"
 echo "[TALON] talon_max_reads (0 = full SAM): $talon_max_reads"
+echo "[TALON] talon_main_threads (main talon --threads): $talon_main_threads"
+echo "[TALON] talon_cap_blas_threads (export OMP_*=1 before talon): $talon_cap_blas_threads"
 
 sort_script=$(realpath "$SCRIPT_DIR/../../util/sort_gtf.sh")
 
@@ -116,14 +126,18 @@ talon_initialize_database \
 
 # call execute_talon for each sample
 if [ $nSamples -ge 1 ]; then
-    jobid=$(sbatch --wait --array=1-$nSamples $SCRIPT_DIR/execute_talon.sbatch $WD $genome_name $genome $annotation_name $annotation_talon $metadata_samples $empty_database_file $out_iso_detect $out_quant "$talon_max_reads" | awk '{print $NF}')
+    cap_blas_flag=0
+    [ "$talon_cap_blas_threads" = true ] && cap_blas_flag=1
+    jobid=$(sbatch --wait --array=1-$nSamples $SCRIPT_DIR/execute_talon.sbatch $WD $genome_name $genome $annotation_name $annotation_talon $metadata_samples $empty_database_file $out_iso_detect $out_quant "$talon_max_reads" "$talon_main_threads" "$cap_blas_flag" | awk '{print $NF}')
 	echo -e "TALON_IND\t${jobid}" >> $joblog
 fi
 
 # run talon for each concatenated file (per condition)
 if [ $nConditions -ge 1 ]; then
     # assign extra resources for concat runs
-    jobid=$(sbatch --qos medium -t 7-00:00:00 --mem 500gb --wait --array=1-$nConditions $SCRIPT_DIR/execute_talon.sbatch $WD $genome_name $genome $annotation_name $annotation_talon $metadata_concat $empty_database_file $out_iso_detect $out_quant "$talon_max_reads" | awk '{print $NF}')
+    cap_blas_flag=0
+    [ "$talon_cap_blas_threads" = true ] && cap_blas_flag=1
+    jobid=$(sbatch --qos medium -t 7-00:00:00 --mem 500gb --wait --array=1-$nConditions $SCRIPT_DIR/execute_talon.sbatch $WD $genome_name $genome $annotation_name $annotation_talon $metadata_concat $empty_database_file $out_iso_detect $out_quant "$talon_max_reads" "$talon_main_threads" "$cap_blas_flag" | awk '{print $NF}')
     echo -e "TALON_CONCAT\t${jobid}" >> $joblog
 fi
 

@@ -128,6 +128,10 @@ params.annotation_db = "/storage/gge/Fabian/nih/data/metadata/isoquant/mm39.ncbi
 params.talon_reformat_skip_gene_id_gene_name = false
 // TALON smoke test: first N alignments per array task (0 = use full SAM). Passed to execute_talon.sbatch.
 params.talon_max_reads = 0
+// Main `talon` step --threads (>=1). Default 1 avoids known multi-thread segfaults on ONT; raise for experiments via params JSON.
+params.talon_main_threads = 1
+// If true, export OMP_/OpenBLAS/MKL thread caps to 1 immediately before main `talon` only.
+params.talon_cap_blas_threads = false
 params.cage = "/storage/gge/genomes/mouse_ref_NIH/reference_genome/lft_mm39_CAGE.bed"
 params.polyA = "/home/apadepe/polyA_site.bed"
 

@@ -22,7 +22,8 @@ empty_database="$7"
 out_iso_detect="$8"
 out_quant="$9"
 max_reads="${10:-0}"
-line_number_metadata=$((SLURM_ARRAY_TASK_ID + 1)) # Add 1 because of header
+talon_main_threads="${11:-1}"
+cap_blas="${12:-0}"
 n_cores="$SLURM_CPUS_PER_TASK"
 
 # Change working directory
@@ -54,6 +55,8 @@ echo "Out dir talon: $out_talon"
 echo "Out dir quant: $out_quant"
 echo "N cores: $n_cores"
 echo "talon_max_reads (0 = full SAM): ${max_reads:-0}"
+echo "talon_main_threads (--threads for main talon): ${talon_main_threads}"
+echo "cap_blas (1 = export OMP_/OpenBLAS/MKL=1 before talon): ${cap_blas}"
 echo ""
 
 # Check if output directories exist
@@ -122,7 +125,7 @@ source activate talon
 set -e
 
 echo "running talon_label_reads ..."
-echo "talon_label_reads threads: 1 (avoid multi-thread heap crashes; TranscriptClean/talon still use \$n_cores=$n_cores)"
+echo "talon_label_reads threads: 1 (avoid multi-thread heap crashes; TranscriptClean uses n_cores=$n_cores; main talon uses talon_main_threads=$talon_main_threads)"
 
 # run TALON steps
 talon_label_reads \
@@ -134,13 +137,22 @@ talon_label_reads \
 	--o $out_label_reads
 
 echo "running talon ..."
-echo "talon main threads: 1 (avoid segfaults seen with multi-threaded talon on ONT)"
+echo "talon main --threads: ${talon_main_threads} (Slurm CPUs: ${n_cores}); cap_blas=${cap_blas}"
+
+if [ "${cap_blas}" = "1" ]; then
+	export OMP_NUM_THREADS=1
+	export OPENBLAS_NUM_THREADS=1
+	export MKL_NUM_THREADS=1
+	export NUMEXPR_NUM_THREADS=1
+	echo "Set OMP_/OpenBLAS/MKL/NUMEXPR thread caps to 1 for main talon only"
+fi
+
 talon \
 	--f $config_file \
 	--db $talon_database \
 	--build $genome_name \
 	--tmpDir "$(dirname $out_talon)/tmp" \
-	--threads 1 \
+	--threads "${talon_main_threads}" \
 	--o $out_talon
 
 echo "running talon_filter_transcripts ..."

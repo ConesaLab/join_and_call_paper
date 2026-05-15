@@ -1,0 +1,12 @@
+{
+    "data": "ont_r10_human",
+    "algorithm": "talon",
+    "result_name": "ont_r10/talon/sub1k_mt16_blascap",
+    "genome": "/storage/gge/Fabian/ont_r10_sy5y/ref/GRCh38_SIRV.fa",
+    "annotation": "/storage/gge/Fabian/ont_r10_sy5y/ref/gencode.v49_SIRV_fixed.gtf",
+    "sqanti_annotation": "/storage/gge/Fabian/ont_r10_sy5y/ref/gencode.v49_SIRV_fixed.gtf",
+    "talon_reformat_skip_gene_id_gene_name": true,
+    "talon_max_reads": 1000,
+    "talon_main_threads": 16,
+    "talon_cap_blas_threads": true
+}
