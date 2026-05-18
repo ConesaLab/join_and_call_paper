@@ -5,3 +5,5 @@
 /*.zip
 /src/plotting/*.csv
 /data/sirv_results/
+/data/
+/reports/
