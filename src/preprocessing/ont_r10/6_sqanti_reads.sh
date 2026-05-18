@@ -8,6 +8,13 @@
 #SBATCH --qos=medium
 #SBATCH --time=2-00:00:00
 #SBATCH --array=0-3
+#
+# Optional: write BAM->GFF and gffread GTF to a separate directory so existing
+#   ${base_dir}/analysis/sqanti_reads/<SRR>.{gff,gtf} are not overwritten, and keep the .gff.
+#   Example (submit from repo with list_fastqs.fof):
+#     sbatch --export=ALL,SQANTI_READS_INTERMEDIATE_OUTDIR=/storage/gge/Fabian/ont_r10_sy5y/analysis/sqanti_reads_bam2gff_probe \
+#       src/preprocessing/ont_r10/6_sqanti_reads.sh
+# SQANTI3 still writes under analysis/sqanti_reads/<SRR>/ unless you change that separately.
 
 source ~/.bashrc
 
@@ -41,15 +48,32 @@ bam="${bam_dir}/${filename}_primary_aln_sorted.bam"
 
 echo $filename
 
+# BAM -> GFF -> GTF: default paths under outdir; optional alternate dir (no overwrite of originals)
+intermediate_dir="${SQANTI_READS_INTERMEDIATE_OUTDIR:-}"
+if [[ -n "${intermediate_dir}" ]]; then
+  mkdir -p "${intermediate_dir}"
+  gff_path="${intermediate_dir}/${filename}.gff"
+  gtf_path="${intermediate_dir}/${filename}.gtf"
+  echo "Using intermediate dir (GFF/GTF not written to main sqanti_reads root): ${intermediate_dir}"
+else
+  gff_path="${outdir}/${filename}.gff"
+  gtf_path="${outdir}/${filename}.gtf"
+fi
+
 # Convert BAM to GFF, then GFF to GTF for SQANTI reads input
-spliced_bam2gff -t 1000000 -M ${bam} > ${outdir}/${filename}.gff
+spliced_bam2gff -t 1000000 -M "${bam}" > "${gff_path}"
 
-gffread ${outdir}/${filename}.gff -T -o ${outdir}/${filename}.gtf
+gffread "${gff_path}" -T -o "${gtf_path}"
 
-rm ${outdir}/${filename}.gff
+# Remove GFF only when using default layout (saves space). Always keep .gff when using a separate intermediate dir.
+if [[ -z "${intermediate_dir}" ]]; then
+  rm -f "${gff_path}"
+else
+  echo "Kept intermediate GFF: ${gff_path}"
+fi
 
 python3 ${sqanti_dir}/sqanti3_qc.py \
     --skipORF --dir "${outdir}/${filename}" \
     --output "${filename}_reads" --min_ref_len "0" \
     --report "skip" --force_id_ignore \
-    ${outdir}/${filename}.gtf ${ref_annotation} ${assembly}
+    "${gtf_path}" ${ref_annotation} ${assembly}
