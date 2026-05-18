@@ -14,12 +14,16 @@
 #
 # Submit from repo: sbatch src/preprocessing/ont_r10/10_get_read_lengths_bam.sh
 # Requires: list_fastqs.fof and *_primary_aln_sorted.bam under base_dir/bam/.
+#
+# Strict mode after sourcing bashrc: with nounset enabled first, /etc/bashrc can fail on
+# unset BASHRCSOURCED when sourcing ~/.bashrc.
 
-set -euo pipefail
 LC_ALL=C
 
 source ~/.bashrc
 module load samtools
+
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="/storage/gge/Fabian/ont_r10_sy5y"

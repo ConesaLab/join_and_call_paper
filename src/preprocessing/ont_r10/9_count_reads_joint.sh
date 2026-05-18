@@ -14,12 +14,16 @@
 #
 # Submit from repo: sbatch src/preprocessing/ont_r10/9_count_reads_joint.sh
 # Requires: list_fastqs.fof (same directory as this script) and data under base_dir.
+#
+# Strict mode after sourcing bashrc: with nounset enabled first, /etc/bashrc can fail on
+# unset BASHRCSOURCED when sourcing ~/.bashrc.
 
-set -euo pipefail
 LC_ALL=C
 
 source ~/.bashrc
 module load samtools
+
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="/storage/gge/Fabian/ont_r10_sy5y"
