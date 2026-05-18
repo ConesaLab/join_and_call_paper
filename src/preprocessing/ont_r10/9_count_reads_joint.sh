@@ -12,8 +12,13 @@
 # (mouse NIH): sample, ont_prim_aln, ont_fastq, pb_prim_aln, pb_fastq.
 # PacBio columns are 0 (ONT-only SY5Y dataset).
 #
-# Submit from repo: sbatch src/preprocessing/ont_r10/9_count_reads_joint.sh
-# Requires: list_fastqs.fof (same directory as this script) and data under base_dir.
+# Submit (Slurm copies this script to spool; do not rely on the script file path):
+#   cd /path/to/join_and_call_paper && sbatch src/preprocessing/ont_r10/9_count_reads_joint.sh
+# or: cd .../join_and_call_paper/src/preprocessing/ont_r10 && sbatch 9_count_reads_joint.sh
+# or: export LIST_FASTQS_FOF=/abs/path/list_fastqs.fof && sbatch ...
+# or: copy list_fastqs.fof to ${BASE_DIR}/list_fastqs.fof (see BASE_DIR below).
+#
+# Requires: list_fastqs.fof and data under BASE_DIR.
 #
 # Strict mode after sourcing bashrc: with nounset enabled first, /etc/bashrc can fail on
 # unset BASHRCSOURCED when sourcing ~/.bashrc.
@@ -25,12 +30,35 @@ module load samtools
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="/storage/gge/Fabian/ont_r10_sy5y"
 BAMDIR="${BASE_DIR}/bam"
 OUT_DIR="${BASE_DIR}/analysis/read_qc"
 OUT_TSV="${OUT_DIR}/read_numbers_joint.tsv"
-FOF="${SCRIPT_DIR}/list_fastqs.fof"
+
+# list_fastqs.fof: Slurm runs a *copy* of this script under /var/spool/slurm/..., so
+# dirname(BASH_SOURCE) is not the repo. Resolve FOF in order:
+#   LIST_FASTQS_FOF -> SLURM_SUBMIT_DIR paths -> BASE_DIR -> script dir (local runs).
+FOF=""
+if [[ -n "${LIST_FASTQS_FOF:-}" && -f "${LIST_FASTQS_FOF}" ]]; then
+  FOF="${LIST_FASTQS_FOF}"
+elif [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  for c in "${SLURM_SUBMIT_DIR}/src/preprocessing/ont_r10/list_fastqs.fof" \
+    "${SLURM_SUBMIT_DIR}/list_fastqs.fof"; do
+    if [[ -f "$c" ]]; then
+      FOF="$c"
+      break
+    fi
+  done
+fi
+if [[ -z "${FOF}" && -f "${BASE_DIR}/list_fastqs.fof" ]]; then
+  FOF="${BASE_DIR}/list_fastqs.fof"
+fi
+if [[ -z "${FOF}" ]]; then
+  _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "${_script_dir}/list_fastqs.fof" ]]; then
+    FOF="${_script_dir}/list_fastqs.fof"
+  fi
+fi
 
 THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
@@ -63,10 +91,14 @@ count_primary_mapped_bam() {
   samtools view -@ "$THREADS" -c -F 2308 -- "$bam"
 }
 
-if [[ ! -e "$FOF" ]]; then
-  echo "ERROR: missing ${FOF}" >&2
+if [[ -z "${FOF}" || ! -f "${FOF}" ]]; then
+  echo "ERROR: could not find list_fastqs.fof (Slurm spool breaks paths next to this script)." >&2
+  echo "  Try: cd <repo> && sbatch src/preprocessing/ont_r10/9_count_reads_joint.sh" >&2
+  echo "  Or:  export LIST_FASTQS_FOF=/path/to/list_fastqs.fof" >&2
+  echo "  Or:  cp list_fastqs.fof ${BASE_DIR}/" >&2
   exit 1
 fi
+echo "Using list_fastqs.fof: ${FOF}"
 
 mapfile -t FASTQ_PATHS < "$FOF"
 

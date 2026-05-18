@@ -12,8 +12,11 @@
 # for each primary-mapped alignment, -F 2308). Same format as src/util/get_read_lengths.sbatch
 # for mouse NIH .bam.readlen.txt files (no subsampling).
 #
-# Submit from repo: sbatch src/preprocessing/ont_r10/10_get_read_lengths_bam.sh
-# Requires: list_fastqs.fof and *_primary_aln_sorted.bam under base_dir/bam/.
+# Submit (Slurm copies this script to spool; see 9_count_reads_joint.sh header).
+#   cd /path/to/join_and_call_paper && sbatch src/preprocessing/ont_r10/10_get_read_lengths_bam.sh
+# or set LIST_FASTQS_FOF, or place list_fastqs.fof under BASE_DIR.
+#
+# Requires: list_fastqs.fof and *_primary_aln_sorted.bam under BASE_DIR/bam/.
 #
 # Strict mode after sourcing bashrc: with nounset enabled first, /etc/bashrc can fail on
 # unset BASHRCSOURCED when sourcing ~/.bashrc.
@@ -25,11 +28,31 @@ module load samtools
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="/storage/gge/Fabian/ont_r10_sy5y"
 BAMDIR="${BASE_DIR}/bam"
 OUT_DIR="${BASE_DIR}/analysis/read_qc/lengths_seq_only/ont"
-FOF="${SCRIPT_DIR}/list_fastqs.fof"
+
+FOF=""
+if [[ -n "${LIST_FASTQS_FOF:-}" && -f "${LIST_FASTQS_FOF}" ]]; then
+  FOF="${LIST_FASTQS_FOF}"
+elif [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  for c in "${SLURM_SUBMIT_DIR}/src/preprocessing/ont_r10/list_fastqs.fof" \
+    "${SLURM_SUBMIT_DIR}/list_fastqs.fof"; do
+    if [[ -f "$c" ]]; then
+      FOF="$c"
+      break
+    fi
+  done
+fi
+if [[ -z "${FOF}" && -f "${BASE_DIR}/list_fastqs.fof" ]]; then
+  FOF="${BASE_DIR}/list_fastqs.fof"
+fi
+if [[ -z "${FOF}" ]]; then
+  _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "${_script_dir}/list_fastqs.fof" ]]; then
+    FOF="${_script_dir}/list_fastqs.fof"
+  fi
+fi
 
 THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
@@ -51,10 +74,14 @@ write_bam_seq_lengths() {
     awk '{s=$10; if (s == "*" || s == "") { print 0 } else { print length(s) } }' >"$out"
 }
 
-if [[ ! -e "$FOF" ]]; then
-  echo "ERROR: missing ${FOF}" >&2
+if [[ -z "${FOF}" || ! -f "${FOF}" ]]; then
+  echo "ERROR: could not find list_fastqs.fof (Slurm spool breaks paths next to this script)." >&2
+  echo "  Try: cd <repo> && sbatch src/preprocessing/ont_r10/10_get_read_lengths_bam.sh" >&2
+  echo "  Or:  export LIST_FASTQS_FOF=/path/to/list_fastqs.fof" >&2
+  echo "  Or:  cp list_fastqs.fof ${BASE_DIR}/" >&2
   exit 1
 fi
+echo "Using list_fastqs.fof: ${FOF}"
 
 mapfile -t FASTQ_PATHS < "$FOF"
 
