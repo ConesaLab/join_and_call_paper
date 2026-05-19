@@ -54,9 +54,17 @@ idx2id <- function(idx, ids){
 }
 
 # format counts the way SQANTI likes
-counts2SQ <- function(counts){
+# SQANTI3's FLcount_parser (e.g. parsers.py) casts abundance to int(); Bambu's
+# per-sample assay values are often non-integer (estimates / normalized), which
+# raises ValueError on individual (single-column) runs. Round to integer counts.
+counts2SQ <- function(counts) {
   original_cols <- colnames(counts)
-  if (ncol(counts) > 1){
+  for (cn in original_cols) {
+    if (is.numeric(counts[[cn]])) {
+      counts[[cn]] <- as.integer(round(counts[[cn]]))
+    }
+  }
+  if (ncol(counts) > 1) {
     counts$superPBID <- rownames(counts)
     counts <- counts[, c("superPBID", original_cols)]
   } else {
