@@ -184,6 +184,11 @@ pick_tpm_quantiles <- function(tpm_data) {
 }
 
 
+tpm_x_axis_label <- function(log_x) {
+  if (log_x) "TPM threshold (\u2265, log scale)" else "TPM threshold (\u2265)"
+}
+
+
 create_tpm_line_plot <- function(curve_data, title, log_x = FALSE,
                                  ylim_max = NULL, xlim = NULL) {
 
@@ -199,7 +204,7 @@ create_tpm_line_plot <- function(curve_data, title, log_x = FALSE,
     scale_color_manual(values = simplified_cat_palette, name = "Category") +
     scale_y_continuous(labels = function(x) format(x, big.mark = ",",
                                                     scientific = FALSE)) +
-    labs(x = "TPM threshold (\u2265)", y = "# transcripts", title = title) +
+    labs(x = tpm_x_axis_label(log_x), y = "# transcripts", title = title) +
     theme_minimal(base_size = 10) +
     theme(
       plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
@@ -208,7 +213,23 @@ create_tpm_line_plot <- function(curve_data, title, log_x = FALSE,
       legend.position = "none"
     )
 
-  if (log_x) p <- p + scale_x_log10()
+  if (log_x) {
+    decade_breaks <- function(x) {
+      rng <- range(x, na.rm = TRUE, finite = TRUE)
+      if (any(rng <= 0)) return(numeric(0))
+      10^seq(ceiling(log10(rng[1])), floor(log10(rng[2])))
+    }
+    decade_labels <- function(x) {
+      formatC(x, big.mark = ",", drop0trailing = TRUE, format = "fg")
+    }
+    p <- p +
+      scale_x_log10(
+        breaks       = decade_breaks,
+        minor_breaks = as.numeric(outer(1:9, 10^(-3:2))),
+        labels       = decade_labels
+      ) +
+      annotation_logticks(sides = "b")
+  }
 
   coord_args <- list()
   if (!is.null(xlim)) coord_args$xlim <- xlim
@@ -283,7 +304,102 @@ create_tpm_pct_bar_plot <- function(curve_data, title, quantile_names = NULL) {
 }
 
 
-assemble_tpm_line_figure <- function(all_line_plots, title) {
+strategy_label_map <- c("J&C" = "Join & Call", "C&J" = "Call & Join")
+
+category_label_map <- c(
+  "FSM"   = "Full Splice Match",
+  "ISM"   = "Incomplete Splice Match",
+  "NIC"   = "Novel in Catalog",
+  "NNC"   = "Novel Not in Catalog",
+  "Other" = "Other"
+)
+
+
+legend_only_theme <- function(text_size = 16, title_size = 20) {
+  use_inside <- utils::packageVersion("ggplot2") >= "3.5.0"
+  base <- theme_void(base_size = text_size) +
+    theme(
+      legend.justification  = c(0.5, 0.5),
+      legend.title          = element_text(size = title_size, face = "bold"),
+      legend.text           = element_text(size = text_size),
+      legend.key.width      = unit(2.5, "lines"),
+      legend.key.height     = unit(1.5, "lines"),
+      legend.background     = element_blank(),
+      legend.box.background = element_blank(),
+      plot.margin           = margin(4, 4, 4, 4)
+    )
+  if (use_inside) {
+    base + theme(legend.position = "inside",
+                 legend.position.inside = c(0.5, 0.5))
+  } else {
+    base + theme(legend.position = c(0.5, 0.5))
+  }
+}
+
+
+build_tpm_strategy_legend <- function(text_size = 16, title_size = 20) {
+  strategy_df <- data.frame(
+    x = c(1, 2, 1, 2),
+    y = NA_real_,
+    strategy = factor(c("J&C", "J&C", "C&J", "C&J"),
+                      levels = c("J&C", "C&J"))
+  )
+  ggplot(strategy_df, aes(x, y, linetype = strategy)) +
+    geom_line(linewidth = 0.9, na.rm = TRUE) +
+    scale_linetype_manual(
+      values = c("J&C" = "solid", "C&J" = "dashed"),
+      labels = strategy_label_map,
+      name   = "Strategy",
+      drop   = FALSE
+    ) +
+    guides(linetype = guide_legend(
+      nrow = 2, title.position = "top",
+      override.aes = list(linewidth = 1.1)
+    )) +
+    legend_only_theme(text_size = text_size, title_size = title_size)
+}
+
+
+build_tpm_category_legend <- function(nrow = 2, ncol = 3,
+                                      text_size = 16, title_size = 20) {
+  cat_levels <- names(simplified_cat_palette)
+  cat_df <- data.frame(
+    x = seq_along(cat_levels),
+    y = NA_real_,
+    category = factor(cat_levels, levels = cat_levels)
+  )
+  ggplot(cat_df, aes(x, y, fill = category)) +
+    geom_tile(na.rm = TRUE) +
+    scale_fill_manual(
+      values = simplified_cat_palette,
+      labels = category_label_map[cat_levels],
+      name   = "Structural Category",
+      drop   = FALSE
+    ) +
+    guides(fill = guide_legend(
+      nrow = nrow, ncol = ncol, title.position = "top",
+      override.aes = list(color = NA)
+    )) +
+    legend_only_theme(text_size = text_size, title_size = title_size)
+}
+
+
+build_tpm_line_legend_figure <- function(category_layout = c(1, 5),
+                                         text_size = 16, title_size = 20) {
+  cat_layout <- as.integer(category_layout)
+  strategy_legend <- build_tpm_strategy_legend(
+    text_size = text_size, title_size = title_size
+  )
+  category_legend <- build_tpm_category_legend(
+    nrow = cat_layout[1], ncol = cat_layout[2],
+    text_size = text_size, title_size = title_size
+  )
+
+  (strategy_legend | category_legend) + plot_layout(widths = c(1, 2))
+}
+
+
+assemble_tpm_line_figure <- function(all_line_plots, title, log_x = FALSE) {
 
   line_1_1 <- all_line_plots$IsoSeq$IsoQuant
   line_1_2 <- all_line_plots$IsoSeq$FLAIR
@@ -297,36 +413,13 @@ assemble_tpm_line_figure <- function(all_line_plots, title) {
   line_3_3 <- all_line_plots$ONT$Bambu
   line_3_4 <- all_line_plots$ONT$TALON
 
-  color_legend_plot <- line_1_1 +
-    theme(legend.position = "bottom") +
-    guides(color = guide_legend(nrow = 2, ncol = 3,
-                                title = "Structural Category",
-                                title.position = "top"))
-  color_legend <- cowplot::get_legend(color_legend_plot)
-
-  strategy_df <- data.frame(
-    x = c(1, 2, 1, 2), y = c(1, 1, 2, 2),
-    strategy = factor(c("J&C", "C&J", "J&C", "C&J"),
-                      levels = c("J&C", "C&J"))
-  )
-  strategy_legend_plot <- ggplot(strategy_df,
-      aes(x, y, linetype = strategy)) +
-    geom_line() +
-    scale_linetype_manual(values = c("J&C" = "solid", "C&J" = "dashed"),
-                          name = "Strategy") +
-    theme_minimal() +
-    theme(legend.position = "bottom") +
-    guides(linetype = guide_legend(nrow = 2, title.position = "top"))
-  linetype_legend <- cowplot::get_legend(strategy_legend_plot)
-
-  combined_legend <- (wrap_elements(full = linetype_legend) |
-                      wrap_elements(full = color_legend)) +
-    plot_layout(widths = c(1, 2))
-  shared_legend <- wrap_elements(full = combined_legend)
+  shared_legend <- wrap_elements(full = build_tpm_line_legend_figure(
+    category_layout = c(2, 3)
+  ))
 
   no_x_title <- theme(axis.title.x = element_blank())
   x_title_grob <- wrap_elements(full = grid::textGrob(
-    "TPM threshold (\u2265)", gp = grid::gpar(fontsize = 12)
+    tpm_x_axis_label(log_x), gp = grid::gpar(fontsize = 12)
   ))
 
   figure <- (
@@ -347,8 +440,7 @@ assemble_tpm_line_figure <- function(all_line_plots, title) {
         IJKL
         MMMM
       ",
-      heights = c(1, 1, 0.4, 1, 0.05),
-      axes = "collect_y"
+      heights = c(1, 1, 0.4, 1, 0.05)
     ) +
     plot_annotation(
       title = title,

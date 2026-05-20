@@ -1,0 +1,419 @@
+---
+title: "Presentation Plots"
+author: "Fabian Jetzinger"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_download: false
+    toc: TRUE
+    toc_depth: 2
+    theme: spacelab
+    self_contained: true
+    highlight: tango
+    fig_width: 9
+    fig_height: 6
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      results = 'hide', fig.align = "center")
+
+library(tidyverse)
+library(cowplot)
+library(patchwork)
+library(scales)
+library(grid)
+library(ComplexUpset)
+library(ggpubr)
+library(RColorConesa)
+
+r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
+
+source(file.path(r_source_dir, "01_config.R"))
+source(file.path(r_source_dir, "02_themes.R"))
+source(file.path(r_source_dir, "03_plot_functions.R"))
+source(file.path(r_source_dir, "04_data_loading.R"))
+```
+
+
+```{r load-data}
+tools_to_load <- list(
+  IsoSeq = c("IsoQuant", "FLAIR")
+)
+
+pres_data <- list()
+pres_raw <- list()
+for (platform in names(tools_to_load)) {
+  pres_data[[platform]] <- list()
+  pres_raw[[platform]] <- list()
+  for (method in tools_to_load[[platform]]) {
+    src_dir <- src_dirs[[platform]][[method]]
+    paths <- get_paths(src_dir)
+    df_lists <- load_df_lists(paths)
+    pres_raw[[platform]][[method]] <- df_lists
+    pres_data[[platform]][[method]] <- process_and_plot(
+      df_lists$Bclass_df_list, df_lists$Kclass_df_list,
+      technology = platform, fl_threshold = 1
+    )
+  }
+}
+```
+
+
+## IsoQuant vs FLAIR — PacBio Brain
+
+```{r isoquant-vs-flair-brain, fig.width=14, fig.height=6}
+pres_labels_brain <- c("Join & Call", "Call & Join",
+                        paste("Brain", 1:5))
+
+make_pres_bar <- function(results, tissue, title, ylims, labels) {
+  plot_key <- paste0(tissue, "_plots")
+  p <- results[[plot_key]][[1]]
+
+  p +
+    scale_x_discrete(labels = labels) +
+    scale_fill_manual(values = cat.palette,
+                      labels = c("Full Splice Match", "Incomplete Splice Match",
+                                 "Novel In Catalog", "Novel Not In Catalog",
+                                 "Genic Genomic", "Antisense", "Fusion",
+                                 "Intergenic", "Genic Intron")) +
+    scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
+    ggtitle(title) +
+    ylab("# transcripts") +
+    theme_minimal() +
+    theme(
+      plot.title   = element_text(hjust = 0.5, size = 18, face = "bold"),
+      axis.text.x  = element_text(size = 11, angle = 45, hjust = 1),
+      axis.text.y  = element_text(size = 11),
+      axis.title   = element_text(size = 13),
+      axis.title.x = element_blank(),
+      legend.position = "none"
+    ) +
+    coord_cartesian(ylim = ylims)
+}
+
+p_iq <- make_pres_bar(pres_data$IsoSeq$IsoQuant, "brain",
+                       "IsoQuant", c(0, 125000), pres_labels_brain)
+p_fl <- make_pres_bar(pres_data$IsoSeq$FLAIR, "brain",
+                       "FLAIR", c(0, 125000), pres_labels_brain)
+
+p_iq_legend <- p_iq +
+  theme(legend.position = "right") +
+  guides(fill = guide_legend(ncol = 1, title = "Structural Category"))
+
+figure <- (p_iq | plot_spacer() | p_fl | cowplot::get_legend(p_iq_legend)) +
+  plot_layout(widths = c(1, 0.05, 1, 0.35), axes = "collect_y") +
+  plot_annotation(
+    title = "PacBio IsoSeq — Brain",
+    theme = theme(plot.title = element_text(size = 20, face = "bold",
+                                            hjust = 0.5))
+  )
+
+final <- figure
+
+if (!dir.exists("plot_creation")) dir.create("plot_creation")
+ggsave("plot_creation/pres_isoquant_vs_flair_brain.pdf",
+       device = cairo_pdf, plot = final,
+       width = 14, height = 6.5, unit = "in")
+
+final
+```
+
+
+## IsoQuant vs FLAIR — UJC Upset (Brain)
+
+```{r isoquant-vs-flair-upset-brain, fig.width=18, fig.height=7}
+pres_upset_labels_brain <- c("Join & Call", "Call & Join",
+                              paste("Brain", 1:5))
+
+iq_df_lists <- pres_raw$IsoSeq$IsoQuant
+fl_df_lists <- pres_raw$IsoSeq$FLAIR
+
+iq_b_filtered <- lapply(iq_df_lists$Bclass_df_list, function(df) {
+  df %>% filter(!is.na(FL) & FL >= 1)
+})
+fl_b_filtered <- lapply(fl_df_lists$Bclass_df_list, function(df) {
+  df %>% filter(!is.na(FL) & FL >= 1)
+})
+
+iq_upset <- create_upset_plot(iq_b_filtered, pres_upset_labels_brain,
+                               "IsoQuant", n = 10)
+fl_upset <- create_upset_plot(fl_b_filtered, pres_upset_labels_brain,
+                               "FLAIR", n = 10)
+
+upset_legend_src <- iq_upset[["comb_bar"]] +
+  theme(legend.position = "right",
+        legend.title = element_text(size = 13, face = "bold"),
+        legend.text  = element_text(size = 11)) +
+  guides(fill = guide_legend(ncol = 1, title = "Structural Category"))
+upset_legend <- cowplot::get_legend(upset_legend_src)
+
+figure_upset <- (wrap_elements(full = iq_upset[["upset"]]) |
+                 plot_spacer() |
+                 wrap_elements(full = fl_upset[["upset"]]) |
+                 upset_legend) +
+  plot_layout(widths = c(1, 0.05, 1, 0.3)) +
+  plot_annotation(
+    title = "PacBio IsoSeq — Brain — UJC Overlap",
+    theme = theme(plot.title = element_text(size = 20, face = "bold",
+                                            hjust = 0.5))
+  )
+
+ggsave("plot_creation/pres_isoquant_vs_flair_upset_brain.pdf",
+       device = cairo_pdf, plot = figure_upset,
+       width = 18, height = 7, unit = "in")
+
+figure_upset
+```
+
+
+## IsoQuant vs FLAIR — Expression of UJCs across samples (Brain)
+
+```{r isoquant-vs-flair-comb-fl-bar-brain, fig.width=14, fig.height=6}
+iq_comb_fl <- pres_data$IsoSeq$IsoQuant$brain_comb_fl_bar_plot +
+  ggtitle("IsoQuant") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.text  = element_text(size = 11),
+    axis.title = element_text(size = 13),
+    legend.position = "none"
+  ) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))
+
+fl_comb_fl <- pres_data$IsoSeq$FLAIR$brain_comb_fl_bar_plot +
+  ggtitle("FLAIR") +
+  ylab(NULL) +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    axis.text  = element_text(size = 11),
+    axis.title = element_text(size = 13),
+    legend.position = "none"
+  ) +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))
+
+legend_src <- pres_data$IsoSeq$IsoQuant$brain_comb_fl_bar_plot +
+  theme(legend.position = "right") +
+  guides(fill = guide_legend(ncol = 1, title = "Structural\nCategory"))
+comb_fl_legend <- cowplot::get_legend(legend_src)
+
+figure_comb_fl <- (iq_comb_fl | plot_spacer() | fl_comb_fl |
+                   comb_fl_legend) +
+  plot_layout(widths = c(1, 0.05, 1, 0.3)) +
+  plot_annotation(
+    title = "PacBio IsoSeq — Brain — Expression of UJCs across samples",
+    theme = theme(plot.title = element_text(size = 20, face = "bold",
+                                            hjust = 0.5))
+  )
+
+ggsave("plot_creation/pres_isoquant_vs_flair_comb_fl_brain.pdf",
+       device = cairo_pdf, plot = figure_comb_fl,
+       width = 14, height = 6, unit = "in")
+
+figure_comb_fl
+```
+
+
+## IsoQuant vs FLAIR — SIRV & TUSCO Dumbbell Plot (Brain)
+
+```{r load-tusco}
+source(file.path(r_source_dir, "06_sirv_analysis.R"))
+library(ggstats)
+
+load_tusco_results <- function(base_dir = "tusco_results") {
+  rdata_files <- list.files(base_dir, pattern = "\\.RData$",
+                            recursive = TRUE, full.names = TRUE)
+  tusco_results <- list()
+  for (file_path in rdata_files) {
+    if (!file.exists(file_path) || file.info(file_path)$size == 0) next
+    rel_path <- gsub(paste0("^", base_dir, "/"), "", file_path)
+    rel_path <- gsub("\\_tusco.RData$", "", rel_path)
+    path_parts <- strsplit(rel_path, "/")[[1]]
+    load_env <- new.env()
+    tryCatch({
+      load(file_path, envir = load_env)
+      loaded_objects <- ls(load_env)
+      if (length(loaded_objects) == 0) next
+      loaded_data <- if ("data_list" %in% loaded_objects) {
+        load_env$data_list
+      } else {
+        get(loaded_objects[1], envir = load_env)
+      }
+      for (i in seq_len(length(path_parts) - 1)) {
+        partial_path <- paste("tusco_results",
+          paste(paste0("[[\"", path_parts[1:i], "\"]]"), collapse = ""), sep = "")
+        eval(parse(text = paste("if(is.null(", partial_path, "))",
+                                partial_path, "<- list()")))
+      }
+      assignment_path <- paste("tusco_results",
+        paste(paste0("[[\"", path_parts, "\"]]"), collapse = ""), sep = "")
+      eval(parse(text = paste(assignment_path, "<- loaded_data")))
+    }, error = function(e) NULL)
+  }
+  tusco_results
+}
+
+rename_names_at_level <- function(x, target_level, current_level = 1) {
+  if (!is.list(x)) return(x)
+  if (current_level == target_level) {
+    old_names <- names(x)
+    new_names <- old_names
+    new_names[old_names %in% c("Bconcat", "B100K0", "B100K0.join")] <- "concat"
+    new_names[old_names %in% c("Kconcat", "B0K100", "B0K100.join")] <- "concat"
+    names(x) <- new_names
+    return(x)
+  }
+  lapply(x, function(e) rename_names_at_level(e, target_level, current_level + 1))
+}
+
+tusco_base_dir <- file.path(base_path, "reports", "tusco_results")
+tusco_results <- load_tusco_results(tusco_base_dir)
+tusco_renamed <- rename_names_at_level(tusco_results, target_level = 5)
+```
+
+
+```{r pres-dumbbell-brain, fig.width=14, fig.height=5}
+preprocess_metrics <- function(concat_df, tama_df) {
+  metric_names <- colnames(concat_df)
+  bind_rows(
+    tibble(
+      method_dataset = rep(c("concat_sirv", "concat_tusco"), each = length(metric_names)),
+      metric = rep(metric_names, times = 2),
+      value  = c(as.numeric(concat_df[1, ]), as.numeric(concat_df[2, ]))
+    ),
+    tibble(
+      method_dataset = rep(c("tama_sirv", "tama_tusco"), each = length(metric_names)),
+      metric = rep(metric_names, times = 2),
+      value  = c(as.numeric(tama_df[1, ]), as.numeric(tama_df[2, ]))
+    )
+  )
+}
+
+metric_full_names <- c(
+  "Sn"    = "Sensitivity",
+  "PDR"   = "Positive Detection Rate",
+  "nrPre" = "Non-redundant Precision",
+  "rPre"  = "Redundant Precision",
+  "1/red" = "Inverse Redundancy",
+  "1-FDR" = "1 \u2013 False Discovery Rate"
+)
+metric_order <- c("Sn", "PDR", "nrPre", "rPre", "1/red", "1-FDR")
+
+build_pres_dumbbell <- function(metrics_long, title) {
+  metrics_long <- metrics_long %>%
+    mutate(metric = factor(metric, levels = rev(metric_order)))
+
+  metrics_wide <- metrics_long %>%
+    separate(method_dataset, into = c("method", "dataset"), sep = "_") %>%
+    pivot_wider(names_from = method, values_from = value)
+
+  points_df <- metrics_wide %>%
+    pivot_longer(cols = c(concat, tama),
+                 names_to = "method", values_to = "value")
+
+  ggplot() +
+    ggstats::geom_stripped_rows(
+      data = metrics_wide, aes(y = metric),
+      width = 1, nudge_y = 0
+    ) +
+    geom_segment(
+      data = metrics_wide,
+      aes(x = concat, xend = tama, y = metric, yend = metric,
+          color = dataset),
+      linewidth = 1.2,
+      position = position_nudge(
+        y = ifelse(metrics_wide$dataset == "sirv", 0.15, -0.15)
+      )
+    ) +
+    geom_point(
+      data = points_df,
+      aes(x = value, y = metric, shape = method,
+          fill = dataset, color = dataset),
+      size = 3, stroke = 0.8,
+      position = position_nudge(
+        y = ifelse(points_df$dataset == "sirv", 0.15, -0.15)
+      )
+    ) +
+    scale_color_manual(
+      name = "Evaluation",
+      values = c("sirv" = "#cab2d6", "tusco" = "#1b9e77"),
+      labels = c("sirv" = "SIRVs", "tusco" = "TUSCO"),
+      guide = guide_legend(
+        override.aes = list(linetype = 1, linewidth = 2, shape = NA),
+        order = 1)
+    ) +
+    scale_fill_manual(
+      values = c("sirv" = "#cab2d6", "tusco" = "#1b9e77"), guide = "none"
+    ) +
+    scale_shape_manual(
+      name = "Strategy",
+      values = c("concat" = 16, "tama" = 17),
+      labels = c("concat" = "Join & Call", "tama" = "Call & Join"),
+      guide = guide_legend(
+        override.aes = list(fill = "black", size = 3), order = 2)
+    ) +
+    scale_x_continuous(limits = c(0, 100),
+                       expand = expansion(mult = c(0.03, 0.03))) +
+    scale_y_discrete(labels = metric_full_names) +
+    coord_cartesian(clip = "off") +
+    labs(x = "Metric value (%)", y = NULL, title = title) +
+    theme_minimal(base_size = 12) +
+    theme(
+      plot.title       = element_text(hjust = 0.5, face = "bold", size = 18),
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.background = element_rect(fill = "white", color = NA),
+      axis.text        = element_text(size = 11),
+      axis.text.y      = element_text(face = "bold", size = 11),
+      axis.title       = element_text(size = 13),
+      legend.position  = "none"
+    )
+}
+
+iq_branch <- tusco_renamed$tusco_full$isoseq$isoquant$B100K0
+iq_concat <- iq_branch$concat$radar_df[c("metrics_values_sirv", "metrics_values_tusco"), ]
+iq_tama   <- iq_branch$TAMA$radar_df[c("metrics_values_sirv", "metrics_values_tusco"), ]
+
+cat("=== iq_concat ===\n"); print(iq_concat); print(class(iq_concat)); print(colnames(iq_concat))
+cat("=== iq_tama ===\n"); print(iq_tama); print(class(iq_tama))
+
+iq_long   <- preprocess_metrics(iq_concat, iq_tama)
+cat("=== iq_long ===\n"); print(iq_long); print(colnames(iq_long))
+p_iq_db   <- build_pres_dumbbell(iq_long, "IsoQuant") +
+  theme(axis.title.x = element_blank())
+
+fl_branch <- tusco_renamed$tusco_full$isoseq$flair_ar_sr$B100K0
+fl_concat <- fl_branch$concat$radar_df[c("metrics_values_sirv", "metrics_values_tusco"), ]
+fl_tama   <- fl_branch$TAMA$radar_df[c("metrics_values_sirv", "metrics_values_tusco"), ]
+fl_long   <- preprocess_metrics(fl_concat, fl_tama)
+p_fl_db   <- build_pres_dumbbell(fl_long, "FLAIR") +
+  theme(axis.title.x = element_blank(),
+        axis.text.y  = element_blank())
+
+legend_src_db <- build_pres_dumbbell(iq_long, "") +
+  theme(legend.position = "right",
+        legend.box = "vertical",
+        legend.title = element_text(size = 13, face = "bold"),
+        legend.text  = element_text(size = 11))
+db_legend <- cowplot::get_legend(legend_src_db)
+
+x_title_grob <- wrap_elements(full = grid::textGrob(
+  "Metric value (%)", gp = grid::gpar(fontsize = 13)
+))
+
+plots_row <- (p_iq_db | plot_spacer() | p_fl_db | db_legend) +
+  plot_layout(widths = c(1, 0.05, 1, 0.3))
+
+figure_db <- (plots_row / x_title_grob) +
+  plot_layout(heights = c(1, 0.04)) +
+  plot_annotation(
+    title = "PacBio IsoSeq — Brain — SIRV & TUSCO Evaluation",
+    theme = theme(plot.title = element_text(size = 20, face = "bold",
+                                            hjust = 0.5))
+  )
+
+ggsave("plot_creation/pres_isoquant_vs_flair_dumbbell_brain.pdf",
+       device = cairo_pdf, plot = figure_db,
+       width = 14, height = 5, unit = "in")
+
+figure_db
+```

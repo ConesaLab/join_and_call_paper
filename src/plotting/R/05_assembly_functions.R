@@ -764,24 +764,16 @@ assemble_compare_plots <- function(results, tissue, fl_filter_level) {
   plot_base_name = paste0(tissue, "_compare_plots")
   
   subplots = c(
-    "count_transcript", 
-    "perc_transcript", 
-    "total_isoforms_transcript", 
-    "perc_isoforms_transcript", 
-    "count_ujc", 
-    "perc_ujc", 
-    "total_isoforms_ujc", 
-    "perc_isoforms_ujc"
+    "count_transcript",
+    "total_isoforms_transcript",
+    "count_ujc",
+    "total_isoforms_ujc"
   )
   subplot_titles <- c(
     paste0("Redundancy of transcripts (# of transcripts); ", tissue),
-    paste0("Relative redundancy of transcripts (% of transcripts); ", tissue),
     paste0("Redundancy of transcripts (# of isoforms); ", tissue),
-    paste0("Relative redundancy of transcripts (% of isoforms); ", tissue),
     paste0("Redundancy of UJCs (# of UJCs); ", tissue),
-    paste0("Relative redundancy of UJCs (% of UJCs); ", tissue),
-    paste0("Redundancy of UJCs (# of isoforms); ", tissue),
-    paste0("Relative redundancy of UJCs (% of isoforms); ", tissue)
+    paste0("Redundancy of UJCs (# of isoforms); ", tissue)
   )
   names(subplot_titles) <- subplots
 

@@ -101,6 +101,21 @@ for (platform in names(all_tpm_data)) {
 ```
 
 
+```{r tpm-line-legend, fig.width=16, fig.height=2.5}
+if (!dir.exists("plot_creation")) {
+  dir.create("plot_creation")
+}
+
+tpm_line_legend <- build_tpm_line_legend_figure()
+
+ggsave("plot_creation/tpm_lines_legend.pdf",
+       device = cairo_pdf, plot = tpm_line_legend,
+       width = 16, height = 2.5, unit = "in")
+
+tpm_line_legend
+```
+
+
 ```{r brain-tpm-lines-log, fig.width=18, fig.height=12}
 if (!dir.exists("plot_creation")) {
   dir.create("plot_creation")
@@ -124,7 +139,8 @@ for (platform in names(all_tpm_data)) {
 
 brain_log_figure <- assemble_tpm_line_figure(
   brain_log_line_plots,
-  title = "Transcripts by TPM threshold (log scale); brain"
+  title = "Transcripts by TPM threshold; brain",
+  log_x = TRUE
 )
 
 ggsave("plot_creation/brain_tpm_lines_log.pdf",
@@ -154,7 +170,8 @@ for (platform in names(all_tpm_data)) {
 
 kidney_log_figure <- assemble_tpm_line_figure(
   kidney_log_line_plots,
-  title = "Transcripts by TPM threshold (log scale); kidney"
+  title = "Transcripts by TPM threshold; kidney",
+  log_x = TRUE
 )
 
 ggsave("plot_creation/kidney_tpm_lines_log.pdf",

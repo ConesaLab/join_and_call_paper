@@ -92,8 +92,8 @@ process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, fl_thre
   plots_Kidney <- plot_classification_data(class_combined_df_Kidney, sample_labels_Kidney)
 
   total_transcripts_plot <- ggarrange(
-    annotate_figure(ggarrange(plots_Brain[[1]], plots_Brain[[2]], nrow = 2), top = "Brain"),
-    annotate_figure(ggarrange(plots_Kidney[[1]], plots_Kidney[[2]], nrow = 2, common.legend = TRUE, legend = "right"), top = "Kidney"),
+    annotate_figure(plots_Brain[[1]], top = "Brain"),
+    annotate_figure(plots_Kidney[[1]], top = "Kidney"),
     widths = c(2, 3)
   )
 
@@ -103,21 +103,21 @@ process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, fl_thre
   class_combined_df_Kidney_Mouse <- class_combined_df_Kidney[!grepl("SIRV", class_combined_df_Kidney$chrom), ]
   plots_Kidney_Mouse <- plot_classification_data(class_combined_df_Kidney_Mouse, sample_labels_Kidney)
 
-  mouse_transcripts_plot <- ggarrange(
-    annotate_figure(ggarrange(plots_Brain_Mouse[[1]], plots_Brain_Mouse[[2]], nrow = 2), top = "Brain"),
-    annotate_figure(ggarrange(plots_Kidney_Mouse[[1]], plots_Kidney_Mouse[[2]], nrow = 2, common.legend = TRUE, legend = "right"), top = "Kidney"),
-    widths = c(2, 3)
-  )
-
   class_combined_df_Brain_SIRVs <- class_combined_df_Brain[grepl("SIRV", class_combined_df_Brain$chrom), ]
   plots_Brain_SIRVs <- plot_classification_data(class_combined_df_Brain_SIRVs, sample_labels_Brain)
 
   class_combined_df_Kidney_SIRVs <- class_combined_df_Kidney[grepl("SIRV", class_combined_df_Kidney$chrom), ]
   plots_Kidney_SIRVs <- plot_classification_data(class_combined_df_Kidney_SIRVs, sample_labels_Kidney)
 
+  mouse_transcripts_plot <- ggarrange(
+    annotate_figure(plots_Brain_Mouse[[1]], top = "Brain"),
+    annotate_figure(plots_Kidney_Mouse[[1]], top = "Kidney"),
+    widths = c(2, 3)
+  )
+
   sirv_transcripts_plot <- ggarrange(
-    annotate_figure(ggarrange(plots_Brain_SIRVs[[1]], plots_Brain_SIRVs[[2]], nrow = 2), top = "Brain"),
-    annotate_figure(ggarrange(plots_Kidney_SIRVs[[1]], plots_Kidney_SIRVs[[2]], nrow = 2, common.legend = TRUE, legend = "right"), top = "Kidney"),
+    annotate_figure(plots_Brain_SIRVs[[1]], top = "Brain"),
+    annotate_figure(plots_Kidney_SIRVs[[1]], top = "Kidney"),
     widths = c(2, 3)
   )
   
@@ -146,8 +146,8 @@ process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, fl_thre
   
   kidney_upset_plots <- create_upset_plot(Kclass_df_list, sample_labels_Kidney, method)
   
-  brain_compare_plots <- compare_isoform_plots(Bclass_df_list)
-  kidney_compare_plots <- compare_isoform_plots(Kclass_df_list)
+  brain_compare_plots <- compare_isoform_plots(Bclass_df_list, condition_label = "brain")
+  kidney_compare_plots <- compare_isoform_plots(Kclass_df_list, condition_label = "kidney")
 
   return(list(
     total_transcripts_plot = total_transcripts_plot,

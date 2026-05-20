@@ -1,0 +1,185 @@
+---
+title: "ONT R10 SY5Y — TPM-normalized transcript filters"
+author: "Fabian Jetzinger"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+params:
+  fl_threshold: 1
+output:
+  html_document:
+    toc: true
+    theme: spacelab
+    self_contained: true
+    fig_width: 14
+    fig_height: 11
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center",
+  fig.width = 14,
+  fig.height = 11
+)
+
+library(tidyverse)
+library(cowplot)
+library(patchwork)
+library(scales)
+
+r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
+
+source(file.path(r_source_dir, "02_themes.R"))
+source(file.path(r_source_dir, "03_plot_functions.R"))
+source(file.path(r_source_dir, "01_config_ont_r10.R"))
+source(file.path(r_source_dir, "07_ont_r10_sy5y.R"))
+source(file.path(r_source_dir, "09_filter_level_lines.R"))
+
+thr <- as.numeric(params$fl_threshold)
+out_dir <- sy5y_plot_creation_dir()
+if (!dir.exists(out_dir)) {
+  dir.create(out_dir, recursive = TRUE)
+}
+
+quantile_labels <- c("Q1", "Q10", "Q25", "Q50", "Q75")
+```
+
+```{r check-paths, results="asis"}
+check_paths_ont_r10()
+```
+
+```{r load-tpm-data}
+all_tpm <- list()
+for (tool in SY5Y_TOOL_ORDER) {
+  raw <- load_sy5y_bclass_list(ont_r10_report_dirs[[tool]])
+  all_tpm[[tool]] <- build_sy5y_tpm_curve_data(raw, fl_threshold = thr)
+}
+
+all_tpms <- unlist(lapply(all_tpm, function(x) x$TPM))
+min_tpm <- min(all_tpms[all_tpms > 0])
+max_tpm <- max(all_tpms)
+log_thresholds <- 10^seq(log10(min_tpm), log10(max_tpm), length.out = 200)
+linear_upper <- quantile(all_tpms, 0.995)
+linear_thresholds <- seq(0, linear_upper, length.out = 200)
+```
+
+```{r tpm-summary, echo=TRUE, results="asis"}
+cat("=== ONT R10 SY5Y TPM distribution ===\n")
+cat(sprintf("  min (nonzero): %.2f\n", min_tpm))
+cat(sprintf("  max:           %.0f\n", max_tpm))
+cat(sprintf("  99.5th pctl:   %.1f\n", linear_upper))
+for (tool in SY5Y_TOOL_ORDER) {
+  cat(sprintf("\n%s:\n", tool))
+  print(round(pick_tpm_quantiles(data.frame(TPM = all_tpm[[tool]]$TPM)), 2))
+}
+```
+
+```{r tpm-legend, fig.width=14, fig.height=3}
+tpm_line_legend <- build_tpm_line_legend_figure(category_layout = c(2, 3))
+ggsave(
+  file.path(out_dir, "sy5y_tpm_lines_legend.pdf"),
+  plot = tpm_line_legend,
+  device = grDevices::cairo_pdf,
+  width = 14,
+  height = 3,
+  units = "in"
+)
+tpm_line_legend
+```
+
+```{r tpm-lines-log}
+log_line_plots <- list()
+for (tool in SY5Y_TOOL_ORDER) {
+  curve <- compute_survival_curve(all_tpm[[tool]], log_thresholds, simplify = TRUE)
+  log_line_plots[[tool]] <- create_tpm_line_plot(
+    curve, tool, log_x = TRUE, xlim = c(0.05, 15)
+  )
+}
+log_fig <- assemble_ont_r10_tpm_line_figure(
+  log_line_plots,
+  title = "Transcripts by TPM threshold; ONT R10 SY5Y",
+  log_x = TRUE
+)
+ggsave(
+  file.path(out_dir, "sy5y_tpm_lines_log.pdf"),
+  plot = log_fig,
+  device = grDevices::cairo_pdf,
+  width = 14,
+  height = 12,
+  units = "in"
+)
+log_fig
+```
+
+```{r tpm-lines-linear}
+lin_line_plots <- list()
+for (tool in SY5Y_TOOL_ORDER) {
+  curve <- compute_survival_curve(all_tpm[[tool]], linear_thresholds, simplify = TRUE)
+  lin_line_plots[[tool]] <- create_tpm_line_plot(
+    curve, tool, log_x = FALSE, xlim = c(0, 15)
+  )
+}
+lin_fig <- assemble_ont_r10_tpm_line_figure(
+  lin_line_plots,
+  title = "Transcripts by TPM threshold (linear scale); ONT R10 SY5Y",
+  log_x = FALSE
+)
+ggsave(
+  file.path(out_dir, "sy5y_tpm_lines_linear.pdf"),
+  plot = lin_fig,
+  device = grDevices::cairo_pdf,
+  width = 14,
+  height = 12,
+  units = "in"
+)
+lin_fig
+```
+
+```{r tpm-bars}
+bar_plots <- list()
+for (tool in SY5Y_TOOL_ORDER) {
+  tool_quantiles <- pick_tpm_quantiles(data.frame(TPM = all_tpm[[tool]]$TPM))
+  curve <- compute_survival_curve(all_tpm[[tool]], tool_quantiles, simplify = FALSE)
+  bar_plots[[tool]] <- create_tpm_bar_plot(curve, tool, quantile_names = quantile_labels)
+}
+bar_fig <- assemble_ont_r10_tpm_bar_figure(
+  bar_plots,
+  title = "Transcripts per structural category at TPM quantiles; ONT R10 SY5Y"
+)
+ggsave(
+  file.path(out_dir, "sy5y_tpm_bars.pdf"),
+  plot = bar_fig,
+  device = grDevices::cairo_pdf,
+  width = 14,
+  height = 12,
+  units = "in"
+)
+bar_fig
+```
+
+```{r tpm-pct-bars}
+pct_bar_plots <- list()
+for (tool in SY5Y_TOOL_ORDER) {
+  tool_quantiles <- pick_tpm_quantiles(data.frame(TPM = all_tpm[[tool]]$TPM))
+  curve <- compute_survival_curve(all_tpm[[tool]], tool_quantiles, simplify = FALSE)
+  pct_bar_plots[[tool]] <- create_tpm_pct_bar_plot(
+    curve, tool, quantile_names = quantile_labels
+  )
+}
+pct_fig <- assemble_ont_r10_tpm_bar_figure(
+  pct_bar_plots,
+  title = "% transcripts per structural category at TPM quantiles; ONT R10 SY5Y"
+)
+ggsave(
+  file.path(out_dir, "sy5y_tpm_pct_bars.pdf"),
+  plot = pct_fig,
+  device = grDevices::cairo_pdf,
+  width = 14,
+  height = 12,
+  units = "in"
+)
+pct_fig
+```
+
+PDFs written to `plot_creation_ont_r10/`: `sy5y_tpm_lines_legend.pdf`, `sy5y_tpm_lines_log.pdf`, `sy5y_tpm_lines_linear.pdf`, `sy5y_tpm_bars.pdf`, `sy5y_tpm_pct_bars.pdf`.

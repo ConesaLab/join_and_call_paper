@@ -405,25 +405,6 @@ kidney_comb_bar_plot
 ```
 
 
-```{r assemble-brain-perc-comb-bar}
-
-pb_ylims  <- c(0, 50)
-ont_ylims <- c(0, 50)
-brain_perc_comb_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Unique Junction Chain occurrence across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_bar_plot", y_label = "% of UJCs")
-ggsave("plot_creation/brain_perc_comb_bar.pdf", device = cairo_pdf, plot = brain_perc_comb_bar_plot, width = 18, height = 12, units = "in")
-brain_perc_comb_bar_plot
-
-```
-
-```{r assemble-kidney-perc-comb-bar}
-
-pb_ylims  <- c(0, 50)
-ont_ylims <- c(0, 50)
-kidney_perc_comb_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Unique Junction Chain occurrence across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_bar_plot", y_label = "% of UJCs")
-ggsave("plot_creation/kidney_perc_comb_bar.pdf", device = cairo_pdf, plot = kidney_perc_comb_bar_plot, width = 18, height = 12, units = "in")
-kidney_perc_comb_bar_plot
-
-```
 
 ```{r assemble-brain-comb-fl-bar}
 
@@ -444,25 +425,6 @@ kidney_comb_fl_bar_plot
 
 ```
 
-```{r assemble-brain-perc-comb-fl-bar}
-
-pb_ylims  <- c(0, 100)
-ont_ylims <- c(0, 100)
-brain_perc_comb_fl_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Expression of UJCs across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_fl_bar_plot", y_label = "% of reads of UJCs")
-ggsave("plot_creation/brain_perc_comb_fl_bar.pdf", device = cairo_pdf, plot = brain_perc_comb_fl_bar_plot, width = 18, height = 12, units = "in")
-brain_perc_comb_fl_bar_plot
-
-```
-```{r assemble-kidney-perc-comb-fl-bar}
-
-pb_ylims  <- c(0, 100)
-ont_ylims <- c(0, 100)
-kidney_perc_comb_fl_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Expression of UJCs across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_comb_fl_bar_plot", y_label = "% of reads of UJCs")
-ggsave("plot_creation/kidney_perc_comb_fl_bar.pdf", device = cairo_pdf, plot = kidney_perc_comb_fl_bar_plot, width = 18, height = 12, units = "in")
-kidney_perc_comb_fl_bar_plot
-
-```
-
 
 
 ```{r assemble-brain-ujc-curve}
@@ -472,17 +434,6 @@ ont_ylims <- c(0, 62500)
 brain_ujc_curve_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_curve_plot")
 ggsave("plot_creation/brain_ujc_curve_plot.pdf", device = cairo_pdf, plot = brain_ujc_curve_plot, width = 18, height = 12, units = "in")
 brain_ujc_curve_plot
-
-```
-
-
-```{r assemble-brain-perc-ujc-curve}
-
-pb_ylims  <- c(0, 100)
-ont_ylims <- c(0, 100)
-brain_perc_ujc_curve_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence by across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_curve_plot")
-ggsave("plot_creation/brain_perc_ujc_curve_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_curve_plot, width = 18, height = 12, units = "in")
-brain_perc_ujc_curve_plot
 
 ```
 
@@ -504,26 +455,6 @@ ont_ylims <- c(0, 62500)
 kidney_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "UJC occurrence across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_stack_plot", y_label = "Mean # of UJCs")
 ggsave("plot_creation/kidney_ujc_stack_plot.pdf", device = cairo_pdf, plot = kidney_ujc_stack_plot, width = 18, height = 12, units = "in")
 kidney_ujc_stack_plot
-
-```
-
-```{r assemble-brain-perc-ujc-stack}
-
-pb_ylims  <- c(0, 100)
-ont_ylims <- c(0, 100)
-brain_perc_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "Relative UJC occurrence across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_stack_plot", y_label = "Mean % of UJCs")
-ggsave("plot_creation/brain_perc_ujc_stack_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_stack_plot, width = 18, height = 12, units = "in")
-brain_perc_ujc_stack_plot
-
-```
-
-```{r assemble-kidney-perc-ujc-stack}
-
-pb_ylims  <- c(0, 100)
-ont_ylims <- c(0, 100)
-kidney_perc_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "Relative UJC occurrence across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_stack_plot", y_label = "Mean % of UJCs")
-ggsave("plot_creation/kidney_perc_ujc_stack_plot.pdf", device = cairo_pdf, plot = kidney_perc_ujc_stack_plot, width = 18, height = 12, units = "in")
-kidney_perc_ujc_stack_plot
 
 ```
 
@@ -572,25 +503,6 @@ kidney_ujc_fl_stack_plot
 
 ```
 
-```{r assemble-brain-perc-ujc-fl-stack}
-
-pb_ylims  <- c(0, 100)
-ont_ylims <- c(0, 100)
-brain_perc_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "Relative expression of UJCs across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_fl_stack_plot", y_label = "Mean % of reads of UJCs")
-ggsave("plot_creation/brain_perc_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = brain_perc_ujc_fl_stack_plot, width = 18, height = 12, units = "in")
-brain_perc_ujc_fl_stack_plot
-
-```
-```{r assemble-kidney-perc-ujc-fl-stack}
-
-pb_ylims  <- c(0, 100)
-ont_ylims <- c(0, 100)
-kidney_perc_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "Relative expression of UJCs across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_perc_ujc_fl_stack_plot", y_label = "Mean % of reads of UJCs")
-ggsave("plot_creation/kidney_perc_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = kidney_perc_ujc_fl_stack_plot, width = 18, height = 12, units = "in")
-kidney_perc_ujc_fl_stack_plot
-
-```
-
 
 ```{r assemble-brain-compare}
 
@@ -620,7 +532,7 @@ for (kicf_name in names(kidney_isoform_compare_figures)) {
   
 }
 
-kicf
+kidney_isoform_compare_figures
 
 ```
 

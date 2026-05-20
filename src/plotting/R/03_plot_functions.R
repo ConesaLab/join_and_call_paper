@@ -1,28 +1,37 @@
 # 03_plot_functions.R
 # Individual plot-generating functions: classification, expression, UpSet, isoform comparison
 
-plot_classification_data <- function(class_combined_df, sample_labels) {
+plot_classification_data <- function(class_combined_df, sample_labels,
+                                     x_discrete_limits = NULL,
+                                     x_drop_missing_levels = TRUE) {
+  if (!is.null(x_discrete_limits)) {
+    if (length(sample_labels) != length(x_discrete_limits)) {
+      stop(
+        "plot_classification_data: length(sample_labels) must equal length(x_discrete_limits)."
+      )
+    }
+    class_combined_df <- class_combined_df %>%
+      mutate(sample = factor(.data$sample, levels = x_discrete_limits))
+    sx <- ggplot2::scale_x_discrete(
+      limits   = x_discrete_limits,
+      labels   = sample_labels,
+      drop     = x_drop_missing_levels
+    )
+  } else {
+    sx <- ggplot2::scale_x_discrete(labels = sample_labels)
+  }
+
   p1 <- ggplot(class_combined_df, aes(x = sample, y = (..count..), fill = structural_category)) +
     geom_bar() +
     scale_fill_manual(values = cat.palette, labels = c("Full\nSplice Match", "Incomplete\nSplice Match", "Novel\nIn Catalog", "Novel Not\nIn Catalog", "Genic\nGenomic", "Antisense", "Fusion", "Intergenic", "Genic\nIntron")) +
-    scale_x_discrete(labels = sample_labels) +
+    sx +
     theme_minimal() +
     theme(legend.position = "none", axis.title.x = element_blank()) +
     ylab("# isoforms") +
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
     theme(axis.text = element_text(size = 10))
 
-  p2 <- ggplot(class_combined_df, aes(x = sample, y = (..count..), fill = structural_category)) +
-    geom_bar(position = "fill") +
-    scale_fill_manual(values = cat.palette, labels = c("Full\nSplice Match", "Incomplete\nSplice Match", "Novel\nIn Catalog", "Novel Not\nIn Catalog", "Genic\nGenomic", "Antisense", "Fusion", "Intergenic", "Genic\nIntron")) +
-    scale_x_discrete(labels = sample_labels) +
-    theme_minimal() +
-    theme(legend.position = "none", axis.title.x = element_blank()) +
-    ylab("% of isoforms") +
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-    theme(axis.text = element_text(size = 10))
-
-  return(list(p1, p2))
+  list(count = p1)
 }
 
 plot_classification_expression_data <- function(class_combined_df,
@@ -157,12 +166,23 @@ create_boxplot <- function(listUJC) {
 }
 
 
-create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
-  
+create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
+                              combination_columns = NULL,
+                              include_percentage_plots = FALSE) {
   if (method == "isoseq_sqanti") {
     method <- "IsoSeq + SQANTI3"
   }
-  
+
+  if (length(sample_labels) != length(class_df_list)) {
+    nm <- names(class_df_list)
+    stop(
+      "create_upset_plot: need one sample label per classification table (",
+      length(sample_labels), " labels vs ", length(class_df_list), " tables). ",
+      if (length(nm)) paste0("Table names: ", paste(nm, collapse = ", "), ". ") else "",
+      "Regenerate SY5Y_class_df_list.RData from the full classification+junction FOFN (concat, TAMA, four replicates)."
+    )
+  }
+
   listUJC <- do.call(rbind, lapply(class_df_list, function(class_df) class_df[!grepl("NA",class_df$UJC), c("structural_category", "UJC")]))
   listUJC <- distinct(listUJC)
   
@@ -188,7 +208,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
   ######### UPSET PLOT ######### 
   ############################## 
   
-  intersection_size_annotation <- intersection_size(
+  intersection_size_annotation <- ComplexUpset::intersection_size(
       counts = FALSE,
       mapping = aes(fill = structural_category)
     ) +
@@ -223,20 +243,37 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
   
   #####################################
   ######### COMBINATION PLOTs ######### 
-  ##################################### 
-  
-  sample_cols <- names(listUJC)[str_detect(names(listUJC), "\\d+$")]
-  if (length(sample_cols) != 5) {
-    stop("Expected exactly 5 sample columns with names ending in digits (e.g. 'B1'...'B5' or 'Brain 1'...'Brain 5')")
+  #####################################
+
+  # UpSet uses all `sample_labels`. Combination / curve / stack plots use a subset of
+  # listUJC columns: default = names ending in a digit (mouse B1–B5 / Brain 1–5 only).
+  # Pass `combination_columns` explicitly for layouts like SY5Y (J&C, C&J, …).
+  if (is.null(combination_columns)) {
+    sample_cols <- names(listUJC)[str_detect(names(listUJC), "\\d+$")]
+    if (length(sample_cols) != 5) {
+      stop(
+        "Default combination logic expects 5 sample columns whose names end in a digit ",
+        "(replicates only). Pass combination_columns explicitly for other layouts."
+      )
+    }
+    prefix <- sample_cols %>%
+      str_remove("\\d+$") %>%
+      unique()
+    if (length(prefix) != 1) {
+      stop("Failed to detect a single common prefix among the sample columns.")
+    }
+  } else {
+    miss <- setdiff(combination_columns, names(listUJC))
+    if (length(miss)) {
+      stop("combination_columns not found in UJC table: ", paste(miss, collapse = ", "))
+    }
+    sample_cols <- combination_columns
+    prefix <- "samples"
   }
-  
-  prefix <- sample_cols %>% 
-    str_remove("\\d+$") %>% 
-    unique()
-  if (length(prefix) != 1) {
-    stop("Failed to detect a single common prefix among the sample columns.")
-  }
-  
+
+  n_sc <- length(sample_cols)
+  n_sc_m1 <- max(1L, n_sc - 1L)
+
   comb_counts <- listUJC %>%
     unite("pattern", all_of(sample_cols), sep = "") %>%
     filter(pattern != str_dup("0", length(sample_cols))) %>%
@@ -247,13 +284,13 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
   
   comb_plot <- ggplot(comb_counts, aes(x = factor(n_samples), y = n_UJC)) +
     geom_boxplot(
-      data = comb_counts %>% filter(n_samples %in% 1:4),
+      data = comb_counts %>% filter(n_samples %in% seq_len(n_sc_m1)),
       aes(group = factor(n_samples)),
       width = 0.25,
       outlier.shape = NA
     ) +
     geom_point(
-      data = comb_counts %>% filter(n_samples == 5),
+      data = comb_counts %>% filter(n_samples == n_sc),
       aes(group = pattern),
       position = position_dodge(width = 0.8),
       size = 2
@@ -261,40 +298,43 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     scale_x_discrete(drop = FALSE) +
     labs(
       x     = "Number of samples present",
-      y     = "Percent of total UJCs",
-      title = paste0("Distribution of UJCs across ", prefix, " samples")
+      y     = "Number of UJCs",
+      title = paste0("Distribution of UJCs across ", prefix, " (n=", n_sc, ")")
     ) +
     theme_minimal(base_size = 10) +
     theme(
       plot.title = element_text(hjust = 0.5, face = "bold")
     )
   comb_plot$full_data <- comb_counts
-  
-  perc_comb_plot <- ggplot(comb_counts, aes(x = factor(n_samples), y = percent_UJC)) +
-    geom_boxplot(
-      data = comb_counts %>% filter(n_samples %in% 1:4),
-      aes(group = factor(n_samples)),
-      width = 0.25,
-      outlier.shape = NA
-    ) +
-    geom_point(
-      data = comb_counts %>% filter(n_samples == 5),
-      aes(group = pattern),
-      position = position_dodge(width = 0.8),
-      size = 2
-    ) +
-    scale_x_discrete(drop = FALSE) +
-    labs(
-      x     = "Number of samples present",
-      y     = "Percent of total UJCs",
-      title = paste0("Distribution of UJCs across ", prefix, " samples")
-    ) +
-    theme_minimal(base_size = 10) +
-    theme(
-      plot.title = element_text(hjust = 0.5, face = "bold")
-    )
-  
-  
+
+  perc_comb_plot <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    perc_comb_plot <- ggplot(comb_counts, aes(x = factor(n_samples), y = percent_UJC)) +
+      geom_boxplot(
+        data = comb_counts %>% filter(n_samples %in% seq_len(n_sc_m1)),
+        aes(group = factor(n_samples)),
+        width = 0.25,
+        outlier.shape = NA
+      ) +
+      geom_point(
+        data = comb_counts %>% filter(n_samples == n_sc),
+        aes(group = pattern),
+        position = position_dodge(width = 0.8),
+        size = 2
+      ) +
+      scale_x_discrete(drop = FALSE) +
+      labs(
+        x     = "Number of samples present",
+        y     = "Percent of total UJCs",
+        title = paste0("Distribution of UJCs across ", prefix, " (n=", n_sc, ")")
+      ) +
+      theme_minimal(base_size = 10) +
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold")
+      )
+  }
+
+
   #########################################
   ######### COMBINATION BAR PLOTs ######### 
   ######################################### 
@@ -319,8 +359,8 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     geom_col(width = 0.6) +
     labs(
       x     = "Number of samples present",
-      y     = "Percent of total UJCs",
-      title = paste0("Average UJC distribution across ", prefix, " samples")
+      y     = "# UJCs",
+      title = paste0("UJC distribution by structural category (", prefix, ", n=", n_sc, ")")
     ) +
     theme_minimal(base_size = 10) +
     theme(
@@ -330,23 +370,26 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
       values = category_colors,
       name = "Structural Category"
     )
-  
-  perc_comb_bar_plot <- ggplot(comb_bar_data, aes(x = factor(n_samples), y = sum_percent_UJC, fill = factor(structural_category))) +
-    geom_col(width = 0.6) +
-    labs(
-      x     = "Number of samples present",
-      y     = "Percent of total UJCs",
-      title = paste0("Average UJC distribution across ", prefix, " samples")
-    ) +
-    theme_minimal(base_size = 10) +
-    theme(
-      plot.title = element_text(hjust = 0.5, face = "bold")
-    ) +
-    scale_fill_manual(
-      values = category_colors,
-      name = "Structural Category"
-    )
-  
+
+  perc_comb_bar_plot <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    perc_comb_bar_plot <- ggplot(comb_bar_data, aes(x = factor(n_samples), y = sum_percent_UJC, fill = factor(structural_category))) +
+      geom_col(width = 0.6) +
+      labs(
+        x     = "Number of samples present",
+        y     = "Percent of total UJCs",
+        title = paste0("Average UJC distribution across ", prefix, " samples")
+      ) +
+      theme_minimal(base_size = 10) +
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold")
+      ) +
+      scale_fill_manual(
+        values = category_colors,
+        name = "Structural Category"
+      )
+  }
+
   ############################################
   ######### COMBINATION BAR FL PLOTs ######### 
   ############################################
@@ -359,9 +402,25 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
       names_from   = sample,
       values_from  = FL_sum,
       names_prefix = "FL_"
-    ) %>%
-    select(-c("FL_Join&Call", "FL_Call&Join")) %>%
-    mutate(across(starts_with("FL_"), ~ replace_na(.x, 0)))
+    )
+  drop_fl <- intersect(c("FL_Join&Call", "FL_Call&Join"), names(fl_sums))
+  if (length(drop_fl)) {
+    fl_sums <- fl_sums %>% select(-all_of(drop_fl))
+  }
+
+  cdf_names <- names(class_df_list)
+  idx_map <- match(sample_cols, sample_labels)
+  if (any(is.na(idx_map))) {
+    stop("combination_columns must all appear in sample_labels (same order as class_df_list).")
+  }
+  fl_keep <- paste0("FL_", cdf_names[idx_map])
+  miss_fl <- setdiff(fl_keep, names(fl_sums))
+  if (length(miss_fl)) {
+    stop("Missing FL columns for combination set: ", paste(miss_fl, collapse = ", "))
+  }
+  fl_sums <- fl_sums %>%
+    select(UJC, structural_category, all_of(fl_keep)) %>%
+    mutate(across(all_of(fl_keep), ~ replace_na(.x, 0)))
   
   sample_cols_fl <- grep("^FL", names(fl_sums), value = TRUE)
   
@@ -400,23 +459,26 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
       name = "Structural Category"
     )
   
-  perc_comb_FL_bar_plot <- ggplot(fl_comb, aes(x = factor(samples_present), y = FL_percent, fill = factor(structural_category))) +
-    geom_col(width = 0.6) +
-    labs(
-      x     = "Number of samples present",
-      y     = "Percent of total reads supporting UJCs",
-      title = paste0("Relative read distribution of UJCs across ", prefix, " samples")
-    ) +
-    theme_minimal(base_size = 10) +
-    theme(
-      plot.title = element_text(hjust = 0.5, face = "bold")
-    ) +
-    scale_fill_manual(
-      values = category_colors,
-      name = "Structural Category"
-    )
-  
-  
+  perc_comb_FL_bar_plot <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    perc_comb_FL_bar_plot <- ggplot(fl_comb, aes(x = factor(samples_present), y = FL_percent, fill = factor(structural_category))) +
+      geom_col(width = 0.6) +
+      labs(
+        x     = "Number of samples present",
+        y     = "Percent of total reads supporting UJCs",
+        title = paste0("Relative read distribution of UJCs across ", prefix, " samples")
+      ) +
+      theme_minimal(base_size = 10) +
+      theme(
+        plot.title = element_text(hjust = 0.5, face = "bold")
+      ) +
+      scale_fill_manual(
+        values = category_colors,
+        name = "Structural Category"
+      )
+  }
+
+
   #########################################
   ######### DISCOVERY CURVE PLOTs ######### 
   #########################################
@@ -453,7 +515,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     geom_ribbon(aes(ymin = min_UJCs, ymax = max_UJCs), alpha = 0.2) +
     geom_line(linewidth = 1) +
     geom_point(size = 2) +
-    scale_x_continuous(breaks = 1:length(sample_cols)) +
+    scale_x_continuous(breaks = seq_len(n_sc)) +
     scale_y_continuous(limits = c(0, NA)) +
     labs(
       title = "Mean number of UJCs discovered across sample combinations",
@@ -462,22 +524,25 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     ) +
     theme_minimal(base_size = 11) +
     theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-  
-  perc_cumul_ujc_curve_plot <- ggplot(discovery_curve, aes(x = n_samples, y = mean_pct)) +
-    geom_ribbon(aes(ymin = min_pct, ymax = max_pct), alpha = 0.2) +
-    geom_line(linewidth = 1) +
-    geom_point(size = 2) +
-    scale_x_continuous(breaks = 1:length(sample_cols)) +
-    scale_y_continuous(limits = c(0, NA)) +
-    labs(
-      title = "Mean percentage of UJCs discovered across sample combinations",
-      x = "Number of samples included",
-      y = "Mean percentage UJCs discovered"
-    ) +
-    theme_minimal(base_size = 11) +
-    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-  
-  
+
+  perc_cumul_ujc_curve_plot <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    perc_cumul_ujc_curve_plot <- ggplot(discovery_curve, aes(x = n_samples, y = mean_pct)) +
+      geom_ribbon(aes(ymin = min_pct, ymax = max_pct), alpha = 0.2) +
+      geom_line(linewidth = 1) +
+      geom_point(size = 2) +
+      scale_x_continuous(breaks = seq_len(n_sc)) +
+      scale_y_continuous(limits = c(0, NA)) +
+      labs(
+        title = "Mean percentage of UJCs discovered across sample combinations",
+        x = "Number of samples included",
+        y = "Mean percentage UJCs discovered"
+      ) +
+      theme_minimal(base_size = 11) +
+      theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  }
+
+
   #################################################
   ######### COMBINATION STACKED BAR PLOTs ######### 
   #################################################
@@ -518,21 +583,23 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     ) +
     theme_minimal(base_size = 11) +
     theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-  
-  perc_cumul_ujc_stack_plot <- ggplot(stack_data, aes(x = factor(n_samples), y = percent, fill = factor(n_present))) +
-    geom_col(width = 0.8) +
-    scale_fill_conesa(palette = "complete", name = "Samples present in") +
-    labs(
-      title = "UJC reproducibility across sample combinations",
-      x = "Number of samples included",
-      y = "Mean number of UJCs",
-      fill = "Reproducibility"
-    ) +
-    theme_minimal(base_size = 11) +
-    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
-  
-  
+  perc_cumul_ujc_stack_plot <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    perc_cumul_ujc_stack_plot <- ggplot(stack_data, aes(x = factor(n_samples), y = percent, fill = factor(n_present))) +
+      geom_col(width = 0.8) +
+      scale_fill_conesa(palette = "complete", name = "Samples present in") +
+      labs(
+        title = "UJC reproducibility across sample combinations (relative)",
+        x = "Number of samples included",
+        y = "Mean % of UJCs",
+        fill = "Reproducibility"
+      ) +
+      theme_minimal(base_size = 11) +
+      theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  }
+
+
   ####################################################
   ######### COMBINATION FL STACKED BAR PLOTs ######### 
   ####################################################
@@ -583,21 +650,24 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     ) %>%
     arrange(nr_samples, samples_present)
   
-  fl_max <- combos_fl %>% 
-    filter(nr_samples == max(nr_samples)) %>% 
-    summarise(sum_FL_total = sum(max_FL_total)) %>% 
+  fl_max <- combos_fl %>%
+    filter(nr_samples == max(nr_samples)) %>%
+    summarise(sum_FL_total = sum(max_FL_total)) %>%
     pull(sum_FL_total)
-  
-  combos_fl_pct <- combos_fl %>%
-    mutate(
-      mean_FL_pct = max_FL_total / fl_max * 100,
-      sd_FL_pct = sd_FL_total / fl_max * 100
-    )
-  
-  
-  cumul_ujc_fl_stack_plot <- ggplot(combos_fl, 
-                              aes(x = factor(nr_samples), 
-                                  y = mean_FL_total, 
+
+  combos_fl_pct <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    combos_fl_pct <- combos_fl %>%
+      mutate(
+        mean_FL_pct = max_FL_total / fl_max * 100,
+        sd_FL_pct = sd_FL_total / fl_max * 100
+      )
+  }
+
+
+  cumul_ujc_fl_stack_plot <- ggplot(combos_fl,
+                              aes(x = factor(nr_samples),
+                                  y = mean_FL_total,
                                   fill = factor(samples_present))) +
     geom_col(width = 0.8) +
     scale_fill_conesa(palette = "complete", name = "Samples present in") +
@@ -608,24 +678,27 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
     ) +
     theme_minimal(base_size = 11) +
     theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-  
-  perc_cumul_ujc_fl_stack_plot <- ggplot(combos_fl_pct, 
-                               aes(x = factor(nr_samples), 
-                                   y = mean_FL_pct, 
-                                   fill = factor(samples_present))) +
-    geom_col(width = 0.8) +
-    scale_fill_conesa(palette = "complete", name = "Samples present in") +
-    labs(
-      title = "FL total as % of max across sample combinations",
-      x     = "Number of samples included",
-      y     = "Mean % of reads supporting UJCs"
-    ) +
-    theme_minimal(base_size = 11) +
-    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-    
-  
-  
-  
+
+  perc_cumul_ujc_fl_stack_plot <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    perc_cumul_ujc_fl_stack_plot <- ggplot(combos_fl_pct,
+                                 aes(x = factor(nr_samples),
+                                     y = mean_FL_pct,
+                                     fill = factor(samples_present))) +
+      geom_col(width = 0.8) +
+      scale_fill_conesa(palette = "complete", name = "Samples present in") +
+      labs(
+        title = "FL total as % of max across sample combinations",
+        x     = "Number of samples included",
+        y     = "Mean % of reads supporting UJCs"
+      ) +
+      theme_minimal(base_size = 11) +
+      theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+  }
+
+
+
+
   ###################################
   ######### RETURNING PLOTS ######### 
   ###################################
@@ -654,7 +727,8 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10) {
 }
 
 
-compare_isoform_plots <- function(class_df_list) {
+compare_isoform_plots <- function(class_df_list, include_percentage_plots = FALSE,
+                                  condition_label = "brain") {
 
   df <- bind_rows(class_df_list, .id = "source") %>%
     mutate(source = factor(source, levels = c("Join&Call", "Call&Join"))) %>%
@@ -700,44 +774,50 @@ compare_isoform_plots <- function(class_df_list) {
       geom_col() +
       scale_fill_conesa(palette = "complete", name = "# of isoforms per transcript") +
       labs(
-        title = "Redundancy of transcripts; brain",
+        title = paste0("Redundancy of transcripts; ", condition_label),
         x     = "Strategy",
         y     = "# of associated transcripts"
       ) +
       theme_minimal()
 
-  p_perc_transcript <- iso_per_transcript %>%
-    ggplot(aes(x = source, y = perc_assoc_transcript * 100, fill = iso_cat)) +
-      geom_col() +
-      scale_fill_conesa(palette = "complete", name = "# of isoforms per transcript") +
-      labs(
-        title = "Relative redundancy of transcripts; brain",
-        x     = "Strategy",
-        y     = "% of associated transcripts"
-      ) +
-      theme_minimal()
+  p_perc_transcript <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    p_perc_transcript <- iso_per_transcript %>%
+      ggplot(aes(x = source, y = perc_assoc_transcript * 100, fill = iso_cat)) +
+        geom_col() +
+        scale_fill_conesa(palette = "complete", name = "# of isoforms per transcript") +
+        labs(
+          title = paste0("Relative redundancy of transcripts; ", condition_label),
+          x     = "Strategy",
+          y     = "% of associated transcripts"
+        ) +
+        theme_minimal()
+  }
 
   p_iso_transcript <- iso_per_transcript %>%
     ggplot(aes(x = source, y = sum_n_isoforms, fill = iso_cat)) +
       geom_bar(stat = "identity") +
       scale_fill_conesa(palette = "complete", name = "# of isoforms per transcript") +
       labs(
-        title = "Redundancy of transcripts; brain",
+        title = paste0("Redundancy of transcripts; ", condition_label),
         x     = "Strategy",
         y     = "# of isoforms"
       ) +
       theme_minimal()
 
-  p_perc_iso_transcript <- iso_per_transcript %>%
-    ggplot(aes(x = source, y = perc_n_isoforms * 100, fill = iso_cat)) +
-      geom_bar(stat = "identity") +
-      scale_fill_conesa(palette = "complete", name = "# of isoforms per transcript") +
-      labs(
-        title = "Relative redundancy of transcripts; brain",
-        x     = "Strategy",
-        y     = "% of isoforms"
-      ) +
-      theme_minimal()
+  p_perc_iso_transcript <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    p_perc_iso_transcript <- iso_per_transcript %>%
+      ggplot(aes(x = source, y = perc_n_isoforms * 100, fill = iso_cat)) +
+        geom_bar(stat = "identity") +
+        scale_fill_conesa(palette = "complete", name = "# of isoforms per transcript") +
+        labs(
+          title = paste0("Relative redundancy of transcripts; ", condition_label),
+          x     = "Strategy",
+          y     = "% of isoforms"
+        ) +
+        theme_minimal()
+  }
 
   iso_per_ujc <- df %>%
     group_by(source, UJC) %>%
@@ -776,53 +856,67 @@ compare_isoform_plots <- function(class_df_list) {
       scale_fill_conesa(palette = "complete", name = "# of isoforms per UJC") +
       geom_bar(stat = "identity") +
       labs(
-        title = "Redundancy of UJCs; brain",
+        title = paste0("Redundancy of UJCs; ", condition_label),
         x     = "Strategy",
         y     = "# of UJCs"
       ) +
       theme_minimal()
   
-  p_perc_ujc <- iso_per_ujc %>%
-    ggplot(aes(x = source, y = perc_UJC * 100, fill = iso_cat)) +
-      scale_fill_conesa(palette = "complete", name = "# of isoforms per UJC") +
-      geom_bar(stat = "identity") +
-      labs(
-        title = "Redundancy of UJCs; brain",
-        x     = "Strategy",
-        y     = "% of UJCs"
-      ) +
-      theme_minimal()
+  p_perc_ujc <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    p_perc_ujc <- iso_per_ujc %>%
+      ggplot(aes(x = source, y = perc_UJC * 100, fill = iso_cat)) +
+        scale_fill_conesa(palette = "complete", name = "# of isoforms per UJC") +
+        geom_bar(stat = "identity") +
+        labs(
+          title = paste0("Redundancy of UJCs; ", condition_label),
+          x     = "Strategy",
+          y     = "% of UJCs"
+        ) +
+        theme_minimal()
+  }
 
   p_iso_ujc <- iso_per_ujc %>%
     ggplot(aes(x = source, y = sum_n_isoforms, fill = iso_cat)) +
       scale_fill_conesa(palette = "complete", name = "# of isoforms per UJC") +
       geom_bar(stat = "identity") +
       labs(
-        title = "Redundancy of UJCs; brain",
+        title = paste0("Redundancy of UJCs; ", condition_label),
         x     = "Strategy",
         y     = "# of isoforms"
       ) +
       theme_minimal()
 
-  p_perc_iso_ujc <- iso_per_ujc %>%
-    ggplot(aes(x = source, y = perc_n_isoforms * 100, fill = iso_cat)) +
-      scale_fill_conesa(palette = "complete", name = "# of isoforms per UJC") +
-      geom_bar(stat = "identity") +
-      labs(
-        title = "Redundancy of UJCs; brain",
-        x     = "Strategy",
-        y     = "% of isoforms"
-      ) +
-      theme_minimal()
+  p_perc_iso_ujc <- NULL
+  if (isTRUE(include_percentage_plots)) {
+    p_perc_iso_ujc <- iso_per_ujc %>%
+      ggplot(aes(x = source, y = perc_n_isoforms * 100, fill = iso_cat)) +
+        scale_fill_conesa(palette = "complete", name = "# of isoforms per UJC") +
+        geom_bar(stat = "identity") +
+        labs(
+          title = paste0("Redundancy of UJCs; ", condition_label),
+          x     = "Strategy",
+          y     = "% of isoforms"
+        ) +
+        theme_minimal()
+  }
 
-  list(
+  out <- list(
     count_transcript = p_count_transcript,
-    perc_transcript = p_perc_transcript,
     total_isoforms_transcript = p_iso_transcript,
-    perc_isoforms_transcript = p_perc_iso_transcript,
     count_ujc = p_count_ujc,
-    perc_ujc = p_perc_ujc,
-    total_isoforms_ujc = p_iso_ujc,
-    perc_isoforms_ujc = p_perc_iso_ujc
+    total_isoforms_ujc = p_iso_ujc
   )
+  if (isTRUE(include_percentage_plots)) {
+    out <- c(
+      out,
+      list(
+        perc_transcript = p_perc_transcript,
+        perc_isoforms_transcript = p_perc_iso_transcript,
+        perc_ujc = p_perc_ujc,
+        perc_isoforms_ujc = p_perc_iso_ujc
+      )
+    )
+  }
+  out
 }
