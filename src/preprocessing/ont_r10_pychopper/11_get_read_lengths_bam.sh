@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16gb
 #SBATCH --qos=medium
-#SBATCH --time=2-00:00:00
+#SBATCH --time=6:00:00
 #
 # Submit: cd .../ont_r10_pychopper && sbatch 11_get_read_lengths_bam.sh
 

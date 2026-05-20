@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=100gb
 #SBATCH --qos=medium
-#SBATCH --time=7-00:00:00
+#SBATCH --time=6:00:00
 
 source ~/.bashrc
 
