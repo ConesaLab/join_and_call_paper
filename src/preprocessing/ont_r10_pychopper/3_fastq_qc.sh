@@ -16,15 +16,13 @@ conda deactivate
 conda activate SQANTI3.env
 module load fastqc
 
-_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=config.sh
-source "${_script_dir}/config.sh"
+source config.sh
 
 mkdir -p "${fastqc_dir}" "${logs_dir}"
 
 echo "=== Job ${SLURM_JOB_ID} | Task ${SLURM_ARRAY_TASK_ID:-N/A} | $(hostname) | $(date) ==="
 
-readarray myarray < "${_script_dir}/list_fastqs_for_map.fof"
+readarray myarray < list_fastqs_for_map.fof
 
 file=${myarray[$SLURM_ARRAY_TASK_ID]}
 

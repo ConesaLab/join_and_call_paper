@@ -12,9 +12,7 @@ source ~/.bashrc
 
 module load samtools
 
-_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=config.sh
-source "${_script_dir}/config.sh"
+source config.sh
 
 mkdir -p "${logs_dir}"
 

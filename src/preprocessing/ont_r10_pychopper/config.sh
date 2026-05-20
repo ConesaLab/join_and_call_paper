@@ -1,5 +1,5 @@
-# Shared paths for the ONT R10 Pychopper branch (source from Slurm scripts).
-# Does not modify the default ont_r10 Dorado + minimap2 -ub pipeline.
+# Shared paths for the ONT R10 Pychopper branch.
+# Source from job scripts after cd to this directory (same pattern as ont_r10 list_fastqs.fof).
 
 base_dir="/storage/gge/Fabian/ont_r10_sy5y"
 fastq_in="${base_dir}/fastq"

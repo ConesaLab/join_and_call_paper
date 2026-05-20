@@ -9,10 +9,8 @@
 #SBATCH --time=2-00:00:00
 #SBATCH --array=0-3
 #
-# Pychopper orientation/trimming for ONT R10 SY5Y (alternative to Dorado-only + minimap2 -ub).
-# Design reference: src/preprocessing/ont/3_pychopper.sh (mouse PCS111; here LSK114 for SQK-LSK114).
-# Input: Dorado-trimmed FASTQs in fastq/ (same as default ont_r10 branch).
-# Kit: -k LSK114 (not the full product string "ONT SQK-LSK114").
+# Submit from this directory: cd .../ont_r10_pychopper && sbatch 0_pychopper.sh
+# Kit: -k LSK114 (SQK-LSK114; not the full product string).
 
 source ~/.bashrc
 
@@ -20,15 +18,13 @@ module load samtools
 conda deactivate
 conda activate pychopper
 
-_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=config.sh
-source "${_script_dir}/config.sh"
+source config.sh
 
 mkdir -p "${fastq_out}" "${logs_dir}"
 
 echo "=== Job ${SLURM_JOB_ID} | Task ${SLURM_ARRAY_TASK_ID:-N/A} | $(hostname) | $(date) ==="
 
-readarray myarray < "${_script_dir}/list_fastqs.fof"
+readarray myarray < list_fastqs.fof
 
 file=${myarray[$SLURM_ARRAY_TASK_ID]}
 

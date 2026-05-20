@@ -15,13 +15,11 @@ module load samtools
 conda deactivate
 conda activate SQANTI3.env
 
-_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=config.sh
-source "${_script_dir}/config.sh"
+source config.sh
 
 echo "=== Job ${SLURM_JOB_ID} | Task ${SLURM_ARRAY_TASK_ID:-N/A} | $(hostname) | $(date) ==="
 
-readarray myarray < "${_script_dir}/list_fastqs_for_map.fof"
+readarray myarray < list_fastqs_for_map.fof
 
 file=${myarray[$SLURM_ARRAY_TASK_ID]}
 

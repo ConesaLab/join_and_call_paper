@@ -14,19 +14,16 @@ module load samtools
 conda deactivate
 conda activate SQANTI3.env
 
-_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=config.sh
-source "${_script_dir}/config.sh"
+source config.sh
 
 sqanti_tool="$HOME/tools/SQANTI3_dev"
-design_csv="${_script_dir}/design_ont_r10_pychopper.csv"
 
 echo "=== Job ${SLURM_JOB_ID} | $(hostname) | $(date) ==="
 
 python3 "${sqanti_tool}/sqanti_reads.py" \
   --genome "${assembly}" \
   --annotation "${ref_annotation}" \
-  -de "${design_csv}" \
+  -de design_ont_r10_pychopper.csv \
   -i "${sqanti_reads_dir}" \
   -f "condition" \
   -p "ONT_R10_pychopper" \

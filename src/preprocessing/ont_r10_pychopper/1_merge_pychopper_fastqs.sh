@@ -8,20 +8,16 @@
 #SBATCH --qos=short
 #SBATCH --time=5:00:00
 #SBATCH --array=0-3
-#
-# Merge Pychopper full-length + rescued reads for mapping (mouse ont/4_map.sh pattern).
 
 source ~/.bashrc
 
-_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=config.sh
-source "${_script_dir}/config.sh"
+source config.sh
 
 mkdir -p "${fastq_out}" "${logs_dir}"
 
 echo "=== Job ${SLURM_JOB_ID} | Task ${SLURM_ARRAY_TASK_ID:-N/A} | $(hostname) | $(date) ==="
 
-readarray myarray < "${_script_dir}/list_fastqs.fof"
+readarray myarray < list_fastqs.fof
 
 file=${myarray[$SLURM_ARRAY_TASK_ID]}
 

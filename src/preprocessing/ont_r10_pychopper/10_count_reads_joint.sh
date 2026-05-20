@@ -10,9 +10,7 @@
 #
 # Same TSV schema as ont_r10/9_count_reads_joint.sh; writes to read_qc_pychopper/.
 #
-# Submit:
-#   cd <repo>/src/preprocessing/ont_r10_pychopper && sbatch 10_count_reads_joint.sh
-# or: export LIST_FASTQS_FOF=/path/to/list_fastqs_for_map.fof
+# Submit: cd .../ont_r10_pychopper && sbatch 10_count_reads_joint.sh
 
 LC_ALL=C
 
@@ -21,33 +19,33 @@ module load samtools
 
 set -euo pipefail
 
-_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=config.sh
-source "${_script_dir}/config.sh"
-
-OUT_TSV="${read_qc_dir}/read_numbers_joint.tsv"
-THREADS="${SLURM_CPUS_PER_TASK:-4}"
+BASE_DIR="/storage/gge/Fabian/ont_r10_sy5y"
+BAMDIR="${BASE_DIR}/bam_pychopper"
+OUT_DIR="${BASE_DIR}/analysis/read_qc_pychopper"
+OUT_TSV="${OUT_DIR}/read_numbers_joint.tsv"
 
 FOF=""
 if [[ -n "${LIST_FASTQS_FOF:-}" && -f "${LIST_FASTQS_FOF}" ]]; then
   FOF="${LIST_FASTQS_FOF}"
 elif [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
-  for c in "${SLURM_SUBMIT_DIR}/src/preprocessing/ont_r10_pychopper/list_fastqs_for_map.fof" \
-    "${SLURM_SUBMIT_DIR}/list_fastqs_for_map.fof"; do
+  for c in "${SLURM_SUBMIT_DIR}/list_fastqs_for_map.fof"; do
     if [[ -f "$c" ]]; then
       FOF="$c"
       break
     fi
   done
 fi
-if [[ -z "${FOF}" && -f "${_script_dir}/list_fastqs_for_map.fof" ]]; then
-  FOF="${_script_dir}/list_fastqs_for_map.fof"
+if [[ -z "${FOF}" && -f list_fastqs_for_map.fof ]]; then
+  FOF="list_fastqs_for_map.fof"
 fi
+
+THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
 echo "=== Job ${SLURM_JOB_ID} | $(hostname) | $(date) ==="
 echo "OUT_TSV=${OUT_TSV}"
 
-mkdir -p "${read_qc_dir}" "${logs_dir}"
+mkdir -p "${OUT_DIR}"
+mkdir -p "${BASE_DIR}/analysis/logs_pychopper"
 
 count_fastq_reads() {
   local fq="$1"
@@ -72,10 +70,10 @@ count_primary_mapped_bam() {
 }
 
 if [[ -z "${FOF}" || ! -f "${FOF}" ]]; then
-  echo "ERROR: could not find list_fastqs_for_map.fof" >&2
+  echo "ERROR: could not find list_fastqs_for_map.fof (run sbatch from ont_r10_pychopper/)." >&2
   exit 1
 fi
-echo "Using: ${FOF}"
+echo "Using list_fastqs_for_map.fof: ${FOF}"
 
 mapfile -t FASTQ_PATHS < "$FOF"
 
@@ -85,7 +83,7 @@ mapfile -t FASTQ_PATHS < "$FOF"
     [[ -z "${fq// }" ]] && continue
     ori_name="$(basename "$fq")"
     sample="${ori_name%_for_map.fastq}"
-    bam="${bam_dir}/${sample}_primary_aln_sorted.bam"
+    bam="${BAMDIR}/${sample}_primary_aln_sorted.bam"
     ont_fq="$(count_fastq_reads "$fq")"
     ont_pr="$(count_primary_mapped_bam "$bam")"
     printf '%s\t%s\t%s\t0\t0\n' "$sample" "$ont_pr" "$ont_fq"
