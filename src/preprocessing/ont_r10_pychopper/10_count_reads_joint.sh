@@ -2,6 +2,8 @@
 #SBATCH --job-name=ont_r10_pychopper_read_counts
 #SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs_pychopper/count_reads_joint_%j.log
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs_pychopper/count_reads_joint_%j.log
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=fjetzinger@biobam.com
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16gb

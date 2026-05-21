@@ -14,6 +14,8 @@ assembly="${ref_dir}/GRCh38_SIRV.fa"
 ref_annotation="${ref_dir}/gencode.v49_SIRV.gtf"
 
 PYCHOPPER_KIT="LSK114"
+# Lower batch size reduces peak RAM on large human FASTQs (default 1000000).
+PYCHOPPER_BATCH_SIZE=25000
 
 # Analysis subdirs (isolated from default ont_r10 branch)
 fastqc_dir="${analysis_dir}/fastqc_pychopper"

@@ -2,6 +2,8 @@
 #SBATCH --job-name=merge_pychopper_ont_r10
 #SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs_pychopper/merge_%A_%a.log
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs_pychopper/merge_%A_%a.log
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=fjetzinger@biobam.com
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=50gb

@@ -2,11 +2,13 @@
 #SBATCH --job-name=map_ont_r10_pychopper
 #SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs_pychopper/map_%A_%a.log
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs_pychopper/map_%A_%a.log
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=fjetzinger@biobam.com
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=50gb
 #SBATCH --qos=medium
-#SBATCH --time=6:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH --array=0-3
 
 source ~/.bashrc

@@ -2,11 +2,13 @@
 #SBATCH --job-name=ont_r10_pychopper_bam_readlen
 #SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs_pychopper/bam_readlen_%j.log
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs_pychopper/bam_readlen_%j.log
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=fjetzinger@biobam.com
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16gb
 #SBATCH --qos=medium
-#SBATCH --time=6:00:00
+#SBATCH --time=2-00:00:00
 #
 # Submit: cd .../ont_r10_pychopper && sbatch 11_get_read_lengths_bam.sh
 

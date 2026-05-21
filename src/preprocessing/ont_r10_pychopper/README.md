@@ -44,24 +44,26 @@ sbatch 11_get_read_lengths_bam.sh
 
 Conda: `pychopper` (step 0), `SQANTI3.env` (mapping and SQANTI steps).
 
+All jobs send Slurm mail on BEGIN, END, and FAIL to `fjetzinger@biobam.com`.
+
 ## Slurm resources (QoS)
 
 | Step | cpus | mem | qos | time | Notes |
 |------|------|-----|-----|------|-------|
-| 0 pychopper | 4 | 50gb | short | 24:00:00 | Mouse uses 15gb/4cpu; 50gb for full human SRR FASTQs (OOM at 15gb) |
+| 0 pychopper | 4 | 100gb | long-mem | 15-00:00:00 | qos max; `-B 25000` batch size |
 | 1 merge | 4 | 50gb | short | 24:00:00 | Matches mouse `ont/3c_merge_fastqs.sh` |
-| 2 map | 8 | 50gb | medium | 6:00:00 | Matches `ont_r10/2_map.sh` mem/cpu; time capped to qos medium max |
+| 2 map | 8 | 50gb | medium | 2-00:00:00 | Matches `ont_r10/2_map.sh` |
 | 3 fastqc | 8 | 10gb | short | 5:00:00 | Matches `ont_r10/1_fastq_qc.sh` |
 | 4 bam_qc | 2 | 10gb | short | 5:00:00 | Matches `ont_r10/3_bam_qc.sh` |
-| 5 sqanti | 1 | 100gb | medium | 6:00:00 | Matches `ont_r10/4_run_sqanti.sh` |
+| 5 sqanti | 1 | 100gb | medium | 2-00:00:00 | Matches `ont_r10/4_run_sqanti.sh` |
 | 6 sqanti SIRV | 1 | 20gb | short | 10:00:00 | Matches `ont_r10/5_run_sqanti_SIRVS.sh` |
-| 7 sqanti_reads | 2 | 50gb | medium | 6:00:00 | Matches `ont_r10/6_sqanti_reads.sh` |
-| 8 sqanti merge | 12 | 100gb | medium | 6:00:00 | Matches `ont_r10/7` mem/cpu |
+| 7 sqanti_reads | 2 | 50gb | medium | 2-00:00:00 | Matches `ont_r10/6_sqanti_reads.sh` |
+| 8 sqanti merge | 12 | 100gb | medium | 7-00:00:00 | Matches `ont_r10/7_sqanti_reads_merge.sh` |
 | 9 concat | 1 | 40gb | short | 24:00:00 | Matches `ont_r10/8_concat_samples.sh` |
 | 10 count reads | 8 | 16gb | short | 24:00:00 | Matches `ont_r10/9_count_reads_joint.sh` |
-| 11 read lengths | 8 | 16gb | medium | 6:00:00 | Matches `ont_r10/10_get_read_lengths_bam.sh` |
+| 11 read lengths | 8 | 16gb | medium | 2-00:00:00 | Matches `ont_r10/10_get_read_lengths_bam.sh` |
 
-Per-job time on **medium** is capped at **6:00:00** per cluster qos. **short** jobs use up to **24:00:00** (mouse pychopper pattern). If step 0 still OOMs, try `long-mem` with `--mem=80gb` or higher.
+QoS max wall times: **short** 1 day, **medium** 7 days, **long-mem** 15 days (scripts match [`ont_r10`](../ont_r10/) where parallel). If step 0 still OOMs, lower `PYCHOPPER_BATCH_SIZE` in `config.sh` or raise `--mem` in `0_pychopper.sh`.
 
 ## Validation checklist
 

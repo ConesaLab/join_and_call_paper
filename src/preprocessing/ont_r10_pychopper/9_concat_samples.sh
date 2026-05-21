@@ -2,6 +2,8 @@
 #SBATCH --job-name=concat_ont_r10_pychopper
 #SBATCH --output=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs_pychopper/concat_samples_%j.log
 #SBATCH --error=/storage/gge/Fabian/ont_r10_sy5y/analysis/logs_pychopper/concat_samples_%j.log
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=fjetzinger@biobam.com
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=40gb
