@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=100gb
 #SBATCH --qos=long-mem
-#SBATCH --time=15-00:00:00
+#SBATCH --time=7-00:00:00
 #SBATCH --array=0-3
 #
 # Submit from this directory: cd .../ont_r10_pychopper && sbatch 0_pychopper.sh

@@ -50,7 +50,7 @@ All jobs send Slurm mail on BEGIN, END, and FAIL to `fjetzinger@biobam.com`.
 
 | Step | cpus | mem | qos | time | Notes |
 |------|------|-----|-----|------|-------|
-| 0 pychopper | 4 | 100gb | long-mem | 15-00:00:00 | qos max; `-B 25000` batch size |
+| 0 pychopper | 4 | 100gb | long-mem | 7-00:00:00 | `-B 25000` batch size |
 | 1 merge | 4 | 50gb | short | 24:00:00 | Matches mouse `ont/3c_merge_fastqs.sh` |
 | 2 map | 8 | 50gb | medium | 2-00:00:00 | Matches `ont_r10/2_map.sh` |
 | 3 fastqc | 8 | 10gb | short | 5:00:00 | Matches `ont_r10/1_fastq_qc.sh` |
@@ -63,7 +63,7 @@ All jobs send Slurm mail on BEGIN, END, and FAIL to `fjetzinger@biobam.com`.
 | 10 count reads | 8 | 16gb | short | 24:00:00 | Matches `ont_r10/9_count_reads_joint.sh` |
 | 11 read lengths | 8 | 16gb | medium | 2-00:00:00 | Matches `ont_r10/10_get_read_lengths_bam.sh` |
 
-QoS max wall times: **short** 1 day, **medium** 7 days, **long-mem** 15 days (scripts match [`ont_r10`](../ont_r10/) where parallel). If step 0 still OOMs, lower `PYCHOPPER_BATCH_SIZE` in `config.sh` or raise `--mem` in `0_pychopper.sh`.
+All jobs request **at most 7 days** wall time (cluster maintenance ~May 30 / Jun 1; longer reservations are rejected). Scripts otherwise match [`ont_r10`](../ont_r10/) mem/cpu/qos. If step 0 still OOMs, lower `PYCHOPPER_BATCH_SIZE` in `config.sh` or raise `--mem` in `0_pychopper.sh`.
 
 ## Validation checklist
 
