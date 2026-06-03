@@ -1,8 +1,18 @@
 # 01_config.R
 # Paths, constants, sample labels, read numbers, FL filter levels
 
-# base_path <- "/mnt/c/Users/jetzi/other_repos/documenting_NIH/fabian"
-base_path <- "C:/Users/jetzi/other_repos/documenting_NIH/fabian"
+if (!exists("paper_documenting_nih_root", mode = "function")) {
+  if (exists("r_source_dir", inherits = TRUE)) {
+    source(file.path(r_source_dir, "00_figure_config.R"))
+  } else {
+    stop(
+      "Define `r_source_dir` before sourcing 01_config.R, or source 00_figure_config.R first.",
+      call. = FALSE
+    )
+  }
+}
+
+base_path <- paper_documenting_nih_root()
 
 isoseq_report_path <- file.path(base_path, "reports", "isoseq")
 ont_report_path    <- file.path(base_path, "reports", "ont")

@@ -21,9 +21,14 @@ SY5Y_COMPARE_PANEL_NAMES <- c(
 # Mouse `all_plots.Rmd`: `brain_comb_bar.pdf` (# UJCs) and `brain_comb_fl_bar.pdf` (read support).
 SY5Y_UJC_OCCURRENCE_TRANSCRIPT <- "comb_bar"
 SY5Y_UJC_OCCURRENCE_READS <- "comb_fl_bar"
+SY5Y_UJC_PERCENT_TRANSCRIPT <- "perc_comb_bar"
+SY5Y_UJC_PERCENT_READS <- "perc_comb_fl_bar"
 
 #' Output directory for ONT R10 SY5Y figures.
 sy5y_plot_creation_dir <- function() {
+  if (exists("plot_creation_ont_r10_dir", mode = "function")) {
+    return(plot_creation_ont_r10_dir())
+  }
   file.path(ont_r10_repo_root, "plot_creation_ont_r10")
 }
 
@@ -172,40 +177,21 @@ style_sy5y_expr_y <- function(p) {
   )
 }
 
-style_sy5y_axes <- function(p) {
-  p + ggplot2::theme(
-    axis.text = ggplot2::element_text(size = 7.5),
-    axis.text.x = ggplot2::element_text(
-      size = 7,
-      angle = 45,
-      hjust = 1,
-      vjust = 1
-    ),
-    axis.title = ggplot2::element_text(size = 8)
-  )
-}
-
 strip_legend <- function(p) {
   p + ggplot2::theme(legend.position = "none")
 }
 
-#' Per-panel tool title — same as mouse `assemble_comb_plots` / `bar_theme` (`labs(title = tool)`).
+#' Per-panel tool title (`bar_theme` / mouse `assemble_comb_plots`).
 sy5y_panel_tool_title <- function(plot, tool_name) {
   plot +
-    ggplot2::labs(title = tool_name) +
-    ggplot2::theme(
-      plot.title = ggplot2::element_text(hjust = 0.5, size = 16, face = "bold"),
-      axis.text = ggplot2::element_text(size = 10),
-      axis.title = ggplot2::element_text(size = 12)
-    )
+    ggplot2::ggtitle(tool_name) +
+    sy5y_mouse_panel_theme()
 }
 
 sy5y_structural_panel <- function(panels, tool_name) {
   ylims <- ont_r10_sy5y_ylims$structural
-  p <- style_sy5y_axes(
-    style_sy5y_count_y(strip_legend(panels$count)) +
-      ggplot2::labs(y = "# isoforms")
-  )
+  p <- style_sy5y_count_y(strip_legend(panels$count)) +
+    ggplot2::labs(y = "# isoforms")
   if (!is.null(ylims) && length(ylims) == 2L && !any(is.na(ylims))) {
     bar_theme(p, tool_name, ylims)
   } else {
@@ -213,14 +199,36 @@ sy5y_structural_panel <- function(panels, tool_name) {
   }
 }
 
-sy5y_comb_panel_theme <- function(plot, tool_name, ylims = NULL, ylab = NULL) {
-  p <- strip_legend(plot)
-  p <- sy5y_panel_tool_title(p, tool_name)
-  p <- sy5y_apply_ylims(p, ylims)
-  if (!is.null(ylab) && nzchar(ylab)) {
-    p <- p + ggplot2::labs(y = ylab)
+sy5y_comb_panel_theme <- function(
+    plot,
+    tool_name,
+    ylims = NULL,
+    ylab = NULL,
+    show_ylab = TRUE,
+    show_y_ticks = TRUE) {
+  p <- strip_legend(plot) +
+    ggplot2::labs(title = tool_name) +
+    sy5y_mouse_panel_theme()
+  if (!is.null(ylims) && length(ylims) == 2L && !any(is.na(ylims)) &&
+      ylims[1] == 0 && ylims[2] %in% c(50, 65, 100)) {
+    p <- sy5y_percent_y_scale(p, ylims)
+  } else {
+    p <- sy5y_apply_ylims(p, ylims)
   }
-  style_sy5y_axes(p)
+  if (!is.null(ylab) && nzchar(ylab) && isTRUE(show_ylab)) {
+    p <- p + ggplot2::labs(y = ylab)
+  } else {
+    p <- sy5y_strip_ylab(p)
+  }
+  if (!isTRUE(show_y_ticks)) {
+    p <- sy5y_strip_y_ticks(p)
+  }
+  p
+}
+
+#' Percent UJC occurrence / expression panels (shared 0–100% y-scale).
+sy5y_ujc_percent_panel <- function(panel_name) {
+  panel_name %in% c("perc_comb_bar", "perc_comb_fl_bar")
 }
 
 sy5y_legend_from_plot <- function(legend_plot) {
@@ -228,9 +236,9 @@ sy5y_legend_from_plot <- function(legend_plot) {
     legend_plot +
       ggplot2::theme(
         legend.position = "right",
-        legend.key.size = grid::unit(0.4, "cm"),
-        legend.text = ggplot2::element_text(size = 8),
-        legend.title = ggplot2::element_text(size = 9)
+        legend.key.size = grid::unit(0.5, "cm"),
+        legend.text = ggplot2::element_text(size = 12),
+        legend.title = ggplot2::element_text(size = 14)
       )
   )
 }
@@ -239,9 +247,80 @@ sy5y_legend_column <- function(legend_grob) {
   patchwork::wrap_elements(full = legend_grob, clip = FALSE)
 }
 
-#' Drop duplicate y-axis titles (keep ylab on top-left panel only; mouse uses `collect_y`).
+#' Patchwork layout: y/x ticks on every panel; one ylab per row via [sy5y_strip_ylab] (not patchwork title collect).
+sy5y_ont_r10_patchwork_layout <- function(widths = c(1, 1), heights = c(1, 1)) {
+  patchwork::plot_layout(
+    widths = widths,
+    heights = heights,
+    guides = "keep",
+    axes = "keep",
+    axis_titles = "keep"
+  )
+}
+
+#' Remove y-axis title (right-hand panels; left column in each row keeps ylab).
 sy5y_strip_ylab <- function(p) {
-  p + ggplot2::theme(axis.title.y = ggplot2::element_blank())
+  if (inherits(p, "ggplot")) {
+    p <- p + ggplot2::theme(axis.title.y = ggplot2::element_blank())
+  }
+  p
+}
+
+#' Remove y-axis tick labels (top-row right panel when collecting y ticks per row).
+sy5y_strip_y_ticks <- function(p) {
+  if (inherits(p, "ggplot")) {
+    p <- p + ggplot2::theme(
+      axis.text.y = ggplot2::element_blank(),
+      axis.ticks.y = ggplot2::element_blank()
+    )
+  }
+  p
+}
+
+#' Remove per-panel x-axis title (shared label via [sy5y_figure_annotation] caption).
+sy5y_strip_x_title <- function(p) {
+  if (inherits(p, "ggplot")) {
+    p <- p + ggplot2::theme(axis.title.x = ggplot2::element_blank())
+  }
+  p
+}
+
+#' Default shared x-axis title for multi-tool UJC grids (caption; tick labels stay per panel).
+sy5y_ujc_default_x_label <- function(panel_name) {
+  if (panel_name %in% c("ujc_curve", "ujc_stack", "ujc_fl_stack")) {
+    "Number of samples included"
+  } else if (panel_name %in% c(
+    "comb_bar", "comb_fl_bar", "perc_comb_bar", "perc_comb_fl_bar"
+  )) {
+    "Number of samples present"
+  } else {
+    NULL
+  }
+}
+
+#' TPM / filter-level panel: ylab on left column only; x tick labels on every panel; shared xlab via caption.
+sy5y_tpm_panel <- function(
+    plot,
+    ylab,
+    strip_x_title = TRUE,
+    show_ylab = TRUE,
+    log_x = FALSE,
+    x_tick_angle = 0,
+    x_tick_hjust = NULL) {
+  p <- plot
+  if (isTRUE(show_ylab)) {
+    p <- p + ggplot2::labs(y = ylab)
+  } else {
+    p <- p + ggplot2::theme(axis.title.y = ggplot2::element_blank())
+  }
+  if (isTRUE(strip_x_title)) {
+    p <- sy5y_strip_x_title(p)
+  }
+  p + tpm_panel_theme(
+    x_tick_angle = x_tick_angle,
+    x_tick_hjust = x_tick_hjust,
+    log_x = log_x
+  )
 }
 
 #' Core 2×2 layout: IsoQuant | FLAIR / Bambu | legend.
@@ -250,23 +329,23 @@ assemble_ont_r10_three_tool_grid <- function(
     flair_col,
     bambu_col,
     legend_grob,
-    title = NULL) {
+    title = NULL,
+    x_label = NULL) {
+  if (length(x_label) && nzchar(x_label)) {
+    iso_col <- sy5y_strip_x_title(iso_col)
+    flair_col <- sy5y_strip_x_title(flair_col)
+    bambu_col <- sy5y_strip_x_title(bambu_col)
+  }
   leg_col <- sy5y_legend_column(legend_grob)
-  core <- (iso_col | sy5y_strip_ylab(flair_col)) / (sy5y_strip_ylab(bambu_col) | leg_col) +
-    patchwork::plot_layout(
-      widths = c(1, 1),
-      heights = c(1, 1),
-      guides = "keep",
-      axes = "collect_y"
-    )
-  if (length(title) && nzchar(title)) {
-    core <- core +
-      patchwork::plot_annotation(
-        title = title,
-        theme = ggplot2::theme(
-          plot.title = ggplot2::element_text(face = "bold", hjust = 0.5, size = 13)
-        )
-      )
+  core <- (
+    iso_col | sy5y_strip_ylab(flair_col)
+  ) / (
+    bambu_col | leg_col
+  ) +
+    sy5y_ont_r10_patchwork_layout()
+  ann <- sy5y_figure_annotation(title = title, x_label = x_label)
+  if (!is.null(ann)) {
+    core <- core + ann
   }
   core
 }
@@ -290,6 +369,42 @@ sy5y_apply_ylims <- function(p, ylims) {
   p + ggplot2::coord_cartesian(ylim = ylims)
 }
 
+#' Shared percent y-axis (fixed caps in ont_r10_sy5y_ylims).
+sy5y_percent_y_scale <- function(p, ylims) {
+  if (is.null(ylims) || length(ylims) != 2L || any(is.na(ylims))) {
+    return(p)
+  }
+  breaks <- if (ylims[2] >= 100) {
+    seq(0, 100, 25)
+  } else if (ylims[2] <= 50) {
+    seq(0, 50, 10)
+  } else {
+    seq(0, ylims[2], by = 10)
+  }
+  if (length(breaks)) {
+    p + ggplot2::scale_y_continuous(
+      limits = ylims,
+      breaks = breaks,
+      labels = function(x) paste0(x, "%")
+    )
+  } else {
+    sy5y_apply_ylims(p, ylims)
+  }
+}
+
+#' Legend source for percent UJC panels (structural fill matches count panels).
+sy5y_ujc_legend_panel <- function(panel_name, legend_panel = NULL) {
+  if (!is.null(legend_panel) && nzchar(legend_panel)) {
+    return(legend_panel)
+  }
+  switch(
+    panel_name,
+    perc_comb_bar = "comb_bar",
+    perc_comb_fl_bar = "comb_fl_bar",
+    panel_name
+  )
+}
+
 #' Save one multi-tool 2×2 UJC panel (used for mouse-style occurrence / curve / stack figures).
 sy5y_ggsave_ujc_multitool_panel <- function(
     all_results,
@@ -299,8 +414,7 @@ sy5y_ggsave_ujc_multitool_panel <- function(
     fl_threshold = 1L,
     ylab = NULL,
     ylims = NULL,
-    width = 14,
-    height = 11) {
+    size = "sy5y_2x2") {
   if (is.null(ylims) && exists("ont_r10_sy5y_ylims", inherits = TRUE)) {
     ylims <- ont_r10_sy5y_ylims[[panel_name]]
     if (is.null(ylims)) {
@@ -318,14 +432,7 @@ sy5y_ggsave_ujc_multitool_panel <- function(
     out_dir,
     sprintf("sy5y_%s_fl%s.pdf", panel_name, fl_threshold)
   )
-  ggplot2::ggsave(
-    out_pdf,
-    plot = p,
-    device = grDevices::cairo_pdf,
-    width = width,
-    height = height,
-    units = "in"
-  )
+  paper_ggsave(out_pdf, plot = p, size = size)
   invisible(out_pdf)
 }
 
@@ -336,21 +443,40 @@ assemble_ont_r10_ujc_ggplot_grid <- function(
     title = NULL,
     ylims = NULL,
     ylab = NULL,
-    legend_panel = "comb_bar") {
+    legend_panel = NULL,
+    x_label = NULL) {
+  if (is.null(x_label)) {
+    x_label <- sy5y_ujc_default_x_label(panel_name)
+  }
+  legend_panel <- sy5y_ujc_legend_panel(panel_name, legend_panel)
   iso_p <- all_results$IsoQuant$ujc[[panel_name]]
   fl_p <- all_results$FLAIR$ujc[[panel_name]]
   bm_p <- all_results$Bambu$ujc[[panel_name]]
+  if (is.null(iso_p)) {
+    stop("Missing UJC panel '", panel_name, "' for IsoQuant (enable include_percentage_plots in sy5y_ujc_bundle).")
+  }
   leg_plot <- all_results$IsoQuant$ujc[[legend_panel]]
   if (is.null(leg_plot)) {
     leg_plot <- iso_p
   }
   leg <- sy5y_legend_from_plot(leg_plot)
+  pct <- sy5y_ujc_percent_panel(panel_name)
   assemble_ont_r10_three_tool_grid(
-    sy5y_comb_panel_theme(iso_p, "IsoQuant", ylims, ylab),
-    sy5y_comb_panel_theme(fl_p, "FLAIR", ylims, ylab),
-    sy5y_comb_panel_theme(bm_p, "Bambu", ylims, ylab),
+    sy5y_comb_panel_theme(
+      iso_p, "IsoQuant", ylims, ylab,
+      show_ylab = TRUE, show_y_ticks = TRUE
+    ),
+    sy5y_comb_panel_theme(
+      fl_p, "FLAIR", ylims, ylab,
+      show_ylab = !pct, show_y_ticks = !pct
+    ),
+    sy5y_comb_panel_theme(
+      bm_p, "Bambu", ylims, ylab,
+      show_ylab = TRUE, show_y_ticks = TRUE
+    ),
     leg,
-    title = title
+    title = title,
+    x_label = x_label
   )
 }
 
@@ -366,8 +492,8 @@ assemble_ont_r10_upset_grid <- function(all_results, title = NULL) {
   leg <- sy5y_legend_from_plot(leg_plot)
   assemble_ont_r10_three_tool_grid(
     upset_col("IsoQuant"),
-    sy5y_strip_ylab(upset_col("FLAIR")),
-    sy5y_strip_ylab(upset_col("Bambu")),
+    upset_col("FLAIR"),
+    upset_col("Bambu"),
     leg,
     title = title
   )
@@ -384,22 +510,21 @@ assemble_ont_r10_compare_grid <- function(
       ggplot2::guides(fill = ggplot2::guide_legend(ncol = 3, nrow = 2)) +
       ggplot2::theme(
         legend.position = "right",
-        legend.key.size = grid::unit(0.35, "cm"),
-        legend.text = ggplot2::element_text(size = 8),
-        legend.title = ggplot2::element_text(size = 9)
+        legend.key.size = grid::unit(0.5, "cm"),
+        legend.text = ggplot2::element_text(size = 12),
+        legend.title = ggplot2::element_text(size = 14)
       )
   )
   cmp_col <- function(tool_name) {
-    style_sy5y_axes(
-      compare_theme(all_results[[tool_name]]$compare[[panel_name]], tool_name)
-    )
+    compare_theme(all_results[[tool_name]]$compare[[panel_name]], tool_name)
   }
   assemble_ont_r10_three_tool_grid(
     cmp_col("IsoQuant"),
     cmp_col("FLAIR"),
     cmp_col("Bambu"),
     leg,
-    title = title
+    title = title,
+    x_label = "Strategy"
   )
 }
 
@@ -465,6 +590,8 @@ sy5y_build_all_tools_results <- function(fl_threshold = 1, include_expression = 
 }
 
 #' Read totals for expression bars (J&C/C&J = sum of replicate FASTQ; replicates from TSV).
+#'
+#' Default `read_col = "ont_fastq"`: white **Unassigned** = `ont_fastq - sum(FL)` per sample.
 sy5y_read_numbers_for_expression <- function(
     class_df_list,
     read_numbers_path = file.path(ont_r10_read_qc_dir, "read_numbers_joint.tsv"),
@@ -508,14 +635,23 @@ sy5y_read_numbers_for_expression <- function(
 sy5y_expression_panel <- function(
     class_df_list,
     fl_threshold = 1,
-    read_numbers_path = file.path(ont_r10_read_qc_dir, "read_numbers_joint.tsv")) {
+    read_numbers_path = file.path(ont_r10_read_qc_dir, "read_numbers_joint.tsv"),
+    read_col = if (exists("ont_r10_sy5y_expression_total_col", inherits = TRUE)) {
+      ont_r10_sy5y_expression_total_col
+    } else {
+      "ont_fastq"
+    }) {
   combined <- sy5y_combined_classification_df(class_df_list, fl_threshold)
   lev <- levels(combined$sample)
   lbl <- sy5y_sample_labels()
   if (length(lev) != length(lbl)) {
     lbl <- lbl[seq_along(lev)]
   }
-  totals <- sy5y_read_numbers_for_expression(class_df_list, read_numbers_path)
+  totals <- sy5y_read_numbers_for_expression(
+    class_df_list,
+    read_numbers_path,
+    read_col = read_col
+  )
   ps <- plot_classification_expression_data(
     combined,
     totals,
@@ -529,9 +665,12 @@ assemble_ont_r10_expression_grid <- function(all_results, title = NULL) {
   ylims <- ont_r10_sy5y_ylims$expression
   expr_col <- function(tool_name) {
     p <- all_results[[tool_name]]$expression$count
-    p <- strip_legend(style_sy5y_axes(style_sy5y_expr_y(p)))
-    p <- sy5y_apply_ylims(p, ylims)
-    p <- sy5y_panel_tool_title(p, tool_name)
+    p <- strip_legend(style_sy5y_expr_y(p))
+    if (!is.null(ylims) && length(ylims) == 2L && !any(is.na(ylims))) {
+      p <- bar_theme(p, tool_name, ylims)
+    } else {
+      p <- sy5y_panel_tool_title(p, tool_name)
+    }
     p + ggplot2::labs(y = "# reads")
   }
   leg <- sy5y_legend_from_plot(all_results$IsoQuant$expression$count)
@@ -558,87 +697,8 @@ sy5y_ujc_bundle <- function(class_df_list, method_title, upset_n_intersections =
     method_title,
     n = upset_n_intersections,
     combination_columns = sy5y_ujc_combination_columns(),
-    include_percentage_plots = FALSE
+    include_percentage_plots = TRUE
   )
-}
-
-sy5y_save_compare_pdfs <- function(bundle, tool_slug, out_dir,
-                                 width = 12,
-                                 height = 8) {
-  if (!dir.exists(out_dir)) {
-    dir.create(out_dir, recursive = TRUE)
-  }
-  for (nm in names(bundle)) {
-    p <- bundle[[nm]]
-    if (is.null(p)) next
-    ggplot2::ggsave(
-      file.path(out_dir, sprintf("sy5y_%s_compare_%s.pdf", tool_slug, nm)),
-      plot = p,
-      device = grDevices::cairo_pdf,
-      width = width,
-      height = height,
-      units = "in"
-    )
-  }
-  invisible(out_dir)
-}
-
-sy5y_compare_patchwork <- function(bundle) {
-  (bundle$count_transcript | bundle$total_isoforms_transcript) /
-    (bundle$count_ujc | bundle$total_isoforms_ujc)
-}
-
-sy5y_save_ujc_pdfs <- function(bundle, tool_slug, out_dir,
-                             width = 12,
-                             height = 8,
-                             upset_width = 16,
-                             upset_height = 9) {
-  if (!dir.exists(out_dir)) {
-    dir.create(out_dir, recursive = TRUE)
-  }
-  nm_dims <- list(
-    upset         = c(upset_width, upset_height),
-    comb          = c(width, height),
-    comb_bar      = c(width, height),
-    comb_fl_bar   = c(width, height),
-    ujc_curve     = c(width, height * 0.85),
-    ujc_stack     = c(width, height),
-    ujc_fl_stack  = c(width, height)
-  )
-  for (nm in names(nm_dims)) {
-    p <- bundle[[nm]]
-    if (is.null(p)) next
-    wd <- nm_dims[[nm]][1]
-    ht <- nm_dims[[nm]][2]
-    out_pdf <- file.path(out_dir, sprintf("sy5y_%s_ujc_%s.pdf", tool_slug, nm))
-    ggplot2::ggsave(
-      out_pdf,
-      plot = p,
-      device = grDevices::cairo_pdf,
-      width = wd,
-      height = ht,
-      units = "in"
-    )
-  }
-  invisible(out_dir)
-}
-
-sy5y_ujc_overview_patchwork <- function(bundle, tool_title) {
-  top <- patchwork::wrap_elements(full = bundle$upset)
-  p_comb <- bundle$comb + ggplot2::labs(subtitle = "UJCs per intersection size")
-  p_bar <- bundle$comb_bar + ggplot2::labs(subtitle = "By structural category")
-  p_fl <- bundle$comb_fl_bar + ggplot2::labs(subtitle = "Read support (FL)")
-  p_cv <- bundle$ujc_curve + ggplot2::labs(subtitle = "Discovery curve")
-  p_st <- bundle$ujc_stack + ggplot2::labs(subtitle = "UJC counts by reproducibility")
-  p_fst <- bundle$ujc_fl_stack + ggplot2::labs(subtitle = "Read support by reproducibility")
-  mid <- (p_comb | p_bar) / (p_fl | p_cv)
-  bot <- (p_st | p_fst)
-  (top / mid / bot) +
-    patchwork::plot_layout(heights = c(1.15, 1, 0.95)) +
-    patchwork::plot_annotation(
-      title = tool_title,
-      theme = ggplot2::theme(plot.title = ggplot2::element_text(face = "bold", hjust = 0.5, size = 14))
-    )
 }
 
 #' TPM curve data for J&C vs C&J (same logic as mouse build_tpm_curve_data).
@@ -677,97 +737,24 @@ build_sy5y_tpm_curve_data <- function(class_df_list, fl_threshold = 1) {
 assemble_ont_r10_tpm_line_figure <- function(
     line_plots,
     title,
-    log_x = FALSE) {
-  no_x <- ggplot2::theme(axis.title.x = ggplot2::element_blank())
-  x_grob <- patchwork::wrap_elements(full = grid::textGrob(
-    tpm_x_axis_label(log_x),
-    gp = grid::gpar(fontsize = 11)
-  ))
-  line_col <- function(p) {
-    p + no_x
-  }
-  shared_legend <- patchwork::wrap_elements(
+    log_x = FALSE,
+    ylab = "# transcripts") {
+  p_iso <- sy5y_tpm_panel(line_plots$IsoQuant, ylab, show_ylab = TRUE, log_x = log_x)
+  p_fl <- sy5y_tpm_panel(line_plots$FLAIR, ylab, show_ylab = FALSE, log_x = log_x)
+  p_bm <- sy5y_tpm_panel(line_plots$Bambu, ylab, show_ylab = TRUE, log_x = log_x)
+  leg_col <- patchwork::wrap_elements(
     full = build_tpm_line_legend_figure(category_layout = c(2, 3)),
     clip = FALSE
   )
-  leg_col <- shared_legend
-  core <- (
-    line_col(line_plots$IsoQuant) |
-      sy5y_strip_ylab(line_col(line_plots$FLAIR))
-  ) / (
-    sy5y_strip_ylab(line_col(line_plots$Bambu)) |
-      leg_col
-  ) / x_grob +
-    patchwork::plot_layout(
-      widths = c(1, 1),
-      heights = c(1, 1, 0.04),
-      axes = "collect_y"
-    ) +
-    patchwork::plot_annotation(
-      title = title,
-      theme = ggplot2::theme(
-        plot.title = ggplot2::element_text(size = 16, face = "bold", hjust = 0.5)
-      )
-    )
-  core
-}
-
-#' 2×2 TPM quantile bar figure (count or percent).
-assemble_ont_r10_tpm_bar_figure <- function(bar_plots, title) {
-  no_x <- ggplot2::theme(axis.title.x = ggplot2::element_blank())
-  bar_col <- function(p) {
-    p + no_x
-  }
-  fill_legend_plot <- bar_plots$IsoQuant +
-    ggplot2::theme(legend.position = "bottom") +
-    ggplot2::guides(
-      fill = ggplot2::guide_legend(
-        nrow = 3, ncol = 3,
-        title = "Structural Category",
-        title.position = "top"
-      )
-    )
-  fill_legend <- cowplot::get_legend(fill_legend_plot)
-  strategy_df <- data.frame(
-    x = factor(c("J&C", "C&J"), levels = c("J&C", "C&J")),
-    y = c(1, 1)
-  )
-  strategy_legend_plot <- ggplot2::ggplot(strategy_df, ggplot2::aes(x = x, y = y, fill = x)) +
-    ggplot2::geom_col(width = 0.7) +
-    ggplot2::scale_fill_manual(
-      values = c("J&C" = "grey50", "C&J" = "grey80"),
-      name = "Strategy"
-    ) +
-    ggplot2::theme_minimal() +
-    ggplot2::theme(legend.position = "bottom") +
-    ggplot2::guides(fill = ggplot2::guide_legend(nrow = 2, title.position = "top"))
-  strategy_legend <- cowplot::get_legend(strategy_legend_plot)
-  combined_legend <- (
-    patchwork::wrap_elements(full = strategy_legend) |
-      patchwork::wrap_elements(full = fill_legend)
-  ) +
-    patchwork::plot_layout(widths = c(1, 2))
-  leg_col <- patchwork::wrap_elements(full = combined_legend)
-  x_grob <- patchwork::wrap_elements(full = grid::textGrob(
-    "Strategy", gp = grid::gpar(fontsize = 11)
-  ))
   (
-    bar_col(bar_plots$IsoQuant) |
-      sy5y_strip_ylab(bar_col(bar_plots$FLAIR))
+    p_iso | p_fl
   ) / (
-    sy5y_strip_ylab(bar_col(bar_plots$Bambu)) |
-      leg_col
-  ) / x_grob +
-    patchwork::plot_layout(
-      widths = c(1, 1),
-      heights = c(1, 1, 0.04),
-      axes = "collect_y"
-    ) +
-    patchwork::plot_annotation(
+    p_bm | leg_col
+  ) +
+    sy5y_ont_r10_patchwork_layout() +
+    sy5y_figure_annotation(
       title = title,
-      theme = ggplot2::theme(
-        plot.title = ggplot2::element_text(size = 16, face = "bold", hjust = 0.5)
-      )
+      x_label = tpm_x_axis_label(log_x)
     )
 }
 

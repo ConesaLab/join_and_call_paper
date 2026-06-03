@@ -52,8 +52,11 @@ for (platform in names(tools_to_load)) {
     df_lists <- load_df_lists(paths)
     pres_raw[[platform]][[method]] <- df_lists
     pres_data[[platform]][[method]] <- process_and_plot(
-      df_lists$Bclass_df_list, df_lists$Kclass_df_list,
-      technology = platform, fl_threshold = 1
+      df_lists$Bclass_df_list,
+      df_lists$Kclass_df_list,
+      technology = platform,
+      method = method,
+      fl_threshold = 1
     )
   }
 }
@@ -80,12 +83,10 @@ make_pres_bar <- function(results, tissue, title, ylims, labels) {
     scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
     ggtitle(title) +
     ylab("# transcripts") +
-    theme_minimal() +
+    paper_panel_theme() +
     theme(
       plot.title   = element_text(hjust = 0.5, size = 18, face = "bold"),
       axis.text.x  = element_text(size = 11, angle = 45, hjust = 1),
-      axis.text.y  = element_text(size = 11),
-      axis.title   = element_text(size = 13),
       axis.title.x = element_blank(),
       legend.position = "none"
     ) +
@@ -311,7 +312,7 @@ build_pres_dumbbell <- function(metrics_long, title) {
                  names_to = "method", values_to = "value")
 
   ggplot() +
-    ggstats::geom_stripped_rows(
+    paper_geom_stripped_rows(
       data = metrics_wide, aes(y = metric),
       width = 1, nudge_y = 0
     ) +
@@ -356,17 +357,7 @@ build_pres_dumbbell <- function(metrics_long, title) {
     scale_y_discrete(labels = metric_full_names) +
     coord_cartesian(clip = "off") +
     labs(x = "Metric value (%)", y = NULL, title = title) +
-    theme_minimal(base_size = 12) +
-    theme(
-      plot.title       = element_text(hjust = 0.5, face = "bold", size = 18),
-      panel.grid.major.y = element_blank(),
-      panel.grid.minor = element_blank(),
-      panel.background = element_rect(fill = "white", color = NA),
-      axis.text        = element_text(size = 11),
-      axis.text.y      = element_text(face = "bold", size = 11),
-      axis.title       = element_text(size = 13),
-      legend.position  = "none"
-    )
+    paper_dumbbell_theme(show_legend = FALSE)
 }
 
 iq_branch <- tusco_renamed$tusco_full$isoseq$isoquant$B100K0

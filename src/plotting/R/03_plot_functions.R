@@ -25,11 +25,10 @@ plot_classification_data <- function(class_combined_df, sample_labels,
     geom_bar() +
     scale_fill_manual(values = cat.palette, labels = c("Full\nSplice Match", "Incomplete\nSplice Match", "Novel\nIn Catalog", "Novel Not\nIn Catalog", "Genic\nGenomic", "Antisense", "Fusion", "Intergenic", "Genic\nIntron")) +
     sx +
-    theme_minimal() +
+    paper_theme() +
     theme(legend.position = "none", axis.title.x = element_blank()) +
     ylab("# isoforms") +
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
-    theme(axis.text = element_text(size = 10))
+    theme(axis.text.x = paper_axis_text_x())
 
   list(count = p1)
 }
@@ -71,12 +70,11 @@ plot_classification_expression_data <- function(class_combined_df,
   extended_fill   <- c(Unassigned = unassigned_color, cat.palette)
   extended_border <- c(Unassigned = border_color,     cat.palette)
 
-  base_theme <- theme_minimal() +
+  base_theme <- paper_theme() +
     theme(
       legend.position = "none",
       axis.title.x    = element_blank(),
-      axis.text.x     = element_text(angle = 90, vjust = 0.5, hjust = 1),
-      axis.text       = element_text(size = 10)
+      axis.text.x     = paper_axis_text_x()
     )
 
   p1 <- ggplot(plot_df, aes(x = sample, y = FL)) +
@@ -141,26 +139,14 @@ create_boxplot <- function(listUJC) {
       geom_boxplot() + ylim(c(min_value, max_value)) +
       scale_color_manual(values = cat.palette, name = "Structural Category") +
       scale_x_discrete(drop = FALSE) + 
-      theme_Publication() + 
-      theme(
-        legend.position = "none",
-        axis.title.x = element_blank(),
-        axis.text.x = element_blank(),
-        axis.ticks.x = element_blank()
-      )
+      paper_upset_theme()
     l_plots[[category]] <- p
   }
   tmp <- listUJC[!listUJC$structural_category %in% structural_categories, ]
   p <- ggplot(tmp, aes(presence_code, log10(counts), color = "a")) +
     geom_boxplot() + ylim(c(min_value, max_value)) +
     scale_color_manual(values = "#969696", name = "Structural Category") +
-    theme_Publication() + 
-    theme(
-      legend.position = "none",
-      axis.title.x = element_blank(),
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank()
-    )
+    paper_upset_theme()
   l_plots[["rest"]] <- p
   return(l_plots)
 }
@@ -219,9 +205,11 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
     ggtitle(method) +
     theme(
       axis.title.y = element_blank(),
-      axis.text.y = element_text(size = 10),
+      axis.text.y = paper_axis_text_y(),
       legend.position = "none",
-      plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+      plot.title = element_text(
+        hjust = 0.5, size = .paper_font("panel"), face = "bold"
+      )
     )
   
   rev_sample_labels <- rev(sample_labels)
@@ -301,10 +289,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       y     = "Number of UJCs",
       title = paste0("Distribution of UJCs across ", prefix, " (n=", n_sc, ")")
     ) +
-    theme_minimal(base_size = 10) +
-    theme(
-      plot.title = element_text(hjust = 0.5, face = "bold")
-    )
+    paper_theme()
   comb_plot$full_data <- comb_counts
 
   perc_comb_plot <- NULL
@@ -328,10 +313,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
         y     = "Percent of total UJCs",
         title = paste0("Distribution of UJCs across ", prefix, " (n=", n_sc, ")")
       ) +
-      theme_minimal(base_size = 10) +
-      theme(
-        plot.title = element_text(hjust = 0.5, face = "bold")
-      )
+      paper_theme()
   }
 
 
@@ -362,10 +344,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       y     = "# UJCs",
       title = paste0("UJC distribution by structural category (", prefix, ", n=", n_sc, ")")
     ) +
-    theme_minimal(base_size = 10) +
-    theme(
-      plot.title = element_text(hjust = 0.5, face = "bold")
-    ) +
+    paper_theme() +
     scale_fill_manual(
       values = category_colors,
       name = "Structural Category"
@@ -380,10 +359,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
         y     = "Percent of total UJCs",
         title = paste0("Average UJC distribution across ", prefix, " samples")
       ) +
-      theme_minimal(base_size = 10) +
-      theme(
-        plot.title = element_text(hjust = 0.5, face = "bold")
-      ) +
+      paper_theme() +
       scale_fill_manual(
         values = category_colors,
         name = "Structural Category"
@@ -447,13 +423,10 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
     geom_col(width = 0.6) +
     labs(
       x     = "Number of samples present",
-      y     = "# reads supporting UJCs",
+      y     = PAPER_UJC_YLAB$comb_fl_bar,
       title = paste0("Total read distribution of UJCs across ", prefix, " samples")
     ) +
-    theme_minimal(base_size = 10) +
-    theme(
-      plot.title = element_text(hjust = 0.5, face = "bold")
-    ) +
+    paper_theme() +
     scale_fill_manual(
       values = category_colors,
       name = "Structural Category"
@@ -465,13 +438,10 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       geom_col(width = 0.6) +
       labs(
         x     = "Number of samples present",
-        y     = "Percent of total reads supporting UJCs",
+        y     = PAPER_UJC_YLAB$perc_comb_fl_bar,
         title = paste0("Relative read distribution of UJCs across ", prefix, " samples")
       ) +
-      theme_minimal(base_size = 10) +
-      theme(
-        plot.title = element_text(hjust = 0.5, face = "bold")
-      ) +
+      paper_theme() +
       scale_fill_manual(
         values = category_colors,
         name = "Structural Category"
@@ -522,8 +492,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       x = "Number of samples included",
       y = "Mean unique UJCs discovered"
     ) +
-    theme_minimal(base_size = 11) +
-    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+    paper_theme(base_size = 11)
 
   perc_cumul_ujc_curve_plot <- NULL
   if (isTRUE(include_percentage_plots)) {
@@ -538,8 +507,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
         x = "Number of samples included",
         y = "Mean percentage UJCs discovered"
       ) +
-      theme_minimal(base_size = 11) +
-      theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+      paper_theme(base_size = 11)
   }
 
 
@@ -581,8 +549,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       y = "Mean number of UJCs",
       fill = "Reproducibility"
     ) +
-    theme_minimal(base_size = 11) +
-    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+    paper_theme(base_size = 11)
 
   perc_cumul_ujc_stack_plot <- NULL
   if (isTRUE(include_percentage_plots)) {
@@ -595,8 +562,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
         y = "Mean % of UJCs",
         fill = "Reproducibility"
       ) +
-      theme_minimal(base_size = 11) +
-      theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+      paper_theme(base_size = 11)
   }
 
 
@@ -674,10 +640,9 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
     labs(
       title = "Mean FL total across sample combinations",
       x     = "Number of samples included",
-      y     = "Mean # of reads supporting UJCs"
+      y     = PAPER_UJC_YLAB$ujc_fl_stack
     ) +
-    theme_minimal(base_size = 11) +
-    theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+    paper_theme(base_size = 11)
 
   perc_cumul_ujc_fl_stack_plot <- NULL
   if (isTRUE(include_percentage_plots)) {
@@ -690,10 +655,9 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       labs(
         title = "FL total as % of max across sample combinations",
         x     = "Number of samples included",
-        y     = "Mean % of reads supporting UJCs"
+        y     = PAPER_UJC_YLAB$perc_ujc_fl_stack
       ) +
-      theme_minimal(base_size = 11) +
-      theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+      paper_theme(base_size = 11)
   }
 
 
@@ -778,7 +742,7 @@ compare_isoform_plots <- function(class_df_list, include_percentage_plots = FALS
         x     = "Strategy",
         y     = "# of associated transcripts"
       ) +
-      theme_minimal()
+      paper_theme()
 
   p_perc_transcript <- NULL
   if (isTRUE(include_percentage_plots)) {
@@ -791,7 +755,7 @@ compare_isoform_plots <- function(class_df_list, include_percentage_plots = FALS
           x     = "Strategy",
           y     = "% of associated transcripts"
         ) +
-        theme_minimal()
+        paper_theme()
   }
 
   p_iso_transcript <- iso_per_transcript %>%
@@ -803,7 +767,7 @@ compare_isoform_plots <- function(class_df_list, include_percentage_plots = FALS
         x     = "Strategy",
         y     = "# of isoforms"
       ) +
-      theme_minimal()
+      paper_theme()
 
   p_perc_iso_transcript <- NULL
   if (isTRUE(include_percentage_plots)) {
@@ -816,7 +780,7 @@ compare_isoform_plots <- function(class_df_list, include_percentage_plots = FALS
           x     = "Strategy",
           y     = "% of isoforms"
         ) +
-        theme_minimal()
+        paper_theme()
   }
 
   iso_per_ujc <- df %>%
@@ -860,7 +824,7 @@ compare_isoform_plots <- function(class_df_list, include_percentage_plots = FALS
         x     = "Strategy",
         y     = "# of UJCs"
       ) +
-      theme_minimal()
+      paper_theme()
   
   p_perc_ujc <- NULL
   if (isTRUE(include_percentage_plots)) {
@@ -873,7 +837,7 @@ compare_isoform_plots <- function(class_df_list, include_percentage_plots = FALS
           x     = "Strategy",
           y     = "% of UJCs"
         ) +
-        theme_minimal()
+        paper_theme()
   }
 
   p_iso_ujc <- iso_per_ujc %>%
@@ -885,7 +849,7 @@ compare_isoform_plots <- function(class_df_list, include_percentage_plots = FALS
         x     = "Strategy",
         y     = "# of isoforms"
       ) +
-      theme_minimal()
+      paper_theme()
 
   p_perc_iso_ujc <- NULL
   if (isTRUE(include_percentage_plots)) {
@@ -898,7 +862,7 @@ compare_isoform_plots <- function(class_df_list, include_percentage_plots = FALS
           x     = "Strategy",
           y     = "% of isoforms"
         ) +
-        theme_minimal()
+        paper_theme()
   }
 
   out <- list(

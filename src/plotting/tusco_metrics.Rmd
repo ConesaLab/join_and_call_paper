@@ -41,91 +41,195 @@ library(ggstats)  # for geom_stripped_rows()
 library(ggpubr)
 
 # Create output directory if it doesn't exist
-if (!dir.exists("plot_creation")) {
-  dir.create("plot_creation")
+if (file.exists("src/plotting/R/00_figure_config.R")) {
+  source("src/plotting/R/00_figure_config.R")
+} else if (file.exists("R/00_figure_config.R")) {
+  source("R/00_figure_config.R")
+} else {
+  stop("Cannot find 00_figure_config.R; set wd to repo root or src/plotting.")
 }
+r_source_dir <- paper_r_source_dir()
+source(file.path(r_source_dir, "02_themes.R"))
+out_dir <- plot_creation_dir()
 ```
 
 
 
 ```{r }
 # Corrected function to load all TUSCO results
-load_tusco_results <- function(base_dir = "tusco_results") {
-  # Find all .RData files recursively
-  rdata_files <- list.files(base_dir, pattern = "\\.RData$", 
-                            recursive = TRUE, full.names = TRUE)
-  
-  # Initialize the main results list
-  tusco_results <- list()
-  
-  for (file_path in rdata_files) {
-    # cat("Loading:", file_path, "\n")
-    
-    # Check if file exists and has size > 0
-    if (!file.exists(file_path) || file.info(file_path)$size == 0) {
-      cat("  ERROR: File does not exist or is empty\n")
-      next
-    }
-    
-    # Remove the base directory and .RData extension
-    rel_path <- gsub(paste0("^", base_dir, "/"), "", file_path)
-    rel_path <- gsub("\\_tusco.RData$", "", rel_path)
-    
-    # Split the path into components
-    path_parts <- strsplit(rel_path, "/")[[1]]
-    
-    # Load the .RData file
-    load_env <- new.env()
-    tryCatch({
-      load(file_path, envir = load_env)
-      
-      # Check what objects were loaded
-      loaded_objects <- ls(load_env)
-      cat("  Objects found:", paste(loaded_objects, collapse = ", "), "\n")
-      
-      if (length(loaded_objects) == 0) {
-        cat("  WARNING: No objects found in", file_path, "\n")
-        next
-      }
-      
-      # Get the loaded data
-      if ("data_list" %in% loaded_objects) {
-        loaded_data <- load_env$data_list
-        # cat("  Using 'data_list' object\n")
-      } else {
-        loaded_data <- get(loaded_objects[1], envir = load_env)
-        # cat("  Using object:", loaded_objects[1], "\n")
-      }
-      
-      # Build the nested structure using string evaluation
-      # Create the assignment expression
-      assignment_path <- paste("tusco_results", paste(paste0("[[\"", path_parts, "\"]]"), collapse = ""), sep = "")
-      assignment_expr <- paste(assignment_path, "<- loaded_data")
-      
-      # Create intermediate lists if they don't exist
-      for (i in 1:(length(path_parts) - 1)) {
-        partial_path <- paste("tusco_results", paste(paste0("[[\"", path_parts[1:i], "\"]]"), collapse = ""), sep = "")
-        check_expr <- paste("if(is.null(", partial_path, "))", partial_path, "<- list()")
-        eval(parse(text = check_expr))
-      }
-      
-      # Assign the loaded data
-      eval(parse(text = assignment_expr))
-      cat("  Successfully stored at:", paste(path_parts, collapse = "$"), "\n")
-      
-    }, error = function(e) {
-      cat("  ERROR loading file:", e$message, "\n")
-    })
+tusco_rdata_path_parts <- function(file_path) {
+  fp <- normalizePath(file_path, winslash = "/", mustWork = TRUE)
+  rel <- sub("^.*/tusco_results/", "", fp)
+  if (identical(rel, fp) || !grepl("_tusco\\.RData$", rel)) {
+    stop("Not a TUSCO result file: ", file_path, call. = FALSE)
   }
-  
-  return(tusco_results)
+  rel <- sub("_tusco\\.RData$", "", rel)
+  parts <- strsplit(rel, "/", fixed = TRUE)[[1L]]
+  parts[nzchar(parts)]
 }
 
-# Load all results
-tusco_results <- load_tusco_results("tusco_results")
+nest_tusco_results <- function(tree, parts, value) {
+  if (length(parts) == 1L) {
+    tree[[parts[1L]]] <- value
+    return(tree)
+  }
+  if (is.null(tree[[parts[1L]]]) || !is.list(tree[[parts[1L]]])) {
+    tree[[parts[1L]]] <- list()
+  }
+  tree[[parts[1L]]] <- nest_tusco_results(tree[[parts[1L]]], parts[-1L], value)
+  tree
+}
 
-# Check the structure
-str(tusco_results, max.level = 5)
+#' Keep only fields used by radar/dumbbell figures (drop large plot tables).
+trim_tusco_branch <- function(x) {
+  if (!is.list(x)) {
+    return(x)
+  }
+  if (all(c("radar_df", "radar") %in% names(x))) {
+    return(x[c("radar_df", "radar")])
+  }
+  lapply(x, trim_tusco_branch)
+}
+
+load_tusco_results <- function(base_dir, verbose = FALSE) {
+  base_dir <- normalizePath(base_dir, winslash = "/", mustWork = TRUE)
+  if (!dir.exists(base_dir)) {
+    stop("TUSCO results directory not found: ", base_dir, call. = FALSE)
+  }
+  rdata_files <- list.files(
+    base_dir,
+    pattern = "_tusco\\.RData$",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+  if (length(rdata_files) == 0L) {
+    stop("No *_tusco.RData files under: ", base_dir, call. = FALSE)
+  }
+
+  tusco_results <- list()
+  n_ok <- 0L
+  n_skip <- 0L
+
+  for (file_path in rdata_files) {
+    if (!file.exists(file_path) || file.info(file_path)$size == 0) {
+      n_skip <- n_skip + 1L
+      if (isTRUE(verbose)) {
+        message("Skipping empty or missing: ", file_path)
+      }
+      next
+    }
+
+    path_parts <- tryCatch(
+      tusco_rdata_path_parts(file_path),
+      error = function(e) {
+        if (isTRUE(verbose)) {
+          message(conditionMessage(e))
+        }
+        NULL
+      }
+    )
+    if (is.null(path_parts) || length(path_parts) == 0L) {
+      n_skip <- n_skip + 1L
+      next
+    }
+
+    load_env <- new.env()
+    ok <- tryCatch({
+      load(file_path, envir = load_env)
+      loaded_objects <- ls(load_env)
+      if (length(loaded_objects) == 0L) {
+        if (isTRUE(verbose)) {
+          message("No objects in: ", file_path)
+        }
+        return(FALSE)
+      }
+      loaded_data <- if ("data_list" %in% loaded_objects) {
+        load_env$data_list
+      } else {
+        get(loaded_objects[1], envir = load_env)
+      }
+      loaded_data <- trim_tusco_branch(loaded_data)
+      tusco_results <- nest_tusco_results(tusco_results, path_parts, loaded_data)
+      if (isTRUE(verbose)) {
+        message("Loaded: ", paste(path_parts, collapse = "/"))
+      }
+      TRUE
+    }, error = function(e) {
+      if (isTRUE(verbose)) {
+        message("ERROR loading ", file_path, ": ", conditionMessage(e))
+      }
+      FALSE
+    })
+
+    if (isTRUE(ok)) {
+      n_ok <- n_ok + 1L
+    } else {
+      n_skip <- n_skip + 1L
+    }
+  }
+
+  message(
+    "Loaded ", n_ok, " TUSCO result",
+    if (n_ok == 1L) "" else "s",
+    " from ", base_dir,
+    if (n_skip > 0L) paste0(" (", n_skip, " skipped)") else ""
+  )
+  tusco_results
+}
+
+#' SIRV/TUSCO metric rows from `radar_df` (radarchart min/max + two metric rows).
+extract_tusco_metric_rows <- function(radar_df) {
+  if (is.null(radar_df) || !is.data.frame(radar_df)) {
+    stop("radar_df must be a data.frame", call. = FALSE)
+  }
+  sirv_row <- "metrics_values_sirv"
+  tusco_row <- "metrics_values_tusco"
+  if (all(c(sirv_row, tusco_row) %in% rownames(radar_df))) {
+    return(radar_df[c(sirv_row, tusco_row), , drop = FALSE])
+  }
+  if (nrow(radar_df) >= 4L) {
+    out <- radar_df[3:4, , drop = FALSE]
+    rownames(out) <- c(sirv_row, tusco_row)
+    return(out)
+  }
+  stop(
+    "radar_df must have rows named ", sirv_row, " and ", tusco_row,
+    ", or at least 4 rows (radarchart min/max/SIRV/TUSCO).",
+    call. = FALSE
+  )
+}
+
+check_metrics_sn_pdr <- function(concat_df, tama_df) {
+  check_one <- function(df, label) {
+    if (is.null(df) || nrow(df) != 2L || !all(c("Sn", "PDR") %in% colnames(df))) {
+      return(invisible(NULL))
+    }
+    for (i in seq_len(nrow(df))) {
+      sn <- suppressWarnings(as.numeric(df[i, "Sn"]))
+      pdr <- suppressWarnings(as.numeric(df[i, "PDR"]))
+      if (length(sn) != 1L || length(pdr) != 1L || is.na(sn) || is.na(pdr)) {
+        next
+      }
+      if (sn > pdr) {
+        rn <- rownames(df)[i]
+        warning(
+          sprintf(
+            "%s %s: Sn (%.3f) > PDR (%.3f)",
+            label, if (nzchar(rn)) rn else paste0("row", i), sn, pdr
+          ),
+          call. = FALSE
+        )
+      }
+    }
+    invisible(NULL)
+  }
+  check_one(concat_df, "concat_df")
+  check_one(tama_df, "tama_df")
+  invisible(NULL)
+}
+
+# Load all results (repo: reports/tusco_results)
+tusco_results <- load_tusco_results(paper_tusco_results_dir())
 ```
 
 
@@ -192,13 +296,10 @@ tusco_renamed$tusco_full$isoseq$flair_ar_sr$B100K0$concat$radar_df[c(3, 4),]
 
 
 ```{r}
-radar_df <- tusco_renamed$tusco_full$isoseq$flair_ar_sr$B100K0$concat$radar_df
-if (radar_df[[3, "Sn"]] > radar_df[[3, "PDR"]]) {
-    warning("sn>pdr, radar_df: Sensitivity is greater than positive detection rate in SIRV. This is not possible.")
-}
-if (radar_df[[4, "Sn"]] > radar_df[[4, "PDR"]]) {
-    warning("sn>pdr, radar_df: Sensitivity is greater than positive detection rate in TUSCO. This is not possible.")
-}
+radar_df <- extract_tusco_metric_rows(
+  tusco_renamed$tusco_full$isoseq$flair_ar_sr$B100K0$concat$radar_df
+)
+check_metrics_sn_pdr(radar_df, radar_df)
 ```
 
 
@@ -218,7 +319,8 @@ assemble_radar_plots <- function(tusco_plot_list) {
     p + ggtitle(title) +
       theme(
         plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-        axis.text = element_text(size = 10),
+        axis.text.x = paper_axis_text_x(0),
+        axis.text.y = paper_axis_text_y(),
         axis.title = element_text(size = 12),
         legend.text = element_text(size = 12),
         legend.title = element_text(size = 14),
@@ -259,7 +361,7 @@ assemble_radar_plots <- function(tusco_plot_list) {
 radar_plot <- assemble_radar_plots(tusco_renamed$tusco_full$isoseq$isoquant$B100K0)
 radar_plot
 
-ggsave("plot_creation/radar_plot.pdf", device = cairo_pdf, plot = radar_plot, height=12, width=18, unit="in")
+paper_ggsave(file.path(out_dir, "radar_plot.pdf"), plot = radar_plot, size = "mouse_10panel")
 ```
 
 ```{r}
@@ -297,7 +399,7 @@ final_plot <- plot_grid(
 
 # 5. Draw the whole thing
 print(final_plot)
-ggsave("plot_creation/radar_plot.pdf", device = cairo_pdf, plot = final_plot, height=12, width=18, unit="in")
+paper_ggsave(file.path(out_dir, "radar_plot.pdf"), plot = final_plot, size = "mouse_10panel")
 
 ```
 
@@ -360,7 +462,7 @@ build_dumbbell_plot <- function(metrics_long,
   # 3) Build plot
   p <- ggplot() +
     # striped rows
-    ggstats::geom_stripped_rows(
+    paper_geom_stripped_rows(
       data = metrics_wide,
       aes(y = metric),
       width   = 1,
@@ -422,21 +524,7 @@ build_dumbbell_plot <- function(metrics_long,
     scale_y_discrete() +               # uses levels of metric factor
     coord_cartesian(clip = "off") +
     labs(x = "Metric value (%)", y = NULL, title = title) +
-    theme_minimal(base_size = 12) +
-    theme(
-      plot.title         = element_text(hjust = 0.5, face = "bold", size = 16),
-      plot.margin        = margin(t = 5, r = 20, b = 5, l = 20, unit = "pt"),
-      panel.grid.major.y = element_blank(),
-      panel.grid.minor   = element_blank(),
-      panel.background   = element_rect(fill = "white", color = NA),
-      axis.text          = element_text(size = 10),
-      axis.text.y        = element_text(face = "bold", size = 10),
-      axis.title         = element_text(size = 12),
-      legend.box         = "horizontal",
-      legend.position    = "right",
-      legend.title       = element_text(size = 14, face = "bold"),
-      legend.text        = element_text(size = 12)
-    )
+    paper_dumbbell_theme(legend_position = "right", legend_box = "horizontal")
   
   return(p)
 }
@@ -476,7 +564,7 @@ build_indiv_dumbbell_plot <- function(metrics_long,
   # 3) Build plot
   p <- ggplot() +
     # striped rows
-    ggstats::geom_stripped_rows(
+    paper_geom_stripped_rows(
       data = metrics_wide,
       aes(y = metric),
       width   = 1,
@@ -523,71 +611,12 @@ build_indiv_dumbbell_plot <- function(metrics_long,
     scale_y_discrete() +           # uses levels of metric factor
     coord_cartesian(clip = "off") +
     labs(x = "Metric value (%)", y = NULL, title = title) +
-    theme_minimal(base_size = 12) +
-    theme(
-      plot.title         = element_text(hjust = 0.5, face = "bold", size = 16),
-      plot.margin        = margin(t = 5, r = 20, b = 5, l = 20, unit = "pt"),
-      panel.grid.major.y = element_blank(),
-      panel.grid.minor   = element_blank(),
-      panel.background   = element_rect(fill = "white", color = NA),
-      axis.text          = element_text(size = 10),
-      axis.text.y        = element_text(face = "bold", size = 10),
-      axis.title         = element_text(size = 12),
-      legend.position    = "right", # Only shape legend will appear
-      legend.title       = element_text(size = 14, face = "bold"),
-      legend.text        = element_text(size = 12)
-    )
+    paper_dumbbell_theme(legend_position = "right")
   
   return(p)
 }
 
 ```
-
-
-```{r}
-check_metrics_sn_pdr <- function(concat_df, tama_df) {
-  # Ensure both dfs have exactly two rows (SIRV then TUSCO) 
-  # and the same set of metric columns
-  if (nrow(concat_df) != 2 || nrow(tama_df) != 2) {
-    stop("Each input df must have exactly two rows: first SIRV then TUSO")
-  }
-  if (!identical(colnames(concat_df), colnames(tama_df))) {
-    stop("concat_df and tama_df must have the same column names")
-  }
-  
-  metric_names <- colnames(concat_df)
-  
-
-  # Check for Sn < PDR in concat_df
-  if (concat_df["metrics_values_sirv", "Sn"] > concat_df["metrics_values_sirv", "PDR"]) {
-    warning(sprintf(
-      "concat_df SIRV: Sn (%.3f) > PDR (%.3f)",
-      concat_df["metrics_values_sirv", "Sn"], concat_df["metrics_values_sirv", "PDR"]
-    ))
-  }
-  if (concat_df["metrics_values_tusco", "Sn"] > concat_df["metrics_values_tusco", "PDR"]) {
-    warning(sprintf(
-      "concat_df TUSCO: Sn (%.3f) > PDR (%.3f)",
-      concat_df["metrics_values_tusco", "Sn"], concat_df["metrics_values_tusco", "PDR"]
-    ))
-  }
-
-  # Check for Sn < PDR in tama_df
-  if (tama_df["metrics_values_sirv", "Sn"] > tama_df["metrics_values_sirv", "PDR"]) {
-    warning(sprintf(
-      "tama_df SIRV: Sn (%.3f) > PDR (%.3f)",
-      tama_df["metrics_values_sirv", "Sn"], tama_df["metrics_values_sirv", "PDR"]
-    ))
-  }
-  if (tama_df["metrics_values_tusco", "Sn"] > tama_df["metrics_values_tusco", "PDR"]) {
-    warning(sprintf(
-      "tama_df TUSCO: Sn (%.3f) > PDR (%.3f)",
-      tama_df["metrics_values_tusco", "Sn"], tama_df["metrics_values_tusco", "PDR"]
-    ))
-  }
-}
-```
-
 
 
 ```{r}
@@ -622,13 +651,19 @@ for (tusco_type in c("tusco_full", "tusco_brain", "tusco_kidney")){
       for (tissue in names(tissue_list)) {
         branch <- tissue_list[[tissue]]
         
-        print(paste(datatype, tool, tissue))
+        if (is.null(branch$concat) || is.null(branch$TAMA) ||
+            is.null(branch$concat$radar_df) || is.null(branch$TAMA$radar_df)) {
+          warning(
+            "Skipping ", paste(datatype, tool, tissue),
+            ": missing concat or TAMA radar_df",
+            call. = FALSE
+          )
+          next
+        }
         
-        # 1) extract the two radar data.frames
-        concat_df <- branch$concat$radar_df[
-          c("metrics_values_sirv", "metrics_values_tusco"), ]
-        tama_df   <- branch$TAMA$radar_df[
-          c("metrics_values_sirv", "metrics_values_tusco"), ]
+        # 1) extract SIRV/TUSCO metric rows (rows 3–4 or named rows)
+        concat_df <- extract_tusco_metric_rows(branch$concat$radar_df)
+        tama_df   <- extract_tusco_metric_rows(branch$TAMA$radar_df)
         
         # 1.5) check Sn PDR metrics
         check_metrics_sn_pdr(concat_df, tama_df)
@@ -752,19 +787,11 @@ assemble_dumbbell_plots <- function(results, tissue, tusco_type, plot_name="dumb
     )
   
   
-  # add inset labels (a/b)
-  label_a <- ggplot() +
-    annotate("text", x = .5, y = .5, label = "a", size = 10, fontface = "bold") +
-    theme_void()
-  label_b <- ggplot() +
-    annotate("text", x = .5, y = .5, label = "b", size = 10, fontface = "bold") +
-    theme_void()
-  
-  final <- wrap_elements(db_plot) +
-    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
-    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.40)
-  
-  return(final)
+  paper_inset_tags_rows(
+    wrap_elements(full = db_plot),
+    tag_by_row = c("1" = "a", "4" = "b"),
+    heights = c(1, 1, 0.2, 1)
+  )
 
 }
 
@@ -777,28 +804,28 @@ assemble_dumbbell_plots <- function(results, tissue, tusco_type, plot_name="dumb
 brain_db_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_full")
 brain_db_plot
 
-ggsave("plot_creation/brain_db_full_plot.pdf", device = cairo_pdf, plot = brain_db_plot, width = 18, height = 12, unit = "in")
+paper_ggsave(file.path(out_dir, "brain_db_full_plot.pdf"), plot = brain_db_plot, size = "mouse_10panel")
 ```
 
 ```{r}
 kidney_db_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_full")
 kidney_db_plot
 
-ggsave("plot_creation/kidney_db_full_plot.pdf", device = cairo_pdf, plot = kidney_db_plot, width = 18, height = 12, unit = "in")
+paper_ggsave(file.path(out_dir, "kidney_db_full_plot.pdf"), plot = kidney_db_plot, size = "mouse_10panel")
 ```
 
 ```{r}
 brain_db_tissue_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_brain")
 brain_db_tissue_plot
 
-ggsave("plot_creation/brain_db_tissue_plot.pdf", device = cairo_pdf, plot = brain_db_tissue_plot, width = 18, height = 12, unit = "in")
+paper_ggsave(file.path(out_dir, "brain_db_tissue_plot.pdf"), plot = brain_db_tissue_plot, size = "mouse_10panel")
 ```
 
 ```{r}
 kidney_db_tissue_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_kidney")
 kidney_db_tissue_plot
 
-ggsave("plot_creation/kidney_db_tissue_plot.pdf", device = cairo_pdf, plot = kidney_db_tissue_plot, width = 18, height = 12, unit = "in")
+paper_ggsave(file.path(out_dir, "kidney_db_tissue_plot.pdf"), plot = kidney_db_tissue_plot, size = "mouse_10panel")
 ```
 
 
@@ -806,21 +833,21 @@ ggsave("plot_creation/kidney_db_tissue_plot.pdf", device = cairo_pdf, plot = kid
 brain_sirv_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_full", "db_sirv_plot")
 brain_sirv_plot
 
-ggsave("plot_creation/brain_sirv_plot.pdf", device = cairo_pdf, plot = brain_sirv_plot, width = 18, height = 12, unit = "in")
+paper_ggsave(file.path(out_dir, "brain_sirv_plot.pdf"), plot = brain_sirv_plot, size = "mouse_10panel")
 ```
 
 ```{r}
 brain_tusco_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_full", "db_tusco_plot")
 brain_tusco_plot
 
-ggsave("plot_creation/brain_tusco_plot.pdf", device = cairo_pdf, plot = brain_tusco_plot, width = 18, height = 12, unit = "in")
+paper_ggsave(file.path(out_dir, "brain_tusco_plot.pdf"), plot = brain_tusco_plot, size = "mouse_10panel")
 ```
 
 ```{r}
 brain_tusco_tissue_plot <- assemble_dumbbell_plots(tusco_renamed, "B100K0", "tusco_brain", "db_tusco_plot")
 brain_tusco_tissue_plot
 
-ggsave("plot_creation/brain_tusco_tissue_plot.pdf", device = cairo_pdf, plot = brain_tusco_tissue_plot, width = 18, height = 12, unit = "in")
+paper_ggsave(file.path(out_dir, "brain_tusco_tissue_plot.pdf"), plot = brain_tusco_tissue_plot, size = "mouse_10panel")
 ```
 
 
@@ -829,21 +856,21 @@ ggsave("plot_creation/brain_tusco_tissue_plot.pdf", device = cairo_pdf, plot = b
 kidney_sirv_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_full", "db_sirv_plot")
 kidney_sirv_plot
 
-ggsave("plot_creation/kidney_sirv_plot.pdf", device = cairo_pdf, plot = kidney_sirv_plot, width = 18, height = 12, unit = "in")
+paper_ggsave(file.path(out_dir, "kidney_sirv_plot.pdf"), plot = kidney_sirv_plot, size = "mouse_10panel")
 ```
 
 ```{r}
 kidney_tusco_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_full", "db_tusco_plot")
 kidney_tusco_plot
 
-ggsave("plot_creation/kidney_tusco_plot.pdf", device = cairo_pdf, plot = kidney_tusco_plot, width = 18, height = 12, unit = "in")
+paper_ggsave(file.path(out_dir, "kidney_tusco_plot.pdf"), plot = kidney_tusco_plot, size = "mouse_10panel")
 ```
 
 ```{r}
 kidney_tusco_tissue_plot <- assemble_dumbbell_plots(tusco_renamed, "B0K100", "tusco_kidney", "db_tusco_plot")
 kidney_tusco_tissue_plot
 
-ggsave("plot_creation/kidney_tusco_tissue_plot.pdf", device = cairo_pdf, plot = kidney_tusco_tissue_plot, width = 18, height = 12, unit = "in")
+paper_ggsave(file.path(out_dir, "kidney_tusco_tissue_plot.pdf"), plot = kidney_tusco_tissue_plot, size = "mouse_10panel")
 ```
 
 ```{r}

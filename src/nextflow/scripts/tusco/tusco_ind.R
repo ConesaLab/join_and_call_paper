@@ -441,6 +441,9 @@ radar_df <- rbind(
 )
 colnames(radar_df) <- metrics_labels
 radar_df <- as.data.frame(radar_df)
+rownames(radar_df) <- c(
+  "max", "min", "metrics_values_sirv", "metrics_values_tusco"
+)
 
 # Debug output - radar_df structure
 message("=== DEBUG: radar_df ===")

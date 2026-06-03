@@ -174,7 +174,7 @@ plot_tissue <- function(tissue_data, sample_order, tissue_title, sample_labels, 
       title = tissue_title
     ) +
     scale_x_discrete(labels = sample_labels) +
-    theme_minimal() +
+    paper_theme() +
     ylim(c(0, 500000))
   
   return(p)

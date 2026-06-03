@@ -107,29 +107,15 @@ assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle
     plot_annotation(
       title = title,
       subtitle = subtitle,
-      theme = theme(
-        plot.title = element_text(size = 22, face = "bold", hjust = 0.5),
-        plot.subtitle = element_text(size = 16, hjust = 0.5)
-      )
-    )
+      theme = paper_figure_title_theme()
+    ) &
+    ggplot2::theme(legend.position = "none")
   
-  label_a <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-  
-  label_b <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-  
-  final_plot <- wrap_elements(full = bar_plot)
-  final_plot <- final_plot + 
-    inset_element(label_a, left = -0.02, bottom = 0.85, right = 0.05, top = 0.95) +
-    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.45)
-
-  
-  return(final_plot)
+  paper_inset_tags_rows(
+    wrap_elements(full = bar_plot),
+    tag_by_row = c("1" = "a", "4" = "b"),
+    heights = c(1, 1, 0.2, 1)
+  )
 }
 
 
@@ -239,27 +225,15 @@ assemble_expr_bar_plots <- function(results, tissue, fl_filter_level, title,
     ) +
     plot_annotation(
       title = title,
-      theme = theme(
-        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
-      )
-    )
+      theme = paper_figure_title_theme()
+    ) &
+    ggplot2::theme(legend.position = "none")
   
-  label_a <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-  
-  label_b <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-  
-  final_plot <- wrap_elements(full = bar_plot)
-  final_plot <- final_plot + 
-    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
-    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.45)
-
-  return(final_plot)
+  paper_inset_tags_rows(
+    wrap_elements(full = bar_plot),
+    tag_by_row = c("1" = "a", "4" = "b"),
+    heights = c(1, 1, 0.2, 1)
+  )
   
 }
 
@@ -348,27 +322,16 @@ assemble_bar_sirv_plots <- function(results, tissue, fl_filter_level, title, sub
       subtitle = subtitle,
       theme = theme(
         plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
-        plot.subtitle = element_text(size = 10, hjust = 0.5)
+        plot.subtitle = element_text(size = PAPER_FONTS$caption, hjust = 0.5)
       )
-    )
+    ) &
+    ggplot2::theme(legend.position = "none")
   
-  label_a <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 5, fontface = "bold") +
-    theme_void()
-  
-  label_b <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 5, fontface = "bold") +
-    theme_void()
-  
-  final_plot <- wrap_elements(full = bar_plot)
-  final_plot <- final_plot + 
-    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
-    inset_element(label_b, left = -0.02, bottom = 0.35, right = 0.05, top = 0.45)
-  
-  return(final_plot)
-  
+  paper_inset_tags_rows(
+    wrap_elements(full = bar_plot),
+    tag_by_row = c("1" = "a", "4" = "b"),
+    heights = c(1, 1, 0.1, 1)
+  )
 }
 
 
@@ -407,27 +370,14 @@ assemble_upset_plots <- function(results, tissue, fl_filter_level, title, plot_n
     ) +
     plot_annotation(
       title = title,
-      theme = theme(
-        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
-      )
+      theme = paper_figure_title_theme()
     )
   
-  label_a <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-  
-  label_b <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-  
-  final_plot <- wrap_elements(full = upset_plot)
-  final_plot <- final_plot + 
-    inset_element(label_a, left = -0.02, bottom = 0.94, right = 0.05, top = 1) +
-    inset_element(label_b, left = -0.02, bottom = 0.25, right = 0.05, top = 0.40)
-  
-  return(final_plot)
+  paper_inset_tags_rows(
+    wrap_elements(full = upset_plot),
+    tag_by_row = c("1" = "a", "4" = "b"),
+    heights = c(1, 1, 0.1, 1)
+  )
 }
 
 
@@ -441,82 +391,62 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
   comb_1_1 <- results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoQuant") +
     scale_y_continuous(limits = pb_ylims) +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12))
+    paper_panel_theme() +
+    theme(legend.position = "none")
   
   comb_1_2 <- results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]] +
     labs(title = "FLAIR") +
     scale_y_continuous(limits = pb_ylims) +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12))
+    paper_panel_theme() +
+    theme(legend.position = "none")
   
   comb_1_3 <- results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]] +
     labs(title = "Bambu") +
     scale_y_continuous(limits = pb_ylims) +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12))
+    paper_panel_theme() +
+    theme(legend.position = "none")
   
   comb_1_4 <- results$IsoSeq$TALON[[fl_filter_level]][[plot_name]] +
     labs(title = "TALON") +
     scale_y_continuous(limits = pb_ylims) +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12))
+    paper_panel_theme() +
+    theme(legend.position = "none")
   
   comb_2_1 <- results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]] +
     labs(title = "Mandalorion") +
     scale_y_continuous(limits = pb_ylims)+
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12))
+    paper_panel_theme() +
+    theme(legend.position = "none")
   
   comb_2_2 <- results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoSeq + SQANTI3") +
     scale_y_continuous(limits = pb_ylims) +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12))
+    paper_panel_theme() +
+    theme(legend.position = "none")
   
   comb_3_1 <- results$ONT$IsoQuant[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoQuant") +
     scale_y_continuous(limits = ont_ylims) +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12))
+    paper_panel_theme() +
+    theme(legend.position = "none")
   
   comb_3_2 <- results$ONT$FLAIR[[fl_filter_level]][[plot_name]] +
     labs(title = "FLAIR") +
     scale_y_continuous(limits = ont_ylims) +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12))
+    paper_panel_theme() +
+    theme(legend.position = "none")
   
   comb_3_3 <- results$ONT$Bambu[[fl_filter_level]][[plot_name]] +
     labs(title = "Bambu") +
     scale_y_continuous(limits = ont_ylims) +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12))
+    paper_panel_theme() +
+    theme(legend.position = "none")
   
   comb_3_4 <- results$ONT$TALON[[fl_filter_level]][[plot_name]] +
     labs(title = "TALON") +
     scale_y_continuous(limits = ont_ylims) +
-    theme(legend.position = "none",
-          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12))
+    paper_panel_theme() +
+    theme(legend.position = "none")
   
   comb_plot <- (
     comb_1_1 + comb_1_2 + comb_1_3 + comb_1_4 +
@@ -536,10 +466,9 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
     ) +
     plot_annotation(
       title = title,
-      theme = theme(
-        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
-      )
-    )
+      theme = paper_figure_title_theme()
+    ) &
+    ggplot2::theme(legend.position = "none")
   
   if (!is.null(y_label)) {
     comb_plot <- comb_plot &
@@ -550,22 +479,11 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
       xlab(x_label)
   }
   
-  label_a <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-  
-  label_b <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-  
-  final_plot <- wrap_elements(full = comb_plot)
-  final_plot <- final_plot + 
-    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
-    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.40)
-  
-  return(final_plot)
+  paper_inset_tags_rows(
+    wrap_elements(full = comb_plot),
+    tag_by_row = c("1" = "a", "4" = "b"),
+    heights = c(1, 1, 0.2, 1)
+  )
 }
 
 
@@ -578,72 +496,62 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
   
   comb_1_1 <- results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoQuant") +
-    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12)) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none") +
     scale_y_continuous(limits = pb_ylims)
   
   comb_1_2 <- results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]] +
     labs(title = "FLAIR") +
-    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12)) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none") +
     scale_y_continuous(limits = pb_ylims)
   
   comb_1_3 <- results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]] +
     labs(title = "Bambu") +
-    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12)) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none") +
     scale_y_continuous(limits = pb_ylims)
   
   comb_1_4 <- results$IsoSeq$TALON[[fl_filter_level]][[plot_name]] +
     labs(title = "TALON") +
-    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12)) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none") +
     scale_y_continuous(limits = pb_ylims)
   
   comb_2_1 <- results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]] +
     labs(title = "Mandalorion") +
-    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12)) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none") +
     scale_y_continuous(limits = pb_ylims)
   
   comb_2_2 <- results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoSeq + SQANTI3") +
-    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12)) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none") +
     scale_y_continuous(limits = pb_ylims)
   
   comb_3_1 <- results$ONT$IsoQuant[[fl_filter_level]][[plot_name]] +
     labs(title = "IsoQuant") +
-    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12)) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none") +
     scale_y_continuous(limits = ont_ylims)
   
   comb_3_2 <- results$ONT$FLAIR[[fl_filter_level]][[plot_name]] +
     labs(title = "FLAIR") +
-    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12)) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none") +
     scale_y_continuous(limits = ont_ylims)
   
   comb_3_3 <- results$ONT$Bambu[[fl_filter_level]][[plot_name]] +
     labs(title = "Bambu") +
-    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12)) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none") +
     scale_y_continuous(limits = ont_ylims)
   
   comb_3_4 <- results$ONT$TALON[[fl_filter_level]][[plot_name]] +
     labs(title = "TALON") +
-    theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-          axis.text = element_text(size = 10),
-          axis.title = element_text(size = 12)) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none") +
     scale_y_continuous(limits = ont_ylims)
   
   comb_plot <- (
@@ -660,16 +568,13 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
         IJKL
       ",
       heights = c(1, 1, 0.2, 1),
-      axes = "collect_y",
-      guides = "collect"
+      axes = "collect_y"
     ) +
     plot_annotation(
       title = title,
-      theme = theme(
-        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
-      )
+      theme = paper_figure_title_theme()
     ) &
-    theme(legend.position = "none") 
+    ggplot2::theme(legend.position = "none") 
   
   if (!is.null(y_label)) {
     comb_plot <- comb_plot &
@@ -680,22 +585,11 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
       xlab(x_label)
   }
   
-  label_a <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-  
-  label_b <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-  
-  final_plot <- wrap_elements(full = comb_plot)
-  final_plot <- final_plot + 
-    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
-    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.40)
-  
-  return(final_plot)
+  paper_inset_tags_rows(
+    wrap_elements(full = comb_plot),
+    tag_by_row = c("1" = "a", "4" = "b"),
+    heights = c(1, 1, 0.2, 1)
+  )
 }
 
 
@@ -734,27 +628,14 @@ assemble_tama_st_upset_plots <- function(results, tissue, fl_filter_level, title
     ) +
     plot_annotation(
       title = title,
-      theme = theme(
-        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
-      )
+      theme = paper_figure_title_theme()
     )
 
-  label_a <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-
-  label_b <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-
-  final_plot <- wrap_elements(full = upset_plot)
-  final_plot <- final_plot +
-    inset_element(label_a, left = -0.02, bottom = 0.94, right = 0.05, top = 1) +
-    inset_element(label_b, left = -0.02, bottom = 0.25, right = 0.05, top = 0.40)
-
-  return(final_plot)
+  paper_inset_tags_rows(
+    wrap_elements(full = upset_plot),
+    tag_by_row = c("1" = "a", "4" = "b"),
+    heights = c(1, 1, 0.1, 1)
+  )
 }
 
 
@@ -783,12 +664,6 @@ assemble_compare_plots <- function(results, tissue, fl_filter_level) {
     subplot_title <- subplot_titles[[subplot_name]]
     
     bar_1_1_base <- results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_base_name]][[subplot_name]]
-    
-    legend_plot <- get_legend(
-      bar_1_1_base +
-        guides(fill = guide_legend(ncol = 3, nrow = 2))
-    )
-    legend <- wrap_elements(legend_plot)
     
     bar_1_1 <- compare_theme(
       bar_1_1_base,
@@ -842,7 +717,7 @@ assemble_compare_plots <- function(results, tissue, fl_filter_level) {
     
     bar_plot <- (
       bar_1_1 + bar_1_2 + bar_1_3 + bar_1_4 +
-      bar_2_1 + bar_2_2 + free(legend) +
+      bar_2_1 + bar_2_2 + plot_spacer() +
       plot_spacer() +
       bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
     ) +
@@ -859,28 +734,15 @@ assemble_compare_plots <- function(results, tissue, fl_filter_level) {
       ) +
       plot_annotation(
         title = paste0(subplot_title, "; ", tissue),
-        theme = theme(
-          plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
-        )
-      )
+        theme = paper_figure_title_theme()
+      ) &
+      ggplot2::theme(legend.position = "none")
     
-    label_a <- ggplot() +
-      annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-               size = 10, fontface = "bold") +
-      theme_void()
-    
-    label_b <- ggplot() +
-      annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-               size = 10, fontface = "bold") +
-      theme_void()
-    
-    final_plot <- wrap_elements(full = bar_plot)
-    final_plot <- final_plot + 
-      inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
-      inset_element(label_b, left = -0.02, bottom = 0.40, right = 0.05, top = 0.50)
-  
-    
-    final_plots[[subplot_name]] <- final_plot
+    final_plots[[subplot_name]] <- paper_inset_tags_rows(
+      wrap_elements(full = bar_plot),
+      tag_by_row = c("1" = "a", "4" = "b"),
+      heights = c(1, 1, 0.2, 1)
+    )
   }
   
   return(final_plots)

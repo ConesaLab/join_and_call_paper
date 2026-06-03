@@ -30,9 +30,12 @@ library(ggpubr)
 
 r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
 
+source(file.path(r_source_dir, "00_figure_config.R"))
 source(file.path(r_source_dir, "01_config.R"))
 source(file.path(r_source_dir, "02_themes.R"))
 source(file.path(r_source_dir, "06_sirv_analysis.R"))
+
+out_dir <- plot_creation_dir()
 ```
 
 
@@ -62,18 +65,7 @@ sirv_dirs <- list(
 
 annotation_palette <- c("With SIRV GTF" = "#15918A", "Without SIRV GTF" = "#F58A53")
 
-load_sirv_df_list <- function(dir) {
-  rdata_path <- file.path(dir, "Bclass_df_list.RData")
-  if (!file.exists(rdata_path)) {
-    warning(paste("File not found:", rdata_path))
-    return(NULL)
-  }
-  env <- new.env()
-  load(rdata_path, envir = env)
-  env$Bclass_df_list
-}
-
-load_original_df_list <- function(dir) {
+load_brain_bclass_list <- function(dir) {
   rdata_path <- file.path(dir, "Bclass_df_list.RData")
   if (!file.exists(rdata_path)) {
     warning(paste("File not found:", rdata_path))
@@ -91,13 +83,18 @@ load_original_df_list <- function(dir) {
 ```{r load-and-compute, results='hide'}
 samples_of_interest <- c("Join&Call", "Call&Join")
 
-compute_metrics_for_dirs <- function(dirs, condition_label) {
-  results <- list()
-  for (platform in names(dirs)) {
-    for (method in names(dirs[[platform]])) {
-      df_list <- load_sirv_df_list(dirs[[platform]][[method]])
-      if (is.null(df_list)) next
+load_sirv_comparison_cache <- function(dirs, condition_label) {
+  metrics_rows <- list()
+  df_cache <- list()
 
+  for (platform in names(dirs)) {
+    df_cache[[platform]] <- list()
+    for (method in names(dirs[[platform]])) {
+      df_list <- load_brain_bclass_list(dirs[[platform]][[method]])
+      if (is.null(df_list)) {
+        next
+      }
+      df_cache[[platform]][[method]] <- df_list
       names(df_list) <- sample_names_Brain[seq_along(df_list)]
 
       for (sample_name in names(df_list)) {
@@ -105,7 +102,9 @@ compute_metrics_for_dirs <- function(dirs, condition_label) {
           calculate_sirv_metrics(df_list[[sample_name]]),
           error = function(e) NULL
         )
-        if (is.null(sirv_result)) next
+        if (is.null(sirv_result)) {
+          next
+        }
 
         metrics_wide <- sirv_result$metrics %>%
           mutate(Value = as.numeric(gsub("%", "", Value))) %>%
@@ -121,18 +120,23 @@ compute_metrics_for_dirs <- function(dirs, condition_label) {
           missing_sirvs = list(sirv_result$sirv_fn)
         ) %>% bind_cols(metrics_wide)
 
-        results[[length(results) + 1]] <- row
+        metrics_rows[[length(metrics_rows) + 1]] <- row
       }
     }
   }
-  bind_rows(results)
+
+  list(
+    metrics = bind_rows(metrics_rows),
+    df_cache = df_cache
+  )
 }
 
-without_annot_df <- compute_metrics_for_dirs(sirv_dirs, "Without SIRV GTF")
+without_cache <- load_sirv_comparison_cache(sirv_dirs, "Without SIRV GTF")
+with_cache    <- load_sirv_comparison_cache(src_dirs, "With SIRV GTF")
 
-with_annot_df <- compute_metrics_for_dirs(src_dirs, "With SIRV GTF")
+sirv_df_cache <- list(with = with_cache$df_cache, without = without_cache$df_cache)
 
-comparison_df <- bind_rows(with_annot_df, without_annot_df) %>%
+comparison_df <- bind_rows(with_cache$metrics, without_cache$metrics) %>%
   mutate(
     method = recode(method, "isoseq_sqanti" = "IsoSeq + SQANTI3"),
     condition = factor(condition, levels = c("With SIRV GTF", "Without SIRV GTF")),
@@ -198,10 +202,10 @@ for (sample_name in samples_of_interest) {
     scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
     labs(x = NULL, y = "Value (%)",
          title = paste("SIRV Metrics Comparison:", sample_name)) +
-    theme_Publication() +
+    paper_theme() +
     theme(
-      axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
-      strip.text = element_text(size = 10),
+      axis.text.x = paper_axis_text_x(),
+      strip.text = element_text(size = PAPER_FONTS$strip),
       legend.position = "bottom"
     )
 
@@ -230,10 +234,10 @@ for (sample_name in samples_of_interest) {
     coord_cartesian(ylim = c(0, 105)) +
     labs(x = NULL, y = "Value (%)",
          title = paste("SIRV Sensitivity & Detection Rate:", sample_name)) +
-    theme_Publication() +
+    paper_theme() +
     theme(
-      axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-      strip.text = element_text(size = 11),
+      axis.text.x = paper_axis_text_x(),
+      strip.text = element_text(size = PAPER_FONTS$strip),
       legend.position = "bottom"
     )
 
@@ -271,10 +275,10 @@ ggplot(diff_df, aes(x = method, y = Difference, fill = improved)) +
   labs(x = NULL, y = "Difference (pp)",
        title = "Change in SIRV metrics: Without annotation vs. With annotation",
        subtitle = "Green = improved without annotation (lower is better for FDR & Redundancy)") +
-  theme_Publication() +
+  paper_theme() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
-    strip.text = element_text(size = 9),
+    axis.text.x = paper_axis_text_x(),
+    strip.text = element_text(size = PAPER_FONTS$strip),
     legend.position = "bottom"
   )
 ```
@@ -289,9 +293,9 @@ detection_rows <- list()
 
 for (platform in names(sirv_dirs)) {
   for (method in names(sirv_dirs[[platform]])) {
-    sirv_list <- load_sirv_df_list(sirv_dirs[[platform]][[method]])
+    sirv_list <- sirv_df_cache$without[[platform]][[method]]
     orig_key <- ifelse(method %in% names(src_dirs_key), src_dirs_key[[method]], method)
-    orig_list <- load_original_df_list(src_dirs[[platform]][[orig_key]])
+    orig_list <- sirv_df_cache$with[[platform]][[orig_key]]
 
     if (is.null(sirv_list) || is.null(orig_list)) next
 
@@ -350,11 +354,8 @@ if (nrow(detection_both) > 0) {
     scale_fill_manual(values = status_palette, name = "Detection") +
     labs(x = NULL, y = NULL,
          title = "Per-SIRV transcript detection") +
-    theme_minimal(base_size = 10) +
+    paper_theme(base_size = PAPER_FONTS$tick) +
     theme(
-      axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8),
-      axis.text.y = element_text(size = 6),
-      plot.title = element_text(face = "bold", hjust = 0.5),
       strip.text = element_text(face = "bold", size = 11),
       legend.position = "bottom"
     )
@@ -406,12 +407,9 @@ if (nrow(detection_by_method) > 0) {
     scale_fill_manual(values = status_palette, name = "Detection") +
     labs(x = NULL, y = NULL,
          title = "Per-SIRV transcript detection by method") +
-    theme_minimal(base_size = 10) +
+    paper_theme(base_size = PAPER_FONTS$tick) +
     coord_cartesian(clip = "off") +
     theme(
-      axis.text.x = element_text(size = 7),
-      axis.text.y = element_text(size = 6),
-      plot.title = element_text(face = "bold", hjust = 0.5),
       plot.margin = margin(t = 5, r = 10, b = 30, l = 10),
       legend.position = "bottom"
     )
@@ -458,10 +456,10 @@ if (length(individual_samples) > 0) {
       coord_cartesian(ylim = c(0, 105)) +
       labs(x = NULL, y = "Value (%)",
            title = paste("Individual sample SIRV metrics:", plt)) +
-      theme_Publication() +
+      paper_theme() +
       theme(
-        axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
-        strip.text = element_text(size = 10),
+        axis.text.x = paper_axis_text_x(),
+        strip.text = element_text(size = PAPER_FONTS$strip),
         legend.position = "bottom"
       )
 
@@ -527,7 +525,7 @@ build_sirv_comparison_dumbbell <- function(comparison_df, platform_filter, metho
     pivot_longer(cols = c(concat, tama), names_to = "method", values_to = "value")
 
   p <- ggplot() +
-    ggstats::geom_stripped_rows(
+    paper_geom_stripped_rows(
       data = metrics_wide, aes(y = metric), width = 1, nudge_y = 0
     ) +
     geom_segment(
@@ -571,21 +569,7 @@ build_sirv_comparison_dumbbell <- function(comparison_df, platform_filter, metho
     ) +
     coord_cartesian(xlim = c(0, 100), clip = "off") +
     labs(x = NULL, y = NULL, title = title) +
-    theme_minimal(base_size = 12) +
-    theme(
-      plot.title         = element_text(hjust = 0.5, face = "bold", size = 16),
-      plot.margin        = margin(t = 5, r = 20, b = 5, l = 20, unit = "pt"),
-      panel.grid.major.y = element_blank(),
-      panel.grid.minor   = element_blank(),
-      panel.background   = element_rect(fill = "white", color = NA),
-      axis.text          = element_text(size = 10),
-      axis.text.y        = element_text(face = "bold", size = 10),
-      axis.title         = element_text(size = 12),
-      legend.box         = "horizontal",
-      legend.position    = "right",
-      legend.title       = element_text(size = 14, face = "bold"),
-      legend.text        = element_text(size = 12)
-    )
+    paper_dumbbell_theme(legend_position = "right", legend_box = "horizontal")
 
   if (!show_x_axis) {
     p <- p + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
@@ -666,21 +650,19 @@ if (length(db_plots) > 0) {
       theme = theme(plot.title = element_text(size = 22, face = "bold", hjust = 0.5))
     )
 
-  label_a <- ggplot() +
-    annotate("text", x = .5, y = .5, label = "a", size = 10, fontface = "bold") +
-    theme_void()
-  label_b <- ggplot() +
-    annotate("text", x = .5, y = .5, label = "b", size = 10, fontface = "bold") +
-    theme_void()
-
-  final_db <- wrap_elements(db_assembled) +
-    inset_element(label_a, left = -0.02, bottom = 0.90, right = 0.05, top = 1) +
-    inset_element(label_b, left = -0.02, bottom = 0.30, right = 0.05, top = 0.40)
+  final_db <- paper_inset_tags_rows(
+    wrap_elements(full = db_assembled),
+    tag_by_row = c("1" = "a", "4" = "b"),
+    heights = c(1, 1, 0.15, 1, 0.08)
+  )
 
   print(final_db)
 
-  ggsave("plot_creation/sirv_comparison_dumbbell.pdf",
-         device = cairo_pdf, plot = final_db, width = 18, height = 12, unit = "in")
+  paper_ggsave(
+    file.path(out_dir, "sirv_comparison_dumbbell.pdf"),
+    plot = final_db,
+    size = "sirv_dumbbell"
+  )
 }
 ```
 
@@ -688,12 +670,11 @@ if (length(db_plots) > 0) {
 # Export
 
 ```{r export}
-if (!dir.exists("plot_creation")) dir.create("plot_creation")
 
 export_df <- comparison_df %>%
   select(-missing_sirvs)
 
-write_csv(export_df, "plot_creation/sirv_comparison_metrics.csv")
+write_csv(export_df, file.path(out_dir, "sirv_comparison_metrics.csv"))
 
-cat(sprintf("Exported %d rows to plot_creation/sirv_comparison_metrics.csv\n", nrow(export_df)))
+cat(sprintf("Exported %d rows to %s\n", nrow(export_df), file.path(out_dir, "sirv_comparison_metrics.csv")))
 ```

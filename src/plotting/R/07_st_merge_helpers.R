@@ -80,31 +80,6 @@ load_st_classification <- function(st_dir, tissue) {
 }
 
 
-process_classification_only <- function(Bclass_df_list, Kclass_df_list, fl_threshold = 1) {
-  for (df_name in names(Bclass_df_list)) {
-    df <- Bclass_df_list[[df_name]]
-    if ("FL" %in% names(df) && mean(is.na(df$FL)) > 0.95) {
-      stop(paste("Error: Data frame", df_name, "has over 95% NA values in the 'FL' column."))
-    }
-    Bclass_df_list[[df_name]] <- df %>% filter(!is.na(FL) & FL >= fl_threshold)
-  }
-
-  kidney_sample_mapping <- setNames(paste0("K", 1:7), paste0("B", 1:7))
-  for (df_name in names(Kclass_df_list)) {
-    df <- Kclass_df_list[[df_name]]
-    if ("FL" %in% names(df) && mean(is.na(df$FL)) > 0.95) {
-      stop(paste("Error: K Data frame", df_name, "has over 95% NA values in the 'FL' column."))
-    }
-    if ("sample" %in% names(df)) {
-      df$sample <- recode(df$sample, !!!kidney_sample_mapping)
-    }
-    Kclass_df_list[[df_name]] <- df %>% filter(!is.na(FL) & FL >= fl_threshold)
-  }
-
-  list(Bclass_df_list = Bclass_df_list, Kclass_df_list = Kclass_df_list)
-}
-
-
 build_extended_combined_df <- function(filtered_df_list, st_df) {
   cols <- c("sample", "structural_category", "chrom")
   existing_dfs <- lapply(filtered_df_list, function(df) df[, cols])
@@ -172,9 +147,11 @@ create_tama_vs_st_upset <- function(tama_df, st_df, method = "") {
     ggtitle(method) +
     theme(
       axis.title.y = element_blank(),
-      axis.text.y = element_text(size = 10),
+      axis.text.y = paper_axis_text_y(),
       legend.position = "none",
-      plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+      plot.title = element_text(
+        hjust = 0.5, size = .paper_font("panel"), face = "bold"
+      )
     )
 
   upset_plot <- ComplexUpset::upset(

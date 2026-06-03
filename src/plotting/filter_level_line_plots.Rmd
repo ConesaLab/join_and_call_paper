@@ -19,10 +19,13 @@ library(scales)
 
 r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
 
+source(file.path(r_source_dir, "00_figure_config.R"))
 source(file.path(r_source_dir, "01_config.R"))
 source(file.path(r_source_dir, "02_themes.R"))
 source(file.path(r_source_dir, "04_data_loading.R"))
 source(file.path(r_source_dir, "09_filter_level_lines.R"))
+
+out_dir <- plot_creation_dir()
 ```
 
 
@@ -69,7 +72,6 @@ log_thresholds <- 10^seq(log10(min_tpm), log10(max_tpm), length.out = 200)
 linear_upper <- quantile(all_tpms, 0.995)
 linear_thresholds <- seq(0, linear_upper, length.out = 200)
 
-quantile_labels <- c("Q1", "Q10", "Q25", "Q50", "Q75")
 ```
 
 
@@ -101,26 +103,20 @@ for (platform in names(all_tpm_data)) {
 ```
 
 
-```{r tpm-line-legend, fig.width=16, fig.height=2.5}
-if (!dir.exists("plot_creation")) {
-  dir.create("plot_creation")
-}
-
+```{r tpm-line-legend, fig.width=18, fig.height=2.5}
 tpm_line_legend <- build_tpm_line_legend_figure()
 
-ggsave("plot_creation/tpm_lines_legend.pdf",
-       device = cairo_pdf, plot = tpm_line_legend,
-       width = 16, height = 2.5, unit = "in")
+paper_ggsave(
+  file.path(out_dir, "tpm_lines_legend.pdf"),
+  plot = tpm_line_legend,
+  size = "legend_strip"
+)
 
 tpm_line_legend
 ```
 
 
 ```{r brain-tpm-lines-log, fig.width=18, fig.height=12}
-if (!dir.exists("plot_creation")) {
-  dir.create("plot_creation")
-}
-
 brain_log_line_plots <- list()
 for (platform in names(all_tpm_data)) {
   brain_log_line_plots[[platform]] <- list()
@@ -143,9 +139,11 @@ brain_log_figure <- assemble_tpm_line_figure(
   log_x = TRUE
 )
 
-ggsave("plot_creation/brain_tpm_lines_log.pdf",
-       device = cairo_pdf, plot = brain_log_figure,
-       width = 18, height = 12, unit = "in")
+paper_ggsave(
+  file.path(out_dir, "brain_tpm_lines_log.pdf"),
+  plot = brain_log_figure,
+  size = "tpm_lines_10panel"
+)
 
 brain_log_figure
 ```
@@ -174,9 +172,11 @@ kidney_log_figure <- assemble_tpm_line_figure(
   log_x = TRUE
 )
 
-ggsave("plot_creation/kidney_tpm_lines_log.pdf",
-       device = cairo_pdf, plot = kidney_log_figure,
-       width = 18, height = 12, unit = "in")
+paper_ggsave(
+  file.path(out_dir, "kidney_tpm_lines_log.pdf"),
+  plot = kidney_log_figure,
+  size = "tpm_lines_10panel"
+)
 
 kidney_log_figure
 ```
@@ -204,9 +204,11 @@ brain_lin_figure <- assemble_tpm_line_figure(
   title = "Transcripts by TPM threshold (linear scale); brain"
 )
 
-ggsave("plot_creation/brain_tpm_lines_linear.pdf",
-       device = cairo_pdf, plot = brain_lin_figure,
-       width = 18, height = 12, unit = "in")
+paper_ggsave(
+  file.path(out_dir, "brain_tpm_lines_linear.pdf"),
+  plot = brain_lin_figure,
+  size = "tpm_lines_10panel"
+)
 
 brain_lin_figure
 ```
@@ -234,125 +236,11 @@ kidney_lin_figure <- assemble_tpm_line_figure(
   title = "Transcripts by TPM threshold (linear scale); kidney"
 )
 
-ggsave("plot_creation/kidney_tpm_lines_linear.pdf",
-       device = cairo_pdf, plot = kidney_lin_figure,
-       width = 18, height = 12, unit = "in")
+paper_ggsave(
+  file.path(out_dir, "kidney_tpm_lines_linear.pdf"),
+  plot = kidney_lin_figure,
+  size = "tpm_lines_10panel"
+)
 
 kidney_lin_figure
-```
-
-
-```{r brain-tpm-bars, fig.width=22, fig.height=14}
-brain_bar_plots <- list()
-for (platform in names(all_tpm_data)) {
-  brain_bar_plots[[platform]] <- list()
-  for (method in names(all_tpm_data[[platform]])) {
-    title <- tool_titles[[method]]
-    if (is.na(title)) title <- method
-    tool_tpm <- all_tpm_data[[platform]][[method]][["brain"]]
-    tool_quantiles <- pick_tpm_quantiles(tool_tpm)
-    curve <- compute_survival_curve(tool_tpm, tool_quantiles, simplify = FALSE)
-    brain_bar_plots[[platform]][[method]] <- create_tpm_bar_plot(
-      curve, title, quantile_names = quantile_labels
-    )
-  }
-}
-
-brain_bar_figure <- assemble_filter_level_bar_figure(
-  brain_bar_plots,
-  title = "Transcripts per structural category at TPM quantiles; brain"
-)
-
-ggsave("plot_creation/brain_tpm_bars.pdf",
-       device = cairo_pdf, plot = brain_bar_figure,
-       width = 22, height = 14, unit = "in")
-
-brain_bar_figure
-```
-
-
-```{r kidney-tpm-bars, fig.width=22, fig.height=14}
-kidney_bar_plots <- list()
-for (platform in names(all_tpm_data)) {
-  kidney_bar_plots[[platform]] <- list()
-  for (method in names(all_tpm_data[[platform]])) {
-    title <- tool_titles[[method]]
-    if (is.na(title)) title <- method
-    tool_tpm <- all_tpm_data[[platform]][[method]][["kidney"]]
-    tool_quantiles <- pick_tpm_quantiles(tool_tpm)
-    curve <- compute_survival_curve(tool_tpm, tool_quantiles, simplify = FALSE)
-    kidney_bar_plots[[platform]][[method]] <- create_tpm_bar_plot(
-      curve, title, quantile_names = quantile_labels
-    )
-  }
-}
-
-kidney_bar_figure <- assemble_filter_level_bar_figure(
-  kidney_bar_plots,
-  title = "Transcripts per structural category at TPM quantiles; kidney"
-)
-
-ggsave("plot_creation/kidney_tpm_bars.pdf",
-       device = cairo_pdf, plot = kidney_bar_figure,
-       width = 22, height = 14, unit = "in")
-
-kidney_bar_figure
-```
-
-
-```{r brain-tpm-pct-bars, fig.width=22, fig.height=14}
-brain_pct_bar_plots <- list()
-for (platform in names(all_tpm_data)) {
-  brain_pct_bar_plots[[platform]] <- list()
-  for (method in names(all_tpm_data[[platform]])) {
-    title <- tool_titles[[method]]
-    if (is.na(title)) title <- method
-    tool_tpm <- all_tpm_data[[platform]][[method]][["brain"]]
-    tool_quantiles <- pick_tpm_quantiles(tool_tpm)
-    curve <- compute_survival_curve(tool_tpm, tool_quantiles, simplify = FALSE)
-    brain_pct_bar_plots[[platform]][[method]] <- create_tpm_pct_bar_plot(
-      curve, title, quantile_names = quantile_labels
-    )
-  }
-}
-
-brain_pct_bar_figure <- assemble_filter_level_bar_figure(
-  brain_pct_bar_plots,
-  title = "% transcripts per structural category at TPM quantiles; brain"
-)
-
-ggsave("plot_creation/brain_tpm_pct_bars.pdf",
-       device = cairo_pdf, plot = brain_pct_bar_figure,
-       width = 22, height = 14, unit = "in")
-
-brain_pct_bar_figure
-```
-
-
-```{r kidney-tpm-pct-bars, fig.width=22, fig.height=14}
-kidney_pct_bar_plots <- list()
-for (platform in names(all_tpm_data)) {
-  kidney_pct_bar_plots[[platform]] <- list()
-  for (method in names(all_tpm_data[[platform]])) {
-    title <- tool_titles[[method]]
-    if (is.na(title)) title <- method
-    tool_tpm <- all_tpm_data[[platform]][[method]][["kidney"]]
-    tool_quantiles <- pick_tpm_quantiles(tool_tpm)
-    curve <- compute_survival_curve(tool_tpm, tool_quantiles, simplify = FALSE)
-    kidney_pct_bar_plots[[platform]][[method]] <- create_tpm_pct_bar_plot(
-      curve, title, quantile_names = quantile_labels
-    )
-  }
-}
-
-kidney_pct_bar_figure <- assemble_filter_level_bar_figure(
-  kidney_pct_bar_plots,
-  title = "% transcripts per structural category at TPM quantiles; kidney"
-)
-
-ggsave("plot_creation/kidney_tpm_pct_bars.pdf",
-       device = cairo_pdf, plot = kidney_pct_bar_figure,
-       width = 22, height = 14, unit = "in")
-
-kidney_pct_bar_figure
 ```

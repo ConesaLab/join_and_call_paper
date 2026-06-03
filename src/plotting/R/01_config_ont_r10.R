@@ -1,18 +1,27 @@
 # 01_config_ont_r10.R
 # Paths for ONT R10 SY5Y human reports (does not modify mouse 01_config.R).
 
+if (!exists("paper_repo_root", mode = "function")) {
+  if (exists("r_source_dir", inherits = TRUE)) {
+    source(file.path(r_source_dir, "00_figure_config.R"))
+  }
+}
+
 if (!exists("ont_r10_repo_root", inherits = TRUE)) {
-  ev <- Sys.getenv("JOIN_AND_CALL_REPO", unset = "")
-  if (nzchar(ev)) {
-    ont_r10_repo_root <- normalizePath(ev, mustWork = TRUE)
-  } else if (exists("r_source_dir", inherits = TRUE)) {
-    # r_source_dir is "R" or "src/plotting/R" — three parents up = repository root
-    ont_r10_repo_root <- normalizePath(
-      file.path(r_source_dir, "..", "..", ".."),
-      mustWork = TRUE
-    )
+  if (exists("paper_repo_root", mode = "function")) {
+    ont_r10_repo_root <- paper_repo_root()
   } else {
-    stop("Define `r_source_dir` before sourcing 01_config_ont_r10.R, or set JOIN_AND_CALL_REPO.")
+    ev <- Sys.getenv("JOIN_AND_CALL_REPO", unset = "")
+    if (nzchar(ev)) {
+      ont_r10_repo_root <- normalizePath(ev, mustWork = TRUE)
+    } else if (exists("r_source_dir", inherits = TRUE)) {
+      ont_r10_repo_root <- normalizePath(
+        file.path(r_source_dir, "..", "..", ".."),
+        mustWork = TRUE
+      )
+    } else {
+      stop("Define `r_source_dir` before sourcing 01_config_ont_r10.R, or set JOIN_AND_CALL_REPO.")
+    }
   }
 }
 
@@ -37,15 +46,63 @@ ont_r10_sy5y_default_sample_labels <- c("191", "198", "209", "210")
 
 ont_r10_sy5y_fl_filter_levels <- c(1, 3, 5, 10, 20)
 
+# Condition suffix for figure titles (mouse: `...; brain` / `...; kidney`).
+ont_r10_sy5y_condition_label <- "SY5Y"
+
+#' Mouse-style assembled figure title: `main; condition` (see `all_plots.Rmd`).
+sy5y_plot_title <- function(
+    main,
+    condition = ont_r10_sy5y_condition_label) {
+  paste(main, condition, sep = "; ")
+}
+
+#' Per-panel theme (alias of `paper_panel_theme()` in `02_themes.R`).
+sy5y_mouse_panel_theme <- function() {
+  if (!exists("paper_panel_theme", mode = "function")) {
+    source(file.path(
+      if (exists("r_source_dir", inherits = TRUE)) r_source_dir else "R",
+      "02_themes.R"
+    ))
+  }
+  paper_panel_theme()
+}
+
+#' Patchwork figure title (alias of `paper_figure_title_theme()`).
+sy5y_mouse_figure_annotation_theme <- function() {
+  if (!exists("paper_figure_title_theme", mode = "function")) {
+    source(file.path(
+      if (exists("r_source_dir", inherits = TRUE)) r_source_dir else "R",
+      "02_themes.R"
+    ))
+  }
+  paper_figure_title_theme()
+}
+
+#' Centered figure title and/or x-axis label (alias of `paper_figure_annotation()`).
+sy5y_figure_annotation <- function(title = NULL, x_label = NULL) {
+  if (!exists("paper_figure_annotation", mode = "function")) {
+    source(file.path(
+      if (exists("r_source_dir", inherits = TRUE)) r_source_dir else "R",
+      "02_themes.R"
+    ))
+  }
+  paper_figure_annotation(title = title, x_label = x_label)
+}
+
+# Denominator for expression-bar "Unassigned" (see sy5y_read_numbers_for_expression).
+ont_r10_sy5y_expression_total_col <- "ont_fastq"
+
 ont_r10_sy5y_ylims <- list(
-  structural   = NULL,
-  expression   = NULL,
-  comb         = NULL,
-  comb_bar     = NULL,
-  comb_fl_bar  = NULL,
-  ujc_curve    = NULL,
-  ujc_stack    = NULL,
-  ujc_fl_stack = NULL
+  structural      = NULL,
+  expression      = NULL,
+  comb            = NULL,
+  comb_bar        = NULL,
+  comb_fl_bar     = NULL,
+  perc_comb_bar    = c(0, 65),
+  perc_comb_fl_bar = c(0, 100),
+  ujc_curve       = NULL,
+  ujc_stack       = NULL,
+  ujc_fl_stack    = NULL
 )
 
 check_paths_ont_r10 <- function() {

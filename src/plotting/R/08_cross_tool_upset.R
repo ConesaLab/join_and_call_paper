@@ -1,6 +1,34 @@
 # 08_cross_tool_upset.R
 # Cross-tool UJC upset/bar plots: compare UJC overlap between tools within a platform
-# Depends on: 02_themes.R (cat.palette), ComplexUpset, patchwork
+# Depends on: 01_config.R, 04_data_loading.R, 02_themes.R, ComplexUpset, patchwork
+
+#' Load filtered class lists for cross-tool figures (no process_and_plot).
+load_cross_tool_all_results <- function(src_dirs, fl_filter_level = 1L) {
+  fl <- as.character(fl_filter_level)
+  all_results <- list()
+
+  for (platform in names(src_dirs)) {
+    all_results[[platform]] <- list()
+    for (method in names(src_dirs[[platform]])) {
+      all_results[[platform]][[method]] <- list()
+      cat(platform, method, "\n")
+      src_dir <- src_dirs[[platform]][[method]]
+      paths <- get_paths(src_dir)
+      df_lists <- load_df_lists(paths)
+      filtered <- process_classification_only(
+        df_lists$Bclass_df_list,
+        df_lists$Kclass_df_list,
+        fl_threshold = fl_filter_level
+      )
+      all_results[[platform]][[method]][[fl]] <- list(
+        b_class_df_list = filtered$Bclass_df_list,
+        k_class_df_list = filtered$Kclass_df_list
+      )
+    }
+  }
+
+  all_results
+}
 
 tool_display_names <- c(
   IsoQuant      = "IsoQuant",
@@ -66,11 +94,10 @@ create_cross_tool_upset <- function(all_results, platform, tissue,
   ) +
     scale_fill_manual(values = cross_tool_category_colors, name = "Structural Category") +
     ggtitle(platform) +
+    paper_panel_theme() +
     theme(
       axis.title.y = element_blank(),
-      axis.text.y  = element_text(size = 10),
-      legend.position = "none",
-      plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+      legend.position = "none"
     )
 
   upset_plot <- ComplexUpset::upset(
@@ -109,13 +136,8 @@ create_cross_tool_bar <- function(all_results, platform, tissue,
     scale_fill_manual(values = cross_tool_category_colors, name = "Structural Category") +
     scale_y_continuous(labels = function(x) format(x, big.mark = ",", scientific = FALSE)) +
     labs(x = "# tools detecting UJC", y = "# UJCs", title = platform) +
-    theme_minimal(base_size = 10) +
-    theme(
-      plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
-      axis.text  = element_text(size = 10),
-      axis.title = element_text(size = 12),
-      legend.position = "none"
-    )
+    paper_theme() +
+    theme(legend.position = "none")
 }
 
 
@@ -128,68 +150,48 @@ assemble_cross_tool_figure <- function(isoseq_upset, ont_upset, title) {
     plot_layout(heights = c(1.2, 1)) +
     plot_annotation(
       title = title,
-      theme = theme(
-        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
-      )
+      theme = paper_figure_title_theme()
     )
 
-  label_a <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-
-  label_b <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-
-  final_plot <- wrap_elements(full = combined)
-  final_plot <- final_plot +
-    inset_element(label_a, left = -0.02, bottom = 0.94, right = 0.05, top = 1) +
-    inset_element(label_b, left = -0.02, bottom = 0.35, right = 0.05, top = 0.45)
-
-  final_plot
+  paper_inset_panel_tags(
+    wrap_elements(full = combined),
+    tags = c("a", "b"),
+    heights = c(1.2, 1)
+  )
 }
 
 
 assemble_cross_tool_bar_figure <- function(isoseq_bar, ont_bar, title) {
 
-  legend_plot <- isoseq_bar +
-    theme(legend.position = "bottom") +
-    guides(fill = guide_legend(nrow = 1))
-  legend_grob <- cowplot::get_legend(legend_plot)
-  shared_legend <- wrap_elements(full = legend_grob)
-
-  combined <- (
-    isoseq_bar + ont_bar + shared_legend
-  ) +
-    plot_layout(
-      design = "A#B\nCCC",
-      heights = c(1, 0.15),
-      widths = c(1, 0.05, 1),
-      axis_titles = "collect"
-    ) +
-    plot_annotation(
-      title = title,
-      theme = theme(
-        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
+  legend_src <- isoseq_bar +
+    ggplot2::theme(legend.position = "right") +
+    ggplot2::guides(
+      fill = ggplot2::guide_legend(
+        ncol = 1,
+        title = "Structural Category"
       )
     )
+  legend_grob <- cowplot::get_legend(legend_src)
+  if (is.null(legend_grob)) {
+    stop("Could not extract structural-category legend for cross-tool bar figure.", call. = FALSE)
+  }
 
-  label_a <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "a", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
+  isoseq_panel <- paper_tag_panel(
+    isoseq_bar + ggplot2::theme(legend.position = "none"),
+    "a"
+  )
+  ont_panel <- paper_tag_panel(
+    ont_bar + ggplot2::theme(legend.position = "none"),
+    "b"
+  )
 
-  label_b <- ggplot() +
-    annotate("text", x = 1, y = 1, label = "b", hjust = 0.5, vjust = 1,
-             size = 10, fontface = "bold") +
-    theme_void()
-
-  final_plot <- wrap_elements(full = combined)
-  final_plot <- final_plot +
-    inset_element(label_a, left = -0.02, bottom = 0.88, right = 0.05, top = 0.98) +
-    inset_element(label_b, left = 0.48,  bottom = 0.88, right = 0.55, top = 0.98)
-
-  final_plot
+  (isoseq_panel | ont_panel | legend_grob) +
+    patchwork::plot_layout(
+      widths = c(1, 1, 0.32),
+      guides = "keep"
+    ) +
+    patchwork::plot_annotation(
+      title = title,
+      theme = paper_figure_title_theme()
+    )
 }

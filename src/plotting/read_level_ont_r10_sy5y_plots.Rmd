@@ -1,14 +1,10 @@
 ---
-title: "ONT R10 SY5Y — read-level plots (SQANTI-reads, read counts, BAM lengths)"
+title: "SY5Y; read-level plots (ONT R10)"
 author: "Fabian Jetzinger"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 params:
   sample_ids_chr: "SRR31732191,SRR31732198,SRR31732209,SRR31732210"
   sample_labels_chr: "191,198,209,210"
-  # SQANTI "Unaligned" slice: "primary_mapped" uses ont_prim_aln (recommended for SY5Y
-  # because SQANTI is run on BAM->GTF input; see diagnostics chunk). "fastq" matches
-  # mouse read_figure_plots.Rmd (ont_fastq - assigned).
-  sqanti_unaligned_denominator: "primary_mapped"
 output:
   html_document:
     toc: true
@@ -29,7 +25,8 @@ categories, stacked FASTQ vs primary-mapped counts, and BAM read-length violins
 | ONT SQANTI-reads merge | `sqanti_reads.py` + `design_ont.csv`; per-sample `*_reads_classification.txt` under NIH paths (`02_sqanti_reads_ONT.sbatch`) | `6_sqanti_reads.sh`: **primary BAM → `spliced_bam2gff` → GTF → `sqanti3_qc.py`** → `*_reads_classification.txt`; then `7_sqanti_reads_merge.sh` runs `sqanti_reads.py` on merged design |
 | Plot reads ONT file names | `ont_dir`: `B31_classification.txt` … (no `_reads_` in Rmd; `design_ont.csv` uses `*_reads_classification.txt` — **local mirror may rename**) | `*_reads_classification.txt` under `sqanti_reads/<SRR>/` |
 | Read totals / lengths | `count_reads.sbatch` + `get_read_lengths.sbatch` on NIH metadata TSVs | `9_count_reads_joint.sh` + `10_get_read_lengths_bam.sh` + same column layout as mouse TSV |
-| Unaligned in SQANTI stack (R) | `ont_fastq - sum(classified reads)` in `build_category_counts()` | **Default here: `ont_prim_aln - assigned`** (`params$sqanti_unaligned_denominator: primary_mapped`) because classification rows come from **BAM-derived GTF**, not necessarily one row per FASTQ read. Set to `fastq` to reproduce the **literal mouse R formula** on this data (often inflates Unaligned). |
+| Extra read buckets (R) | Single "Unaligned" in mouse | **Unaligned** = `ont_fastq - ont_prim_aln`; **Unstranded** = `ont_prim_aln - SQANTI-classified` (mapped but no classification row). |
+| Expression "Unassigned" total | `ont_fastq` | `ont_fastq` (unchanged; see `ont_r10_sy5y_plots.Rmd`) |
 
 The HTML **diagnostics** chunk prints: classification file row count, rows that become `NA` after category recode (excluded from stacked sums), `ont_fastq` / `ont_prim_aln`, **`n_primary_mapped_minus_rows`** (primary BAM reads not represented as a classification row), and **`pct_sqanti_rows_of_primary_mapped`**.
 
@@ -80,6 +77,8 @@ library(stringr)
 library(forcats)
 
 r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
+source(file.path(r_source_dir, "00_figure_config.R"))
+source(file.path(r_source_dir, "02_themes.R"))
 source(file.path(r_source_dir, "01_config_ont_r10.R"))
 source(file.path(r_source_dir, "08_read_level_sy5y.R"))
 
@@ -95,10 +94,7 @@ if (length(sample_ids) != length(sample_labels)) {
   stop("params$sample_ids_chr and params$sample_labels_chr must have the same number of entries.")
 }
 
-out_dir <- file.path(ont_r10_repo_root, "plot_creation_ont_r10")
-if (!dir.exists(out_dir)) {
-  dir.create(out_dir, recursive = TRUE)
-}
+out_dir <- plot_creation_ont_r10_dir()
 ```
 
 ```{r check-paths, results="asis"}
@@ -127,72 +123,42 @@ knitr::kable(
 ```
 
 ```{r sqanti-category-counts}
-ud <- tolower(trimws(as.character(params$sqanti_unaligned_denominator)))
-if (!ud %in% c("primary_mapped", "fastq")) {
-  stop("params$sqanti_unaligned_denominator must be 'primary_mapped' or 'fastq'")
-}
-unaligned_denom <- if (ud == "fastq") "ont_fastq" else "ont_prim_aln"
-
 category_counts_sy5y <- build_sy5y_sqanti_category_counts(
   read_numbers,
   sample_ids = sample_ids,
   sample_labels = sample_labels,
-  sqanti_reads_root = ont_r10_sqanti_reads_root,
-  unaligned_denominator = unaligned_denom
+  sqanti_reads_root = ont_r10_sqanti_reads_root
 )
 
-sq_title <- sprintf(
-  "ONT R10 SY5Y — SQANTI-reads (Unaligned denominator: %s)",
-  if (unaligned_denom == "ont_fastq") "ont_fastq (mouse Rmd parity)" else "ont_prim_aln (BAM-aligned total)"
+sq_reads_plot <- plot_read_level_sqanti_faceted(
+  category_counts_sy5y,
+  title = ont_r10_sy5y_condition_label
 )
-sq_reads_plot <- plot_read_level_sqanti_faceted(category_counts_sy5y, title = sq_title)
 sq_reads_plot
 ```
 
-```{r save-sqanti-pdf, results="hide"}
-ggsave(
-  file.path(out_dir, "sy5y_sq_reads_plot.pdf"),
-  plot = sq_reads_plot,
-  device = grDevices::cairo_pdf,
-  width = 14,
-  height = 10,
-  units = "in"
-)
-```
-
 ```{r readnum-plot}
-readnum_tidy <- build_sy5y_readnum_tidy(read_numbers, sample_ids, sample_labels)
-readnum_plot <- plot_sy5y_readnum_faceted(readnum_tidy, title = "ONT R10 SY5Y — FASTQ vs primary-mapped (ONT)")
-readnum_plot
-```
-
-```{r save-readnum-pdf, results="hide"}
-ggsave(
-  file.path(out_dir, "sy5y_readnum_plot.pdf"),
-  plot = readnum_plot,
-  device = grDevices::cairo_pdf,
-  width = 14,
-  height = 10,
-  units = "in"
+readnum_tidy <- build_sy5y_readnum_tidy(
+  read_numbers,
+  sample_ids,
+  sample_labels,
+  category_counts = category_counts_sy5y
 )
+readnum_plot <- plot_sy5y_readnum_faceted(
+  readnum_tidy,
+  title = ont_r10_sy5y_condition_label
+)
+readnum_plot
 ```
 
 ```{r lengths}
 length_ont_dir <- file.path(ont_r10_read_qc_dir, "lengths_seq_only", "ont")
 all_lengths_df <- build_sy5y_lengths_df(length_ont_dir, sample_ids, sample_labels)
-lengths_violin <- plot_sy5y_lengths_violin(all_lengths_df, title = "ONT R10 SY5Y — read length (BAM SEQ)")
-lengths_violin
-```
-
-```{r save-lengths-pdf, results="hide"}
-ggsave(
-  file.path(out_dir, "sy5y_lengths_violin.pdf"),
-  plot = lengths_violin,
-  device = grDevices::cairo_pdf,
-  width = 14,
-  height = 10,
-  units = "in"
+lengths_violin <- plot_sy5y_lengths_violin(
+  all_lengths_df,
+  title = ont_r10_sy5y_condition_label
 )
+lengths_violin
 ```
 
 ```{r combined-patchwork}
@@ -207,22 +173,16 @@ sy5y_read_level_combined
 ```
 
 ```{r save-combined-pdf, results="hide"}
-ggsave(
+paper_ggsave(
   file.path(out_dir, "sy5y_read_level_combined.pdf"),
   plot = sy5y_read_level_combined,
-  device = grDevices::cairo_pdf,
-  width = 16,
-  height = 10,
-  units = "in"
+  size = "read_level_combo"
 )
 ```
 
-PDFs written under `plot_creation_ont_r10/`:
+PDF written under `plot_creation_ont_r10/`:
 
-- `sy5y_sq_reads_plot.pdf`
-- `sy5y_readnum_plot.pdf`
-- `sy5y_lengths_violin.pdf`
-- `sy5y_read_level_combined.pdf`
+- `sy5y_read_level_combined.pdf` (SQANTI-reads stack + read-length violins)
 
 Render from the repository:
 

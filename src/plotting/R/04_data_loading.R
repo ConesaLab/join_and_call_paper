@@ -55,7 +55,34 @@ load_df_lists <- function(paths) {
 }
 
 
-process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, fl_threshold=0) {
+#' Filter class lists by FL threshold (no plot generation).
+process_classification_only <- function(Bclass_df_list, Kclass_df_list, fl_threshold = 1) {
+  for (df_name in names(Bclass_df_list)) {
+    df <- Bclass_df_list[[df_name]]
+    if ("FL" %in% names(df) && mean(is.na(df$FL)) > 0.95) {
+      stop(paste("Error: Data frame", df_name, "has over 95% NA values in the 'FL' column."))
+    }
+    Bclass_df_list[[df_name]] <- df %>% filter(!is.na(FL) & FL >= fl_threshold)
+  }
+
+  kidney_sample_mapping <- setNames(paste0("K", 1:7), paste0("B", 1:7))
+  for (df_name in names(Kclass_df_list)) {
+    df <- Kclass_df_list[[df_name]]
+    if ("FL" %in% names(df) && mean(is.na(df$FL)) > 0.95) {
+      stop(paste("Error: K Data frame", df_name, "has over 95% NA values in the 'FL' column."))
+    }
+    if ("sample" %in% names(df)) {
+      df$sample <- recode(df$sample, !!!kidney_sample_mapping)
+    }
+    Kclass_df_list[[df_name]] <- df %>% filter(!is.na(FL) & FL >= fl_threshold)
+  }
+
+  list(Bclass_df_list = Bclass_df_list, Kclass_df_list = Kclass_df_list)
+}
+
+
+process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, method,
+                             fl_threshold = 0) {
   
   for (df_name in names(Bclass_df_list)) {
     df <- Bclass_df_list[[df_name]]
@@ -137,14 +164,24 @@ process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, fl_thre
   UJC_counts_Brain[UJC_counts_Brain[, sample_labels_Brain[1]] == 0, sample_labels_Brain[1]] <- NA
   UJC_counts_Brain[, 2:ncol(UJC_counts_Brain)] <- apply(UJC_counts_Brain[, 2:ncol(UJC_counts_Brain)], 2, cpm)
   
-  brain_upset_plots <- create_upset_plot(Bclass_df_list, sample_labels_Brain, method)
+  brain_upset_plots <- create_upset_plot(
+    Bclass_df_list,
+    sample_labels_Brain,
+    method,
+    include_percentage_plots = TRUE
+  )
 
   UJC_counts_Kidney <- UJC_count_matrix(Kclass_df_list, sample_labels_Kidney)
   UJC_counts_Kidney[, sample_labels_Kidney[1]] <- rowSums(UJC_counts_Kidney[, 2:ncol(UJC_counts_Kidney)], na.rm = TRUE)
   UJC_counts_Kidney[UJC_counts_Kidney[, sample_labels_Kidney[1]] == 0, sample_labels_Kidney[1]] <- NA
   UJC_counts_Kidney[, 2:ncol(UJC_counts_Kidney)] <- apply(UJC_counts_Kidney[, 2:ncol(UJC_counts_Kidney)], 2, cpm)
   
-  kidney_upset_plots <- create_upset_plot(Kclass_df_list, sample_labels_Kidney, method)
+  kidney_upset_plots <- create_upset_plot(
+    Kclass_df_list,
+    sample_labels_Kidney,
+    method,
+    include_percentage_plots = TRUE
+  )
   
   brain_compare_plots <- compare_isoform_plots(Bclass_df_list, condition_label = "brain")
   kidney_compare_plots <- compare_isoform_plots(Kclass_df_list, condition_label = "kidney")
@@ -199,42 +236,105 @@ process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, fl_thre
 }
 
 
+#' Pull one tissue's stack summary table from nested `all_results`.
+.stack_data_from_results <- function(all_results, data_type, tool, tissue,
+                                     fl_filter_level, suffix) {
+  fl_filter_level <- as.character(fl_filter_level)
+  if (!data_type %in% names(all_results)) {
+    return(NULL)
+  }
+  platform_results <- all_results[[data_type]]
+  if (!tool %in% names(platform_results)) {
+    return(NULL)
+  }
+  tool_results <- platform_results[[tool]]
+  if (!fl_filter_level %in% names(tool_results)) {
+    return(NULL)
+  }
+  fl_results <- tool_results[[fl_filter_level]]
+  if (is.null(fl_results)) {
+    return(NULL)
+  }
+  fl_results[[paste0(tissue, suffix)]]
+}
+
 extract_ujc_data <- function(all_results, data_type, tool, tissue, fl_filter_level = "1") {
-  tryCatch({
-    data <- all_results[[data_type]][[tool]][[fl_filter_level]][[paste0(tissue, "_ujc_stack_data")]]
-    if (!is.null(data)) {
-      data %>%
-        mutate(
-          data_type = data_type,
-          tool = tool,
-          tissue = tissue
-        )
-    } else {
-      NULL
-    }
-  }, error = function(e) {
-    NULL
-  })
+  data <- .stack_data_from_results(
+    all_results, data_type, tool, tissue, fl_filter_level, "_ujc_stack_data"
+  )
+  if (is.null(data) || !is.data.frame(data) || nrow(data) == 0L) {
+    return(NULL)
+  }
+  dplyr::mutate(
+    data,
+    data_type = .env$data_type,
+    tool = .env$tool,
+    tissue = .env$tissue
+  )
 }
 
 extract_fl_data <- function(all_results, data_type, tool, tissue, fl_filter_level = "1") {
-  tryCatch({
-    fl_data <- all_results[[data_type]][[tool]][[fl_filter_level]][[paste0(tissue, "_ujc_fl_stack_data")]]
-    pct_data <- all_results[[data_type]][[tool]][[fl_filter_level]][[paste0(tissue, "_ujc_fl_stack_pct_data")]]
+  fl_data <- .stack_data_from_results(
+    all_results, data_type, tool, tissue, fl_filter_level, "_ujc_fl_stack_data"
+  )
+  if (is.null(fl_data) || !is.data.frame(fl_data) || nrow(fl_data) == 0L) {
+    return(NULL)
+  }
+  pct_data <- .stack_data_from_results(
+    all_results, data_type, tool, tissue, fl_filter_level, "_ujc_fl_stack_pct_data"
+  )
+  if (!is.null(pct_data) && is.data.frame(pct_data) && nrow(pct_data) > 0L) {
+    fl_data <- dplyr::left_join(
+      fl_data,
+      pct_data %>%
+        dplyr::select(
+          "nr_samples",
+          "samples_present",
+          "mean_FL_pct",
+          "sd_FL_pct"
+        ),
+      by = c("nr_samples", "samples_present")
+    )
+  }
+  dplyr::mutate(
+    fl_data,
+    data_type = .env$data_type,
+    tool = .env$tool,
+    tissue = .env$tissue
+  )
+}
 
-    if (!is.null(fl_data) && !is.null(pct_data)) {
-      fl_data %>%
-        left_join(pct_data %>% select(nr_samples, samples_present, mean_FL_pct, sd_FL_pct),
-                  by = c("nr_samples", "samples_present")) %>%
-        mutate(
-          data_type = data_type,
-          tool = tool,
-          tissue = tissue
-        )
-    } else {
-      NULL
+#' Collect UJC / FL stack summary tables actually present in `all_results`.
+collect_stack_summary_tables <- function(all_results, fl_filter_level = "1") {
+  fl_filter_level <- as.character(fl_filter_level)
+  ujc_pieces <- list()
+  fl_pieces <- list()
+
+  for (data_type in names(all_results)) {
+    for (tool in names(all_results[[data_type]])) {
+      for (tissue in c("brain", "kidney")) {
+        ujc <- extract_ujc_data(all_results, data_type, tool, tissue, fl_filter_level)
+        if (!is.null(ujc)) {
+          ujc_pieces[[length(ujc_pieces) + 1L]] <- ujc
+        }
+        fl <- extract_fl_data(all_results, data_type, tool, tissue, fl_filter_level)
+        if (!is.null(fl)) {
+          fl_pieces[[length(fl_pieces) + 1L]] <- fl
+        }
+      }
     }
-  }, error = function(e) {
-    NULL
-  })
+  }
+
+  if (length(ujc_pieces) == 0L) {
+    stop(
+      "No UJC stack summary data in all_results at FL ", fl_filter_level, ". ",
+      "Run the 'usage' chunk first and confirm process_and_plot() completed.",
+      call. = FALSE
+    )
+  }
+
+  list(
+    ujc = dplyr::bind_rows(ujc_pieces),
+    fl = if (length(fl_pieces) > 0L) dplyr::bind_rows(fl_pieces) else NULL
+  )
 }

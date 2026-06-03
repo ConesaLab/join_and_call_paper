@@ -1,5 +1,5 @@
 ---
-title: "ONT R10 SY5Y — structural categories and UJC analysis"
+title: "SY5Y; structural categories and UJC analysis (ONT R10)"
 author: "Fabian Jetzinger"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 params:
@@ -34,6 +34,7 @@ library(ComplexUpset)
 
 r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
 
+source(file.path(r_source_dir, "00_figure_config.R"))
 source(file.path(r_source_dir, "02_themes.R"))
 source(file.path(r_source_dir, "03_plot_functions.R"))
 source(file.path(r_source_dir, "01_config_ont_r10.R"))
@@ -51,9 +52,6 @@ if (!length(fl_levels)) {
 thr_ujc <- as.numeric(params$fl_threshold)
 
 out_dir <- sy5y_plot_creation_dir()
-if (!dir.exists(out_dir)) {
-  dir.create(out_dir, recursive = TRUE)
-}
 ```
 
 ```{r check-paths, results="asis"}
@@ -68,9 +66,9 @@ all_results <- sy5y_build_all_tools_results(thr_ujc, include_expression = FALSE)
 sy5y_print_ylim_diagnostics(all_results)
 ```
 
-## Structural categories (FL filter)
+## Structural categories
 
-Same count-based view as mouse `all_plots.Rmd` (no stacked “% of isoforms” panel). One **2×2** PDF per FL threshold.
+Same count-based view as mouse `all_plots.Rmd` (no stacked “% of isoforms” panel). One **2×2** PDF per FL threshold (FL >= 1 omits a filter label in the title).
 
 ```{r structural-loop, results="hide"}
 for (fl in fl_levels) {
@@ -83,18 +81,12 @@ for (fl in fl_levels) {
   bm_p <- sy5y_classification_count_panel(
     all_results$Bambu$raw, sy5y_sample_labels(), fl
   )
-  title <- sprintf(
-    "ONT R10 SY5Y — transcripts per structural category (filter: FL >= %s)",
-    fl
-  )
+  title <- sy5y_plot_title("Transcripts per structural category")
   p <- assemble_ont_r10_tool_grid(iso_p, fl_p, bm_p, title = title)
-  ggsave(
+  paper_ggsave(
     file.path(out_dir, sprintf("sy5y_structural_category_fl%s.pdf", fl)),
     plot = p,
-    device = grDevices::cairo_pdf,
-    width = 14,
-    height = 11,
-    units = "in"
+    size = "sy5y_2x2"
   )
 }
 ```
@@ -114,18 +106,15 @@ assemble_ont_r10_tool_grid(
   iso_show,
   fl_show_p,
   bm_show,
-  title = sprintf(
-    "ONT R10 SY5Y — transcripts per structural category (filter: FL >= %s)",
-    fl_show
-  )
+  title = sy5y_plot_title("Transcripts per structural category")
 )
 ```
 
 ---
 
-## Expression (FL >= 1)
+## Expression
 
-Transcript read support per structural category (with unassigned reads), mirroring mouse `assemble_expr_bar_plots` for ONT only.
+Transcript read support per structural category (with unassigned reads), mirroring mouse `assemble_expr_bar_plots` for ONT only. **Unassigned** = `ont_fastq` minus sum of FL reads per structural category (`ont_r10_sy5y_expression_total_col` in `01_config_ont_r10.R`).
 
 ```{r expression-build}
 for (tool in SY5Y_TOOL_ORDER) {
@@ -136,18 +125,15 @@ for (tool in SY5Y_TOOL_ORDER) {
 }
 expr_grid <- assemble_ont_r10_expression_grid(
   all_results,
-  title = "ONT R10 SY5Y — transcript expression per structural category"
+  title = sy5y_plot_title("Transcript expression per structural category")
 )
 ```
 
 ```{r expression-save, results="hide"}
-ggsave(
+paper_ggsave(
   file.path(out_dir, "sy5y_expression_fl1.pdf"),
   plot = expr_grid,
-  device = grDevices::cairo_pdf,
-  width = 14,
-  height = 11,
-  units = "in"
+  size = "sy5y_2x2"
 )
 ```
 
@@ -157,26 +143,26 @@ expr_grid
 
 ---
 
-## UJC analysis — multi-tool 2×2 grids (FL >= `r thr_ujc`)
+## UJC analysis; multi-tool 2×2 grids`r if (thr_ujc > 1) sprintf(" (FL >= %s)", thr_ujc) else ""`
 
-Panels match mouse `all_plots.Rmd` (non-percent only). Per-tool PDFs and HTML overviews are kept for inspection.
+UJC occurrence across replicate samples: absolute counts (mouse-style) plus percent panels (0–65% # UJCs, 0–100% read support). Other UJC panels remain count-based only.
 
 ```{r ujc-titles}
 ujc_titles <- list(
-  upset = "Unique Junction Chain overlap; ONT R10 SY5Y",
-  comb = "Unique Junction Chain occurrence across samples; ONT R10 SY5Y",
-  comb_bar = "Unique Junction Chain occurrence across samples; ONT R10 SY5Y",
-  comb_fl_bar = "Expression of UJCs across samples; ONT R10 SY5Y",
-  ujc_curve = "Transcript occurrence across number of samples; ONT R10 SY5Y",
-  ujc_stack = "UJC occurrence across combinations of samples; ONT R10 SY5Y",
-  ujc_fl_stack = "Expression of UJCs across combinations of samples; ONT R10 SY5Y"
+  upset = sy5y_plot_title("Unique Junction Chain overlap"),
+  comb = sy5y_plot_title("Unique Junction Chain occurrence across samples"),
+  comb_bar = sy5y_plot_title("Unique Junction Chain occurrence across samples"),
+  comb_fl_bar = sy5y_plot_title("Expression of UJCs across samples"),
+  ujc_curve = sy5y_plot_title("Transcript occurrence across number of samples"),
+  ujc_stack = sy5y_plot_title("UJC occurrence across combinations of samples"),
+  ujc_fl_stack = sy5y_plot_title("Expression of UJCs across combinations of samples")
 )
-ujc_ylabs <- list(
-  comb = "Number of UJCs",
-  comb_bar = "# of UJCs",
-  comb_fl_bar = "# of reads of UJCs",
-  ujc_stack = "Mean # of UJCs",
-  ujc_fl_stack = "Mean # of reads of UJCs"
+ujc_ylabs <- c(
+  list(comb = "Number of UJCs"),
+  PAPER_UJC_YLAB[c(
+    "comb_bar", "comb_fl_bar", "perc_comb_bar", "perc_comb_fl_bar",
+    "ujc_stack", "perc_ujc_stack", "ujc_fl_stack", "perc_ujc_fl_stack"
+  )]
 )
 ```
 
@@ -184,17 +170,14 @@ ujc_ylabs <- list(
 
 ```{r ujc-upset-save, results="hide"}
 p_upset <- assemble_ont_r10_upset_grid(all_results, title = ujc_titles$upset)
-ggsave(
+paper_ggsave(
   file.path(out_dir, sprintf("sy5y_upset_fl%s.pdf", thr_ujc)),
   plot = p_upset,
-  device = grDevices::cairo_pdf,
-  width = 16,
-  height = 12,
-  units = "in"
+  size = "sy5y_2x2"
 )
 ```
 
-### UJC occurrence across samples — transcript counts
+### UJC occurrence across samples; transcript counts
 
 Mouse: `brain_comb_bar.pdf` (`# of UJCs` on the y-axis).
 
@@ -218,9 +201,9 @@ assemble_ont_r10_ujc_ggplot_grid(
 )
 ```
 
-### UJC occurrence across samples — read support (FL)
+### UJC occurrence across samples; read support
 
-Mouse: `brain_comb_fl_bar.pdf` (`# of reads of UJCs` on the y-axis). Same x-axis (number of replicate samples present), summed FL read support per structural category.
+Mouse: `brain_comb_fl_bar.pdf` (`# of reads in UJC` on the y-axis). Same x-axis (number of replicate samples present), summed FL read support per structural category.
 
 ```{r ujc-occurrence-reads-save, results="hide"}
 sy5y_ggsave_ujc_multitool_panel(
@@ -244,6 +227,54 @@ assemble_ont_r10_ujc_ggplot_grid(
 )
 ```
 
+### UJC occurrence across samples; percentages
+
+Shared y-axis limits: 0–65% (# UJCs) and 0–100% (read support).
+
+```{r ujc-occurrence-transcripts-pct-save, results="hide"}
+sy5y_ggsave_ujc_multitool_panel(
+  all_results,
+  SY5Y_UJC_PERCENT_TRANSCRIPT,
+  title = paste(ujc_titles$comb_bar, "(%)"),
+  out_dir = out_dir,
+  fl_threshold = thr_ujc,
+  ylab = ujc_ylabs$perc_comb_bar,
+  ylims = ont_r10_sy5y_ylims$perc_comb_bar
+)
+```
+
+```{r show-ujc-comb-bar-pct, echo=FALSE}
+assemble_ont_r10_ujc_ggplot_grid(
+  all_results,
+  SY5Y_UJC_PERCENT_TRANSCRIPT,
+  title = paste(ujc_titles$comb_bar, "(%)"),
+  ylab = ujc_ylabs$perc_comb_bar,
+  ylims = ont_r10_sy5y_ylims$perc_comb_bar
+)
+```
+
+```{r ujc-occurrence-reads-pct-save, results="hide"}
+sy5y_ggsave_ujc_multitool_panel(
+  all_results,
+  SY5Y_UJC_PERCENT_READS,
+  title = paste(ujc_titles$comb_fl_bar, "(%)"),
+  out_dir = out_dir,
+  fl_threshold = thr_ujc,
+  ylab = ujc_ylabs$perc_comb_fl_bar,
+  ylims = ont_r10_sy5y_ylims$perc_comb_fl_bar
+)
+```
+
+```{r show-ujc-comb-fl-bar-pct, echo=FALSE}
+assemble_ont_r10_ujc_ggplot_grid(
+  all_results,
+  SY5Y_UJC_PERCENT_READS,
+  title = paste(ujc_titles$comb_fl_bar, "(%)"),
+  ylab = ujc_ylabs$perc_comb_fl_bar,
+  ylims = ont_r10_sy5y_ylims$perc_comb_fl_bar
+)
+```
+
 ### Other UJC panels
 
 ```{r ujc-other-save, results="hide"}
@@ -263,71 +294,29 @@ for (pn in ujc_other_panels) {
 }
 ```
 
-```{r ujc-per-tool-save, results="hide"}
-for (tool in SY5Y_TOOL_ORDER) {
-  slug <- tolower(tool)
-  sy5y_save_ujc_pdfs(all_results[[tool]]$ujc, slug, out_dir)
-  ggsave(
-    file.path(out_dir, sprintf("sy5y_ujc_overview_%s_fl%s.pdf", slug, thr_ujc)),
-    plot = sy5y_ujc_overview_patchwork(
-      all_results[[tool]]$ujc,
-      paste0(tool, " — UJC overview")
-    ),
-    device = grDevices::cairo_pdf,
-    width = 16,
-    height = 22,
-    units = "in"
-  )
-}
-```
-
 ```{r show-ujc-upset, echo=FALSE, fig.height=12, fig.width=16}
 assemble_ont_r10_upset_grid(all_results, title = ujc_titles$upset)
 ```
 
 ---
 
-## Join&Call vs Call&Join — multi-tool redundancy (FL >= `r thr_ujc`)
+## Join&Call vs Call&Join; multi-tool redundancy`r if (thr_ujc > 1) sprintf(" (FL >= %s)", thr_ujc) else ""`
 
 Four **2×2** figures (one per panel type), matching mouse `assemble_compare_plots`.
 
 ```{r compare-multitool-save, results="hide"}
 cmp_titles <- list(
-  count_transcript = "Redundancy of transcripts (# of transcripts); SY5Y",
-  total_isoforms_transcript = "Redundancy of transcripts (# of isoforms); SY5Y",
-  count_ujc = "Redundancy of UJCs (# of UJCs); SY5Y",
-  total_isoforms_ujc = "Redundancy of UJCs (# of isoforms); SY5Y"
+  count_transcript = sy5y_plot_title("Redundancy of transcripts (# of transcripts)"),
+  total_isoforms_transcript = sy5y_plot_title("Redundancy of transcripts (# of isoforms)"),
+  count_ujc = sy5y_plot_title("Redundancy of UJCs (# of UJCs)"),
+  total_isoforms_ujc = sy5y_plot_title("Redundancy of UJCs (# of isoforms)")
 )
 for (pn in SY5Y_COMPARE_PANEL_NAMES) {
   p <- assemble_ont_r10_compare_grid(all_results, pn, title = cmp_titles[[pn]])
-  ggsave(
+  paper_ggsave(
     file.path(out_dir, sprintf("sy5y_compare_%s_fl%s.pdf", pn, thr_ujc)),
     plot = p,
-    device = grDevices::cairo_pdf,
-    width = 14,
-    height = 11,
-    units = "in"
-  )
-}
-```
-
-```{r compare-per-tool-save, results="hide"}
-for (tool in SY5Y_TOOL_ORDER) {
-  slug <- tolower(tool)
-  sy5y_save_compare_pdfs(all_results[[tool]]$compare, slug, out_dir)
-  ggsave(
-    file.path(out_dir, sprintf("sy5y_compare_overview_%s_fl%s.pdf", slug, thr_ujc)),
-    plot = sy5y_compare_patchwork(all_results[[tool]]$compare) +
-      patchwork::plot_annotation(
-        title = paste0(tool, " — Join&Call vs Call&Join"),
-        theme = ggplot2::theme(
-          plot.title = ggplot2::element_text(face = "bold", hjust = 0.5, size = 14)
-        )
-      ),
-    device = grDevices::cairo_pdf,
-    width = 14,
-    height = 12,
-    units = "in"
+    size = "sy5y_2x2"
   )
 }
 ```
@@ -349,10 +338,9 @@ Multi-tool PDFs under `plot_creation_ont_r10/`:
 - `sy5y_structural_category_fl{1,3,5,10,20}.pdf`
 - `sy5y_expression_fl1.pdf`
 - `sy5y_upset_fl1.pdf`
-- **UJC occurrence across samples:** `sy5y_comb_bar_fl1.pdf` (# UJCs) and `sy5y_comb_fl_bar_fl1.pdf` (# reads of UJCs; mouse `brain_comb_fl_bar.pdf`)
+- **UJC occurrence across samples:** `sy5y_comb_bar_fl1.pdf` and `sy5y_comb_fl_bar_fl1.pdf` (counts); `sy5y_perc_comb_bar_fl1.pdf` (0–65%) and `sy5y_perc_comb_fl_bar_fl1.pdf` (0–100%)
 - `sy5y_comb_fl1.pdf` (boxplot), `sy5y_ujc_curve_fl1.pdf`, `sy5y_ujc_stack_fl1.pdf`, `sy5y_ujc_fl_stack_fl1.pdf`
 - `sy5y_compare_<panel>_fl1.pdf` (four compare panels)
-- Per-tool: `sy5y_<tool>_ujc_*.pdf`, `sy5y_ujc_overview_<tool>_fl1.pdf`, `sy5y_<tool>_compare_*.pdf`
 
 TPM filter figures: knit [`filter_level_ont_r10_sy5y_plots.Rmd`](filter_level_ont_r10_sy5y_plots.Rmd).
 

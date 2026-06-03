@@ -28,7 +28,7 @@ read_level_sy5y_category_map <- c(
 
 read_level_sy5y_display_levels <- c(
   "FSM", "ISM", "NIC", "NNC", "Genic\nGenomic", "Antisense", "Fusion",
-  "Intergenic", "Genic\nIntron", "Unaligned"
+  "Intergenic", "Genic\nIntron", "Unstranded", "Unaligned"
 )
 
 #' One SQANTI-reads classification file -> category counts (memory: structural_category only).
@@ -107,15 +107,21 @@ read_level_sy5y_sqanti_diagnostics <- function(read_numbers,
     fq <- as.numeric(rn1$ont_fastq[[1L]])
     pr <- as.numeric(rn1$ont_prim_aln[[1L]])
 
+    assigned_used <- n_used
+    unmapped <- as.integer(pmax(0, fq - pr))
+    unstranded <- as.integer(pmax(0, pr - assigned_used))
+
     tibble::tibble(
       sample = id,
       sample_label = lab,
       n_rows_in_classification_file = n_row,
       n_rows_na_after_recode = as.integer(n_na),
       pct_rows_na_after_recode = round(100 * n_na / pmax(1L, n_row), 3),
-      n_rows_used_in_category_counts = as.integer(n_used),
+      n_rows_used_in_category_counts = assigned_used,
       ont_fastq = fq,
       ont_prim_aln = pr,
+      n_unmapped_fastq = unmapped,
+      n_unstranded_primary = unstranded,
       n_primary_mapped_minus_rows = pr - n_row,
       pct_sqanti_rows_of_primary_mapped = round(100 * n_row / pmax(1, pr), 2),
       n_fastq_minus_rows = fq - n_row,
@@ -124,29 +130,47 @@ read_level_sy5y_sqanti_diagnostics <- function(read_numbers,
   })
 }
 
-#' SQANTI structural categories + Unaligned, ONT only.
+#' Per-replicate SQANTI-reads row counts used in stacked categories (`assigned`).
 #'
-#' Mouse `read_figure_plots.Rmd` uses **Unaligned = `ont_fastq - assigned`** for both
-#' technologies. That matches only if every FASTQ read appears once in the classification
-#' table (or unmapped reads are otherwise represented). The SY5Y cluster pipeline runs
-#' **BAM -> `spliced_bam2gff` -> GTF -> `sqanti3_qc.py`** (`6_sqanti_reads.sh`), so the
-#' classification file is tied to **BAM-derived isoforms / reads in that GTF**, not
-#' necessarily one row per FASTQ read, and often **not one row per primary BAM read**
-#' (see [read_level_sy5y_sqanti_diagnostics]: `n_primary_mapped_minus_rows`). The white
-#' "Unaligned" slice then includes primary alignments absent from the classification table,
-#' not only strictly unmapped reads. Use `unaligned_denominator = "ont_prim_aln"` when
-#' comparing to BAM-based counts; `ont_fastq` matches mouse Rmd but can dominate Unaligned
-#' when rows are BAM-limited.
+#' @return Named numeric vector (`names` = `sample_ids`).
+sy5y_sqanti_assigned_per_sample <- function(sample_ids, sqanti_reads_root) {
+  stats::setNames(
+    purrr::map_dbl(sample_ids, function(id) {
+      path <- file.path(
+        sqanti_reads_root,
+        id,
+        paste0(id, "_reads_classification.txt")
+      )
+      if (!file.exists(path)) {
+        stop("Missing classification file: ", path, call. = FALSE)
+      }
+      sc <- as.character(
+        readr::read_tsv(
+          path,
+          show_col_types = FALSE,
+          col_select = "structural_category"
+        )[[1L]]
+      )
+      sum(!is.na(dplyr::recode(sc, !!!read_level_sy5y_category_map)))
+    }),
+    sample_ids
+  )
+}
+
+#' SQANTI structural categories + Unstranded + Unaligned (ONT only).
 #'
-#' @param unaligned_denominator `"ont_fastq"` (mouse Rmd parity) or `"ont_prim_aln"`
-#'   (recommended when SQANTI input is primary-mapped BAM only).
+#' With **minimap2 `-ub`** (Dorado-trimmed, not strand-oriented), decompose reads not
+#' in the SQANTI-reads table into:
+#'
+#' - **Unaligned**: `ont_fastq - ont_prim_aln` (no primary alignment).
+#' - **Unstranded**: `ont_prim_aln - assigned` (primary-mapped but no classification row;
+#'   BAM-derived SQANTI input often yields fewer rows than primary alignments).
+#'
+#' SQANTI categories (including Antisense) sum to `assigned`.
 build_sy5y_sqanti_category_counts <- function(read_numbers,
                                               sample_ids,
                                               sample_labels,
-                                              sqanti_reads_root,
-                                              unaligned_denominator = c("ont_prim_aln", "ont_fastq")) {
-  unaligned_denominator <- match.arg(unaligned_denominator)
-
+                                              sqanti_reads_root) {
   if (length(sample_ids) != length(sample_labels)) {
     stop("`sample_ids` and `sample_labels` must have the same length.", call. = FALSE)
   }
@@ -172,23 +196,34 @@ build_sy5y_sqanti_category_counts <- function(read_numbers,
     dplyr::group_by(.data$sample, .data$technology) %>%
     dplyr::summarise(assigned = sum(.data$num_reads), .groups = "drop")
 
-  total_col <- if (unaligned_denominator == "ont_fastq") "ont_fastq" else "ont_prim_aln"
-
-  unaligned <- rn %>%
+  extra_base <- rn %>%
     dplyr::transmute(
       sample = .data$sample_label,
       technology = "ont",
-      total = .data[[total_col]]
+      ont_fastq = .data$ont_fastq,
+      ont_prim_aln = .data$ont_prim_aln
     ) %>%
     dplyr::left_join(assigned, by = c("sample", "technology")) %>%
-    dplyr::mutate(
-      assigned = dplyr::coalesce(.data$assigned, 0),
-      num_reads = pmax(0, .data$total - .data$assigned),
-      category_label = "Unaligned"
-    ) %>%
-    dplyr::select(category_label, num_reads, sample, technology)
+    dplyr::mutate(assigned = dplyr::coalesce(.data$assigned, 0L))
 
-  dplyr::bind_rows(counts, unaligned) %>%
+  extra <- dplyr::bind_rows(
+    extra_base %>%
+      dplyr::transmute(
+        category_label = "Unstranded",
+        num_reads = as.integer(pmax(0L, .data$ont_prim_aln - .data$assigned)),
+        sample = .data$sample,
+        technology = .data$technology
+      ),
+    extra_base %>%
+      dplyr::transmute(
+        category_label = "Unaligned",
+        num_reads = as.integer(pmax(0L, .data$ont_fastq - .data$ont_prim_aln)),
+        sample = .data$sample,
+        technology = .data$technology
+      )
+  )
+
+  dplyr::bind_rows(counts, extra) %>%
     dplyr::mutate(
       category_label = factor(
         .data$category_label,
@@ -203,15 +238,16 @@ build_sy5y_sqanti_category_counts <- function(read_numbers,
 #' Same layout as mouse `plot_sqanti_faceted` in read_figure_plots.Rmd.
 plot_read_level_sqanti_faceted <- function(counts_df, title = NULL) {
   pal <- read_level_sy5y_cat_palette
-  extended_fill <- c(pal, "Unaligned" = "white")
-  extended_color <- c(
-    stats::setNames(rep(NA, length(pal)), names(pal)),
-    "Unaligned" = "black"
+  extended_fill <- c(
+    pal,
+    "Unstranded" = "grey85",
+    "Unaligned" = "white"
   )
   dl <- read_level_sy5y_display_levels
-  legend_breaks <- c("Unaligned", dl[dl != "Unaligned"])
+  legend_breaks <- c("Unaligned", "Unstranded", dl[!dl %in% c("Unaligned", "Unstranded")])
   legend_labels <- c(
     "Unaligned",
+    "Unstranded",
     "Full\nSplice Match",
     "Incomplete\nSplice Match",
     "Novel\nIn Catalog",
@@ -228,51 +264,45 @@ plot_read_level_sqanti_faceted <- function(counts_df, title = NULL) {
     ggplot2::aes(
       x = .data$technology,
       y = .data$num_reads,
-      fill = .data$category_label,
-      color = .data$category_label
+      fill = .data$category_label
     )
   ) +
-    ggplot2::geom_col(
+    ggplot2::geom_bar(
+      stat = "identity",
       width = 0.8,
-      linewidth = 0.3,
-      position = ggplot2::position_stack(reverse = TRUE)
+      position = ggplot2::position_stack(reverse = TRUE),
+      colour = "black",
+      linewidth = 0.15
     ) +
-    ggplot2::scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
+    ggplot2::scale_x_discrete(labels = NULL) +
     ggplot2::scale_fill_manual(
       name = "Structural Category",
       values = extended_fill,
       breaks = legend_breaks,
-      labels = legend_labels
-    ) +
-    ggplot2::scale_color_manual(
-      name = "Structural Category",
-      values = extended_color,
-      breaks = legend_breaks,
       labels = legend_labels,
-      na.value = NA
+      drop = FALSE
     ) +
     ggplot2::facet_grid(cols = ggplot2::vars(.data$sample), switch = "x") +
+    paper_read_count_y_scale() +
     ggplot2::labs(x = NULL, y = "Number of reads", title = title) +
+    paper_read_level_theme() +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(hjust = 0.5, size = 16, face = "bold"),
-      panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.5),
-      strip.placement = "outside",
-      strip.background = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.5),
-      strip.text = ggplot2::element_text(face = "bold", size = 10),
-      axis.text = ggplot2::element_text(size = 10),
-      axis.text.x = ggplot2::element_text(angle = 0, hjust = 0.5, size = 10),
-      axis.title = ggplot2::element_text(size = 12),
-      panel.grid.major.x = ggplot2::element_blank(),
-      panel.grid.minor.x = ggplot2::element_blank(),
+      axis.text.x = ggplot2::element_blank(),
+      axis.ticks.x = ggplot2::element_blank(),
       legend.position = "right",
-      legend.box = "vertical",
-      legend.title = ggplot2::element_text(size = 14),
-      legend.text = ggplot2::element_text(size = 12)
+      legend.box = "vertical"
     )
 }
 
-#' Tidy table for stacked Aligned vs Unaligned (ONT FASTQ vs primary BAM), one facet per replicate.
-build_sy5y_readnum_tidy <- function(read_numbers, sample_ids, sample_labels) {
+#' Tidy table for stacked SQANTI-classified / unstranded / unmapped reads (one facet per replicate).
+#'
+#' Requires `sqanti_reads_root` to sum per-read classifications, or pass precomputed
+#' `category_counts` from [build_sy5y_sqanti_category_counts].
+build_sy5y_readnum_tidy <- function(read_numbers,
+                                    sample_ids,
+                                    sample_labels,
+                                    sqanti_reads_root = NULL,
+                                    category_counts = NULL) {
   req <- c("sample", "ont_fastq", "ont_prim_aln", "pb_fastq", "pb_prim_aln")
   if (!all(req %in% names(read_numbers))) {
     stop(
@@ -281,47 +311,65 @@ build_sy5y_readnum_tidy <- function(read_numbers, sample_ids, sample_labels) {
       call. = FALSE
     )
   }
-  read_numbers %>%
-    dplyr::filter(.data$sample %in% sample_ids) %>%
-    dplyr::mutate(
-      sample_label = sample_labels[match(.data$sample, sample_ids)],
-      ont_unassigned = pmax(0, .data$ont_fastq - .data$ont_prim_aln)
+
+  if (is.null(category_counts)) {
+    if (is.null(sqanti_reads_root)) {
+      stop("Provide `category_counts` or `sqanti_reads_root`.", call. = FALSE)
+    }
+    category_counts <- build_sy5y_sqanti_category_counts(
+      read_numbers,
+      sample_ids,
+      sample_labels,
+      sqanti_reads_root
+    )
+  }
+
+  assigned <- category_counts %>%
+    dplyr::filter(
+      !.data$category_label %in% c("Unstranded", "Unaligned"),
+      .data$technology == "ont"
+    ) %>%
+    dplyr::group_by(.data$sample) %>%
+    dplyr::summarise(classified = sum(.data$num_reads), .groups = "drop")
+
+  extra <- category_counts %>%
+    dplyr::filter(
+      .data$category_label %in% c("Unstranded", "Unaligned"),
+      .data$technology == "ont"
     ) %>%
     dplyr::transmute(
-      sample_label,
-      technology = "ont",
-      prim_aln = .data$ont_prim_aln,
-      unassigned = .data$ont_unassigned
-    ) %>%
-    tidyr::pivot_longer(
-      cols = c("prim_aln", "unassigned"),
-      names_to = "assign_category",
-      values_to = "num_reads"
-    ) %>%
+      sample_label = as.character(.data$sample),
+      assign_category = as.character(.data$category_label),
+      num_reads = .data$num_reads
+    )
+
+  classified <- assigned %>%
+    dplyr::transmute(
+      sample_label = as.character(.data$sample),
+      assign_category = "Classified",
+      num_reads = .data$classified
+    )
+
+  dplyr::bind_rows(classified, extra) %>%
     dplyr::mutate(
-      assign_category = dplyr::recode(
-        .data$assign_category,
-        prim_aln = "Aligned",
-        unassigned = "Unaligned"
-      ),
       sample_label = factor(.data$sample_label, levels = sample_labels),
-      technology = factor(.data$technology, levels = c("pacbio", "ont")),
-      assign_category = forcats::fct_relevel(.data$assign_category, "Aligned", "Unaligned")
+      technology = factor("ont", levels = c("pacbio", "ont")),
+      assign_category = forcats::fct_relevel(
+        .data$assign_category,
+        "Classified",
+        "Unstranded",
+        "Unaligned"
+      )
     )
 }
 
 #' Faceted read-number plot (ONT only; matches mouse styling).
-plot_sy5y_readnum_faceted <- function(tidy_counts, title = "SY5Y ONT") {
-  y_max <- tidy_counts %>%
-    dplyr::group_by(.data$sample_label, .data$technology) %>%
-    dplyr::summarise(total = sum(.data$num_reads), .groups = "drop") %>%
-    dplyr::pull(.data$total) %>%
-    max(na.rm = TRUE)
-  breaks_2m <- seq(0, ceiling(y_max / 2e6) * 2e6, by = 2e6)
-
-  assign_palette <- stats::setNames(
-    RColorConesa::colorConesa(n = 2, palette = "complete"),
-    c("Aligned", "Unaligned")
+plot_sy5y_readnum_faceted <- function(tidy_counts, title = "SY5Y") {
+  classified_fill <- RColorConesa::colorConesa(n = 2L, palette = "complete")[1L]
+  assign_palette <- c(
+    "Classified" = classified_fill,
+    "Unstranded" = "grey85",
+    "Unaligned" = "white"
   )
 
   ggplot2::ggplot(
@@ -330,32 +378,32 @@ plot_sy5y_readnum_faceted <- function(tidy_counts, title = "SY5Y ONT") {
       x = .data$technology,
       y = .data$num_reads,
       fill = .data$assign_category,
-      order = as.numeric(.data$assign_category == "Unaligned")
+      order = dplyr::case_when(
+        .data$assign_category == "Unaligned" ~ 3L,
+        .data$assign_category == "Unstranded" ~ 2L,
+        TRUE ~ 1L
+      )
     )
   ) +
-    ggplot2::geom_col(width = 0.7, position = ggplot2::position_stack(reverse = TRUE)) +
-    ggplot2::scale_y_continuous(breaks = breaks_2m, labels = scales::scientific) +
-    ggplot2::scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
+    ggplot2::geom_col(
+      width = 0.7,
+      position = ggplot2::position_stack(reverse = TRUE),
+      color = "black",
+      linewidth = 0.2
+    ) +
+    paper_read_count_y_scale() +
+    ggplot2::scale_x_discrete(labels = NULL) +
     ggplot2::scale_fill_manual(
       values = assign_palette,
-      breaks = c("Unaligned", "Aligned"),
-      labels = c("Unaligned", "Aligned")
+      breaks = c("Unaligned", "Unstranded", "Classified"),
+      labels = c("Unaligned", "Unstranded", "Classified")
     ) +
     ggplot2::facet_grid(cols = ggplot2::vars(.data$sample_label), switch = "x") +
     ggplot2::labs(x = NULL, y = "Number of reads", fill = "Category", title = title) +
+    paper_read_level_theme() +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(hjust = 0.5, size = 16, face = "bold"),
-      panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.5),
-      strip.placement = "outside",
-      strip.background = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.5),
-      strip.text = ggplot2::element_text(face = "bold", size = 10),
-      axis.text = ggplot2::element_text(size = 10),
-      axis.text.x = ggplot2::element_text(angle = 0, hjust = 0.5, size = 10),
-      axis.title = ggplot2::element_text(size = 12),
-      panel.grid.major.x = ggplot2::element_blank(),
-      panel.grid.minor.x = ggplot2::element_blank(),
-      legend.title = ggplot2::element_text(size = 14),
-      legend.text = ggplot2::element_text(size = 12)
+      axis.text.x = ggplot2::element_blank(),
+      axis.ticks.x = ggplot2::element_blank()
     )
 }
 
@@ -387,7 +435,7 @@ build_sy5y_lengths_df <- function(length_ont_dir, sample_ids, sample_labels) {
 }
 
 #' Violin + boxplot per replicate (mouse read_figure_plots.Rmd style).
-plot_sy5y_lengths_violin <- function(lengths_df, title = "SY5Y ONT") {
+plot_sy5y_lengths_violin <- function(lengths_df, title = "SY5Y") {
   df <- lengths_df %>%
     dplyr::group_by(.data$sample, .data$technology) %>%
     dplyr::filter(
@@ -409,17 +457,12 @@ plot_sy5y_lengths_violin <- function(lengths_df, title = "SY5Y ONT") {
     ggplot2::facet_grid(cols = ggplot2::vars(.data$sample), switch = "x") +
     ggplot2::scale_y_continuous(breaks = breaks_1k) +
     ggplot2::scale_fill_manual(values = c(pacbio = violin_fill, ont = violin_fill)) +
-    ggplot2::scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
+    ggplot2::scale_x_discrete(labels = NULL) +
     ggplot2::labs(x = NULL, y = "Read length (nt)", fill = "Technology", title = title) +
+    paper_read_level_theme() +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(hjust = 0.5, size = 16, face = "bold"),
-      panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.5),
-      strip.placement = "outside",
-      strip.background = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.5),
-      strip.text = ggplot2::element_text(face = "bold", size = 10),
-      axis.text = ggplot2::element_text(size = 10),
-      axis.text.x = ggplot2::element_text(angle = 0, hjust = 0.5, size = 10),
-      axis.title = ggplot2::element_text(size = 12),
+      axis.text.x = ggplot2::element_blank(),
+      axis.ticks.x = ggplot2::element_blank(),
       legend.position = "none"
     )
 }

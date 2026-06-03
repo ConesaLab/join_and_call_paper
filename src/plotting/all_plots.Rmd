@@ -49,12 +49,15 @@ library(RColorConesa)
 # "src/plotting/R" when running interactively from the project root
 r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
 
+source(file.path(r_source_dir, "00_figure_config.R"))
 source(file.path(r_source_dir, "01_config.R"))
 source(file.path(r_source_dir, "02_themes.R"))
 source(file.path(r_source_dir, "03_plot_functions.R"))
 source(file.path(r_source_dir, "04_data_loading.R"))
 source(file.path(r_source_dir, "05_assembly_functions.R"))
 source(file.path(r_source_dir, "06_sirv_analysis.R"))
+
+out_dir <- plot_creation_dir()
 ```
 
 
@@ -76,12 +79,17 @@ for (platform in names(src_dirs)) {
     paths <- get_paths(src_dir)
     
     df_lists <- load_df_lists(paths)
-    
-    for (fl_filter_level in fl_filter_levels){
-      results <- process_and_plot(df_lists$Bclass_df_list, df_lists$Kclass_df_list, technology = platform, fl_threshold = fl_filter_level)
-      
+
+    # FL 3/5/10/20 sweeps live in filter_level_line_plots.Rmd (faster knit).
+    for (fl_filter_level in c(1L)) {
+      results <- process_and_plot(
+        df_lists$Bclass_df_list,
+        df_lists$Kclass_df_list,
+        technology = platform,
+        method = method,
+        fl_threshold = fl_filter_level
+      )
       all_results[[platform]][[method]][[as.character(fl_filter_level)]] <- results
-      
     }
   }
 }
@@ -91,32 +99,18 @@ for (platform in names(src_dirs)) {
 
 ```{r create-summary-tables}
 
-data_types <- c("IsoSeq", "ONT")
-tools <- c("IsoQuant", "FLAIR", "Bambu", "TALON", "Mandalorion", "isoseq_sqanti")
-tissues <- c("brain", "kidney")
 fl_filter_level <- "1"
-
-all_ujc_data <- map_dfr(data_types, function(dt) {
-  map_dfr(tools, function(tool) {
-    map_dfr(tissues, function(tissue) {
-      extract_ujc_data(all_results, dt, tool, tissue, fl_filter_level)
-    })
-  })
-})
+stack_tables <- collect_stack_summary_tables(all_results, fl_filter_level)
+all_ujc_data <- stack_tables$ujc
+all_fl_data <- stack_tables$fl
 
 write.csv(all_ujc_data, "all_ujcs_data.csv")
-
-all_fl_data <- map_dfr(data_types, function(dt) {
-  map_dfr(tools, function(tool) {
-    map_dfr(tissues, function(tissue) {
-      extract_fl_data(all_results, dt, tool, tissue, fl_filter_level)
-    })
-  })
-})
-write.csv(all_fl_data, "all_fl_data.csv")
+if (!is.null(all_fl_data)) {
+  write.csv(all_fl_data, "all_fl_data.csv")
+}
 
 brain_ujc_summary <- all_ujc_data %>%
-  filter(tissue == "brain") %>%
+  dplyr::filter(.data$tissue == "brain") %>%
   group_by(n_samples, n_present, data_type, tool) %>%
   summarise(
     mean_count = mean(mean_count, na.rm = TRUE),
@@ -132,7 +126,7 @@ brain_ujc_summary <- all_ujc_data %>%
   )
 
 kidney_ujc_summary <- all_ujc_data %>%
-  filter(tissue == "kidney") %>%
+  dplyr::filter(.data$tissue == "kidney") %>%
   group_by(n_samples, n_present, data_type, tool) %>%
   summarise(
     mean_count = mean(mean_count, na.rm = TRUE),
@@ -147,8 +141,16 @@ kidney_ujc_summary <- all_ujc_data %>%
     across(c(percent, sd_percent), ~round(., 3))
   )
 
+if (is.null(all_fl_data)) {
+  stop(
+    "No FL stack summary data (percent tables are omitted unless include_percentage_plots is enabled in create_upset_plot). ",
+    "Re-run usage or enable percentage plots for FL summaries.",
+    call. = FALSE
+  )
+}
+
 brain_fl_summary <- all_fl_data %>%
-  filter(tissue == "brain") %>%
+  dplyr::filter(.data$tissue == "brain") %>%
   group_by(nr_samples, samples_present, data_type, tool) %>%
   summarise(
     mean_FL_total = mean(mean_FL_total, na.rm = TRUE),
@@ -164,7 +166,7 @@ brain_fl_summary <- all_fl_data %>%
   )
 
 kidney_fl_summary <- all_fl_data %>%
-  filter(tissue == "kidney") %>%
+  dplyr::filter(.data$tissue == "kidney") %>%
   group_by(nr_samples, samples_present, data_type, tool) %>%
   summarise(
     mean_FL_total = mean(mean_FL_total, na.rm = TRUE),
@@ -195,40 +197,32 @@ print(kidney_fl_summary)
 
 ```{r assemble-brain-bar}
 
-if (!dir.exists("plot_creation")) {
-  dir.create("plot_creation")
-}
-
 pb_ylims = c(0, 160000)
 ont_ylims = c(0, 80000)
 
-pb5_ylims = c(0, 130000)
-ont5_ylims = c(0, 65000)
-
-pb10_ylims = c(0, 80000)
-ont10_ylims = c(0, 40000)
-
-pb20_ylims = c(0, 50000)
-ont20_ylims = c(0, 30000)
+# pb5_ylims = c(0, 130000)
+# ont5_ylims = c(0, 65000)
+# pb10_ylims = c(0, 80000)
+# ont10_ylims = c(0, 40000)
+# pb20_ylims = c(0, 50000)
+# ont20_ylims = c(0, 30000)
 
 brain_plot_1 <- assemble_bar_plots(all_results, "brain", 1, title="Transcripts per structural category; brain", subtitle="Filter: >=1 read", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("plot_creation/brain_bar_filter1.pdf", device = cairo_pdf, plot = brain_plot_1, width=18, height=12, unit="in")
-brain_plot_3 <- assemble_bar_plots(all_results, "brain", 3, title="Transcripts per structural category; brain", subtitle="Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("plot_creation/brain_bar_filter3.pdf", device = cairo_pdf, plot = brain_plot_3, width=18, height=12, unit="in")
-brain_plot_5 <- assemble_bar_plots(all_results, "brain", 5, title="Transcripts per structural category; brain", subtitle="Filter: >=5 reads", pb_ylims = pb5_ylims, ont_ylims = ont5_ylims)
-ggsave("plot_creation/brain_bar_filter5.pdf", device = cairo_pdf, plot = brain_plot_5, width=18, height=12, unit="in")
-brain_plot_10 <- assemble_bar_plots(all_results, "brain", 10, title="Transcripts per structural category; brain", subtitle="Filter: >=10 reads", pb_ylims = pb10_ylims, ont_ylims = ont10_ylims)
-ggsave("plot_creation/brain_bar_filter10.pdf", device = cairo_pdf, plot = brain_plot_10, width=18, height=12, unit="in")
-
-brain_plot_20 <- assemble_bar_plots(all_results, "brain", 20, title="Transcripts per structural category; brain", subtitle="Filter: >=20 reads", pb_ylims = pb20_ylims, ont_ylims = ont20_ylims)
-ggsave("plot_creation/brain_bar_filter20.pdf", device = cairo_pdf, plot = brain_plot_20, width=18, height=12, unit="in")
-
+paper_ggsave(file.path(out_dir, "brain_bar_filter1.pdf"), plot = brain_plot_1, size = "mouse_10panel")
+# brain_plot_3 <- assemble_bar_plots(all_results, "brain", 3, title="Transcripts per structural category; brain", subtitle="Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+# paper_ggsave(file.path(out_dir, "brain_bar_filter3.pdf"), plot = brain_plot_3, size = "mouse_10panel")
+# brain_plot_5 <- assemble_bar_plots(all_results, "brain", 5, title="Transcripts per structural category; brain", subtitle="Filter: >=5 reads", pb_ylims = pb5_ylims, ont_ylims = ont5_ylims)
+# paper_ggsave(file.path(out_dir, "brain_bar_filter5.pdf"), plot = brain_plot_5, size = "mouse_10panel")
+# brain_plot_10 <- assemble_bar_plots(all_results, "brain", 10, title="Transcripts per structural category; brain", subtitle="Filter: >=10 reads", pb_ylims = pb10_ylims, ont_ylims = ont10_ylims)
+# paper_ggsave(file.path(out_dir, "brain_bar_filter10.pdf"), plot = brain_plot_10, size = "mouse_10panel")
+# brain_plot_20 <- assemble_bar_plots(all_results, "brain", 20, title="Transcripts per structural category; brain", subtitle="Filter: >=20 reads", pb_ylims = pb20_ylims, ont_ylims = ont20_ylims)
+# paper_ggsave(file.path(out_dir, "brain_bar_filter20.pdf"), plot = brain_plot_20, size = "mouse_10panel")
 
 brain_plot_1
-brain_plot_3
-brain_plot_5
-brain_plot_10
-brain_plot_20
+# brain_plot_3
+# brain_plot_5
+# brain_plot_10
+# brain_plot_20
 
 ```
 
@@ -237,32 +231,29 @@ brain_plot_20
 
 pb_ylims = c(0, 140000)
 ont_ylims = c(0, 70000)
-pb5_ylims = c(0, 110000)
-ont5_ylims = c(0, 60000)
-pb10_ylims = c(0, 75000)
-ont10_ylims = c(0, 35000)
-pb20_ylims = c(0, 45000)
-ont20_ylims = c(0, 20000)
+# pb5_ylims = c(0, 110000)
+# ont5_ylims = c(0, 60000)
+# pb10_ylims = c(0, 75000)
+# ont10_ylims = c(0, 35000)
+# pb20_ylims = c(0, 45000)
+# ont20_ylims = c(0, 20000)
 
 kidney_plot_1 <- assemble_bar_plots(all_results, "kidney", 1, title="Transcripts per structural category; kidney", subtitle="", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
-ggsave("plot_creation/kidney_bar_filter1.pdf", device = cairo_pdf, plot = kidney_plot_1, width=18, height=12, unit="in")
-kidney_plot_3 <- assemble_bar_plots(all_results, "kidney", 3, title="Transcripts per structural category; kidney", subtitle="Filter: >=3 reads", pb_ylims = pb5_ylims, ont_ylims = ont5_ylims)
-ggsave("plot_creation/kidney_bar_filter3.pdf", device = cairo_pdf, plot = kidney_plot_3, width=18, height=12, unit="in")
-kidney_plot_5 <- assemble_bar_plots(all_results, "kidney", 5, title="Transcripts per structural category; kidney", subtitle="Filter: >=5 reads", pb_ylims = pb5_ylims, ont_ylims = ont5_ylims)
-ggsave("plot_creation/kidney_bar_filter5.pdf", device = cairo_pdf, plot = kidney_plot_5, width=18, height=12, unit="in")
-kidney_plot_10 <- assemble_bar_plots(all_results, "kidney", 10, title="Transcripts per structural category; kidney", subtitle="Filter: >=10 reads", pb_ylims = pb10_ylims, ont_ylims = ont10_ylims)
-ggsave("plot_creation/kidney_bar_filter10.pdf", device = cairo_pdf, plot = kidney_plot_10, width=18, height=12, unit="in")
-
-
-kidney_plot_20 <- assemble_bar_plots(all_results, "kidney", 20, title="Transcripts per structural category; kidney", subtitle="Filter: >=20 reads", pb_ylims = pb20_ylims, ont_ylims = ont20_ylims)
-ggsave("plot_creation/kidney_bar_filter20.pdf", device = cairo_pdf, plot = kidney_plot_20, width=18, height=12, unit="in")
-
+paper_ggsave(file.path(out_dir, "kidney_bar_filter1.pdf"), plot = kidney_plot_1, size = "mouse_10panel")
+# kidney_plot_3 <- assemble_bar_plots(all_results, "kidney", 3, title="Transcripts per structural category; kidney", subtitle="Filter: >=3 reads", pb_ylims = pb5_ylims, ont_ylims = ont5_ylims)
+# paper_ggsave(file.path(out_dir, "kidney_bar_filter3.pdf"), plot = kidney_plot_3, size = "mouse_10panel")
+# kidney_plot_5 <- assemble_bar_plots(all_results, "kidney", 5, title="Transcripts per structural category; kidney", subtitle="Filter: >=5 reads", pb_ylims = pb5_ylims, ont_ylims = ont5_ylims)
+# paper_ggsave(file.path(out_dir, "kidney_bar_filter5.pdf"), plot = kidney_plot_5, size = "mouse_10panel")
+# kidney_plot_10 <- assemble_bar_plots(all_results, "kidney", 10, title="Transcripts per structural category; kidney", subtitle="Filter: >=10 reads", pb_ylims = pb10_ylims, ont_ylims = ont10_ylims)
+# paper_ggsave(file.path(out_dir, "kidney_bar_filter10.pdf"), plot = kidney_plot_10, size = "mouse_10panel")
+# kidney_plot_20 <- assemble_bar_plots(all_results, "kidney", 20, title="Transcripts per structural category; kidney", subtitle="Filter: >=20 reads", pb_ylims = pb20_ylims, ont_ylims = ont20_ylims)
+# paper_ggsave(file.path(out_dir, "kidney_bar_filter20.pdf"), plot = kidney_plot_20, size = "mouse_10panel")
 
 kidney_plot_1
-kidney_plot_3
-kidney_plot_5
-kidney_plot_10
-kidney_plot_20
+# kidney_plot_3
+# kidney_plot_5
+# kidney_plot_10
+# kidney_plot_20
 
 ```
 
@@ -296,7 +287,7 @@ ont_ylims = c(0, 45000000)
 
 brain_expr_plot_1 <- assemble_expr_bar_plots(all_results, "brain", 1, "Transcript expression per structural category; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix="_expression_plot", use_scientific = TRUE)
 
-ggsave("plot_creation/brain_expr_bar_filter1.pdf", device = cairo_pdf, plot = brain_expr_plot_1, width=18, height=12, unit="in")
+paper_ggsave(file.path(out_dir, "brain_expr_bar_filter1.pdf"), plot = brain_expr_plot_1, size = "mouse_10panel")
 
 brain_expr_plot_1
 ```
@@ -309,7 +300,7 @@ ont_ylims = c(0, 35000000)
 
 kidney_expr_plot_1 <- assemble_expr_bar_plots(all_results, "kidney", 1, "Transcript expression per structural category; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix="_expression_plot", use_scientific = TRUE)
 
-ggsave("plot_creation/kidney_expr_bar_filter1.pdf", device = cairo_pdf, plot = kidney_expr_plot_1, width = 18, height = 12, units = "in")
+paper_ggsave(file.path(out_dir, "kidney_expr_bar_filter1.pdf"), plot = kidney_expr_plot_1, size = "mouse_10panel")
 
 kidney_expr_plot_1
 
@@ -325,18 +316,18 @@ pb_talon_ylims = c(0, 300)
 ont_talon_ylims = c(0, 1200)
 
 sirv_brain_plot_1 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 1, title="SIRV transcripts; brain", subtitle = "", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("plot_creation/sirv_brain_bar_filter1.pdf", device = cairo_pdf, plot = sirv_brain_plot_1, width = 18, height = 12, units = "in")
-sirv_brain_plot_3 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 3, title="SIRV transcripts; brain", subtitle = "Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("plot_creation/sirv_brain_bar_filter3.pdf", device = cairo_pdf, plot = sirv_brain_plot_3, width = 18, height = 12, units = "in")
-sirv_brain_plot_5 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 5, title="SIRV transcripts; brain", subtitle = "Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("plot_creation/sirv_brain_bar_filter5.pdf", device = cairo_pdf, plot = sirv_brain_plot_5, width = 18, height = 12, units = "in")
-sirv_brain_plot_10 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 10, title="SIRV transcripts; brain", subtitle = "Filter: >=10 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("plot_creation/sirv_brain_bar_filter10.pdf", device = cairo_pdf, plot = sirv_brain_plot_10, width = 18, height = 12, units = "in")
+paper_ggsave(file.path(out_dir, "sirv_brain_bar_filter1.pdf"), plot = sirv_brain_plot_1, size = "mouse_10panel")
+# sirv_brain_plot_3 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 3, title="SIRV transcripts; brain", subtitle = "Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+# paper_ggsave(file.path(out_dir, "sirv_brain_bar_filter3.pdf"), plot = sirv_brain_plot_3, size = "mouse_10panel")
+# sirv_brain_plot_5 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 5, title="SIRV transcripts; brain", subtitle = "Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+# paper_ggsave(file.path(out_dir, "sirv_brain_bar_filter5.pdf"), plot = sirv_brain_plot_5, size = "mouse_10panel")
+# sirv_brain_plot_10 <- assemble_bar_sirv_plots(all_results, "sirv_brain", 10, title="SIRV transcripts; brain", subtitle = "Filter: >=10 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+# paper_ggsave(file.path(out_dir, "sirv_brain_bar_filter10.pdf"), plot = sirv_brain_plot_10, size = "mouse_10panel")
 
 sirv_brain_plot_1
-sirv_brain_plot_3
-sirv_brain_plot_5
-sirv_brain_plot_10
+# sirv_brain_plot_3
+# sirv_brain_plot_5
+# sirv_brain_plot_10
 
 ```
 
@@ -350,25 +341,25 @@ pb_talon_ylims = c(0, 350)
 ont_talon_ylims = c(0, 1000)
 
 sirv_kidney_plot_1 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 1, title="SIRV transcripts; kidney", subtitle = "", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("plot_creation/sirv_kidney_bar_filter1.pdf", device = cairo_pdf, plot = sirv_kidney_plot_1, width = 18, height = 12, units = "in")
-sirv_kidney_plot_3 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 3, title="SIRV transcripts; kidney", subtitle = "Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("plot_creation/sirv_kidney_bar_filter3.pdf", device = cairo_pdf, plot = sirv_kidney_plot_3, width = 18, height = 12, units = "in")
-sirv_kidney_plot_5 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 5, title="SIRV transcripts; kidney", subtitle = "Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("plot_creation/sirv_kidney_bar_filter5.pdf", device = cairo_pdf, plot = sirv_kidney_plot_5, width = 18, height = 12, units = "in")
-sirv_kidney_plot_10 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 10, title="SIRV transcripts; kidney", subtitle = "Filter: >=10 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
-ggsave("plot_creation/sirv_kidney_bar_filter10.pdf", device = cairo_pdf, plot = sirv_kidney_plot_10, width = 18, height = 12, units = "in")
+paper_ggsave(file.path(out_dir, "sirv_kidney_bar_filter1.pdf"), plot = sirv_kidney_plot_1, size = "mouse_10panel")
+# sirv_kidney_plot_3 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 3, title="SIRV transcripts; kidney", subtitle = "Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+# paper_ggsave(file.path(out_dir, "sirv_kidney_bar_filter3.pdf"), plot = sirv_kidney_plot_3, size = "mouse_10panel")
+# sirv_kidney_plot_5 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 5, title="SIRV transcripts; kidney", subtitle = "Filter: >=5 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+# paper_ggsave(file.path(out_dir, "sirv_kidney_bar_filter5.pdf"), plot = sirv_kidney_plot_5, size = "mouse_10panel")
+# sirv_kidney_plot_10 <- assemble_bar_sirv_plots(all_results, "sirv_kidney", 10, title="SIRV transcripts; kidney", subtitle = "Filter: >=10 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims, pb_talon_ylims=pb_talon_ylims, pb_isoseq_ylims=pb_isoseq_ylims, ont_talon_ylims=ont_talon_ylims)
+# paper_ggsave(file.path(out_dir, "sirv_kidney_bar_filter10.pdf"), plot = sirv_kidney_plot_10, size = "mouse_10panel")
 
 sirv_kidney_plot_1
-sirv_kidney_plot_3
-sirv_kidney_plot_5
-sirv_kidney_plot_10
+# sirv_kidney_plot_3
+# sirv_kidney_plot_5
+# sirv_kidney_plot_10
 ```
 
 
 ```{r assemble-brain-upset}
 
 brain_upset_plot <- assemble_upset_plots(all_results, "brain", 1, "Unique Junction Chain overlap; brain")
-ggsave("plot_creation/brain_upset_filter1.pdf", device = cairo_pdf, plot = brain_upset_plot, width = 18, height = 12, units = "in")
+paper_ggsave(file.path(out_dir, "brain_upset_filter1.pdf"), plot = brain_upset_plot, size = "mouse_10panel")
 
 brain_upset_plot
 
@@ -377,7 +368,7 @@ brain_upset_plot
 ```{r assemble-kidney-upset}
 
 kidney_upset_plot <- assemble_upset_plots(all_results, "kidney", 1, "Unique Junction Chain overlap; kidney")
-ggsave("plot_creation/kidney_upset_filter1.pdf", device = cairo_pdf, plot = kidney_upset_plot, width = 18, height = 12, units = "in")
+paper_ggsave(file.path(out_dir, "kidney_upset_filter1.pdf"), plot = kidney_upset_plot, size = "mouse_10panel")
 
 kidney_upset_plot
 
@@ -389,7 +380,7 @@ kidney_upset_plot
 pb_ylims  <- c(0, 35000)
 ont_ylims <- c(0, 20000)
 brain_comb_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Unique Junction Chain occurrence across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_bar_plot", y_label = "# of UJCs")
-ggsave("plot_creation/brain_comb_bar.pdf", device = cairo_pdf, plot = brain_comb_bar_plot, width = 18, height = 12, units = "in")
+paper_ggsave(file.path(out_dir, "brain_comb_bar.pdf"), plot = brain_comb_bar_plot, size = "mouse_10panel")
 brain_comb_bar_plot
 
 ```
@@ -399,7 +390,7 @@ brain_comb_bar_plot
 pb_ylims  <- c(0, 35000)
 ont_ylims <- c(0, 20000)
 kidney_comb_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Unique Junction Chain occurrence across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_bar_plot", y_label = "# of UJCs")
-ggsave("plot_creation/kidney_comb_bar.pdf", device = cairo_pdf, plot = kidney_comb_bar_plot, width = 18, height = 12, units = "in")
+paper_ggsave(file.path(out_dir, "kidney_comb_bar.pdf"), plot = kidney_comb_bar_plot, size = "mouse_10panel")
 kidney_comb_bar_plot
 
 ```
@@ -410,8 +401,8 @@ kidney_comb_bar_plot
 
 pb_ylims  <- c(0, 20000000)
 ont_ylims <- c(0, 20000000)
-brain_comb_fl_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Expression of UJCs across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_fl_bar_plot", y_label = "# of reads of UJCs")
-ggsave("plot_creation/brain_comb_fl_bar.pdf", device = cairo_pdf, plot = brain_comb_fl_bar_plot, width = 18, height = 12, units = "in")
+brain_comb_fl_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Expression of UJCs across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_fl_bar_plot", y_label = PAPER_UJC_YLAB$comb_fl_bar)
+paper_ggsave(file.path(out_dir, "brain_comb_fl_bar.pdf"), plot = brain_comb_fl_bar_plot, size = "mouse_10panel")
 brain_comb_fl_bar_plot
 
 ```
@@ -419,8 +410,8 @@ brain_comb_fl_bar_plot
 
 pb_ylims  <- c(0, 25000000)
 ont_ylims <- c(0, 25000000)
-kidney_comb_fl_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Expression of UJCs across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_fl_bar_plot", y_label = "# of reads of UJCs")
-ggsave("plot_creation/kidney_comb_fl_bar.pdf", device = cairo_pdf, plot = kidney_comb_fl_bar_plot, width = 18, height = 12, units = "in")
+kidney_comb_fl_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Expression of UJCs across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_fl_bar_plot", y_label = PAPER_UJC_YLAB$comb_fl_bar)
+paper_ggsave(file.path(out_dir, "kidney_comb_fl_bar.pdf"), plot = kidney_comb_fl_bar_plot, size = "mouse_10panel")
 kidney_comb_fl_bar_plot
 
 ```
@@ -432,7 +423,7 @@ kidney_comb_fl_bar_plot
 pb_ylims  <- c(0, 100000)
 ont_ylims <- c(0, 62500)
 brain_ujc_curve_plot <- assemble_comb_plots(all_results, "brain", 1, "Transcript occurrence across number of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_curve_plot")
-ggsave("plot_creation/brain_ujc_curve_plot.pdf", device = cairo_pdf, plot = brain_ujc_curve_plot, width = 18, height = 12, units = "in")
+paper_ggsave(file.path(out_dir, "brain_ujc_curve_plot.pdf"), plot = brain_ujc_curve_plot, size = "mouse_10panel")
 brain_ujc_curve_plot
 
 ```
@@ -443,7 +434,7 @@ brain_ujc_curve_plot
 pb_ylims  <- c(0, 100000)
 ont_ylims <- c(0, 62500)
 brain_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "UJC occurrence across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_stack_plot", y_label = "Mean # of UJCs")
-ggsave("plot_creation/brain_ujc_stack_plot.pdf", device = cairo_pdf, plot = brain_ujc_stack_plot, width = 18, height = 12, units = "in")
+paper_ggsave(file.path(out_dir, "brain_ujc_stack_plot.pdf"), plot = brain_ujc_stack_plot, size = "mouse_10panel")
 brain_ujc_stack_plot
 
 ```
@@ -453,7 +444,7 @@ brain_ujc_stack_plot
 pb_ylims  <- c(0, 100000)
 ont_ylims <- c(0, 62500)
 kidney_ujc_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "UJC occurrence across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_stack_plot", y_label = "Mean # of UJCs")
-ggsave("plot_creation/kidney_ujc_stack_plot.pdf", device = cairo_pdf, plot = kidney_ujc_stack_plot, width = 18, height = 12, units = "in")
+paper_ggsave(file.path(out_dir, "kidney_ujc_stack_plot.pdf"), plot = kidney_ujc_stack_plot, size = "mouse_10panel")
 kidney_ujc_stack_plot
 
 ```
@@ -487,8 +478,8 @@ all_results$ONT$FLAIR$`1`$b_class_df_list$`Join&Call` %>%
 
 pb_ylims  <- c(0, 20000000)
 ont_ylims <- c(0, 20000000)
-brain_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "Expression of UJCs across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_fl_stack_plot", y_label = "Mean # of reads of UJCs")
-ggsave("plot_creation/brain_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = brain_ujc_fl_stack_plot, width = 18, height = 12, units = "in")
+brain_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "brain", 1, "Expression of UJCs across combinations of samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_fl_stack_plot", y_label = PAPER_UJC_YLAB$ujc_fl_stack)
+paper_ggsave(file.path(out_dir, "brain_ujc_fl_stack_plot.pdf"), plot = brain_ujc_fl_stack_plot, size = "mouse_10panel")
 brain_ujc_fl_stack_plot
 
 ```
@@ -497,8 +488,8 @@ brain_ujc_fl_stack_plot
 
 pb_ylims  <- c(0, 25000000)
 ont_ylims <- c(0, 25000000)
-kidney_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "Expression of UJCs across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_fl_stack_plot", y_label = "Mean # of reads of UJCs")
-ggsave("plot_creation/kidney_ujc_fl_stack_plot.pdf", device = cairo_pdf, plot = kidney_ujc_fl_stack_plot, width = 18, height = 12, units = "in")
+kidney_ujc_fl_stack_plot <- assemble_comb_stack_plots(all_results, "kidney", 1, "Expression of UJCs across combinations of samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_ujc_fl_stack_plot", y_label = PAPER_UJC_YLAB$ujc_fl_stack)
+paper_ggsave(file.path(out_dir, "kidney_ujc_fl_stack_plot.pdf"), plot = kidney_ujc_fl_stack_plot, size = "mouse_10panel")
 kidney_ujc_fl_stack_plot
 
 ```

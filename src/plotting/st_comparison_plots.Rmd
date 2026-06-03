@@ -21,6 +21,7 @@ library(RColorConesa)
 
 r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
 
+source(file.path(r_source_dir, "00_figure_config.R"))
 source(file.path(r_source_dir, "01_config.R"))
 source(file.path(r_source_dir, "02_themes.R"))
 source(file.path(r_source_dir, "03_plot_functions.R"))
@@ -28,6 +29,8 @@ source(file.path(r_source_dir, "04_data_loading.R"))
 source(file.path(r_source_dir, "05_assembly_functions.R"))
 source(file.path(r_source_dir, "06_sirv_analysis.R"))
 source(file.path(r_source_dir, "07_st_merge_helpers.R"))
+
+out_dir <- plot_creation_dir()
 ```
 
 
@@ -92,10 +95,6 @@ for (platform in names(src_dirs)) {
 
 
 ```{r assemble-brain-bar}
-if (!dir.exists("plot_creation")) {
-  dir.create("plot_creation")
-}
-
 pb_ylims  <- c(0, 160000)
 ont_ylims <- c(0, 80000)
 
@@ -106,9 +105,11 @@ brain_plot_1 <- assemble_bar_plots(
   pb_ylims = pb_ylims, ont_ylims = ont_ylims
 )
 
-ggsave("plot_creation/brain_bar_filter1_st.pdf",
-       device = cairo_pdf, plot = brain_plot_1,
-       width = 18, height = 12, unit = "in")
+paper_ggsave(
+  file.path(out_dir, "brain_bar_filter1_st.pdf"),
+  plot = brain_plot_1,
+  size = "mouse_10panel"
+)
 
 brain_plot_1
 ```
@@ -125,9 +126,11 @@ kidney_plot_1 <- assemble_bar_plots(
   pb_ylims = pb_ylims, ont_ylims = ont_ylims
 )
 
-ggsave("plot_creation/kidney_bar_filter1_st.pdf",
-       device = cairo_pdf, plot = kidney_plot_1,
-       width = 18, height = 12, unit = "in")
+paper_ggsave(
+  file.path(out_dir, "kidney_bar_filter1_st.pdf"),
+  plot = kidney_plot_1,
+  size = "mouse_10panel"
+)
 
 kidney_plot_1
 ```
@@ -139,9 +142,11 @@ brain_upset_1 <- assemble_tama_st_upset_plots(
   title = "C&J (TAMA) vs C&J (ST) UJC overlap; brain"
 )
 
-ggsave("plot_creation/brain_tama_st_upset.pdf",
-       device = cairo_pdf, plot = brain_upset_1,
-       width = 18, height = 14, unit = "in")
+paper_ggsave(
+  file.path(out_dir, "brain_tama_st_upset.pdf"),
+  plot = brain_upset_1,
+  size = "st_upset"
+)
 
 brain_upset_1
 ```
@@ -153,9 +158,11 @@ kidney_upset_1 <- assemble_tama_st_upset_plots(
   title = "C&J (TAMA) vs C&J (ST) UJC overlap; kidney"
 )
 
-ggsave("plot_creation/kidney_tama_st_upset.pdf",
-       device = cairo_pdf, plot = kidney_upset_1,
-       width = 18, height = 14, unit = "in")
+paper_ggsave(
+  file.path(out_dir, "kidney_tama_st_upset.pdf"),
+  plot = kidney_upset_1,
+  size = "st_upset"
+)
 
 kidney_upset_1
 ```
