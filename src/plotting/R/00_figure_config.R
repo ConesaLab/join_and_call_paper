@@ -175,17 +175,24 @@ paper_tusco_results_dir <- function() {
 #' Canonical figure widths/heights in inches (width, height).
 FIG_SIZE <- list(
   mouse_10panel      = c(18, 12),
-  sy5y_2x2           = c(18, 12),
+  #' ONT R10 SY5Y 2×2 (3 tools + legend): ~one mouse 10-panel cell per subplot.
+  sy5y_2x2           = c(12, 9),
   tpm_lines_10panel  = c(18, 12),
-  sy5y_tpm_2x2       = c(18, 12),
+  sy5y_tpm_2x2       = c(12, 9),
   legend_strip       = c(18, 2.5),
+  sy5y_legend_strip  = c(12, 2.5),
   read_level_combo   = c(18, 10),
+  #' ONT R10 read-level: one faceted panel (4 replicates) or two-panel combo.
+  sy5y_read_level_panel = c(10, 6),
+  sy5y_read_level_combo = c(14, 6),
   ref_tusco_sirv     = c(8, 14),
   cross_tool_upset   = c(18, 16),
   cross_tool_bar     = c(14, 8),
   st_upset           = c(18, 14),
   presentation_wide  = c(14, 6.5),
-  sirv_dumbbell      = c(18, 12)
+  sirv_dumbbell      = c(18, 12),
+  #' 2×2 ranking grid: ~same per-panel size as one cell in `mouse_10panel` (18×12, 4×3 layout).
+  resource_ranking_2x2 = c(12, 9)
 )
 
 #' Canonical y-axis labels for UJC occurrence / expression panels.
@@ -203,17 +210,20 @@ PAPER_UJC_YLAB <- list(
 #' Typography sizes in points (ggplot2 element_text).
 #' `tick` is the minimum size used anywhere on a figure; all other roles are >= tick.
 PAPER_FONTS <- list(
-  tick         = 11,
-  axis         = 12,
+  tick         = 13,
+  axis         = 13,
   panel        = 16,
   figure       = 22,
   subtitle     = 16,
-  legend_text  = 12,
+  legend_text  = 13,
   legend_title = 14,
-  strip        = 11,
+  strip        = 13,
   tag          = 14,
-  caption      = 12
+  caption      = 13
 )
+
+#' UpSet matrix set labels (J&C, C&J, B1–B5) in mouse `all_plots` 10-panel grids only.
+PAPER_MOUSE_UPSET_MATRIX_LABEL <- 12L
 
 #' Resolve FIG_SIZE name or numeric c(width, height).
 paper_figure_size <- function(size) {

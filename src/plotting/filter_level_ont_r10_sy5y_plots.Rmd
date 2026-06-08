@@ -19,8 +19,8 @@ knitr::opts_chunk$set(
   message = FALSE,
   warning = FALSE,
   fig.align = "center",
-  fig.width = 18,
-  fig.height = 12
+  fig.width = 12,
+  fig.height = 9
 )
 
 library(tidyverse)
@@ -76,7 +76,7 @@ tpm_line_legend <- build_tpm_line_legend_figure(category_layout = c(2, 3))
 paper_ggsave(
   file.path(out_dir, "sy5y_tpm_lines_legend.pdf"),
   plot = tpm_line_legend,
-  size = "legend_strip"
+  size = "sy5y_legend_strip"
 )
 tpm_line_legend
 ```

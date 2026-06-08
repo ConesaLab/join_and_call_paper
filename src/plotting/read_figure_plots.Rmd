@@ -53,6 +53,7 @@ library(patchwork)
 r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
 source(file.path(r_source_dir, "00_figure_config.R"))
 source(file.path(r_source_dir, "02_themes.R"))
+source(file.path(r_source_dir, "08_read_level_plots.R"))
 source(file.path(r_source_dir, "10_ref_tusco_sirv_violins.R"))
 out_dir <- plot_creation_dir()
 ```
@@ -63,32 +64,9 @@ base_dir <- paper_sqanti_reads_root()
 pacbio_dir <- file.path(base_dir, "pacbio")
 ont_dir    <- file.path(base_dir, "ont")
 
-# Define palette and label mapping consistent with all_plots.Rmd
-cat.palette <- c(
-  "FSM" = "#6BAED6",
-  "ISM" = "#FC8D59",
-  "NIC" = "#78C679",
-  "NNC" = "#EE6A50",
-  "Genic\nGenomic" = "#969696",
-  "Antisense" = "#66C2A4",
-  "Fusion" = "goldenrod1",
-  "Intergenic" = "darksalmon",
-  "Genic\nIntron" = "#41B6C4"
-)
-
-category_map <- c(
-  "full-splice_match" = "FSM",
-  "incomplete-splice_match" = "ISM",
-  "novel_in_catalog" = "NIC",
-  "novel_not_in_catalog" = "NNC",
-  "genic" = "Genic\nGenomic",
-  "antisense" = "Antisense",
-  "fusion" = "Fusion",
-  "intergenic" = "Intergenic",
-  "genic_intron" = "Genic\nIntron"
-)
-
-display_levels <- c("FSM","ISM","NIC","NNC","Genic\nGenomic","Antisense","Fusion","Intergenic","Genic\nIntron","Unaligned")
+cat.palette <- read_level_structural_cat_palette
+category_map <- read_level_structural_category_map
+display_levels <- read_level_mouse_display_levels
 
 # Helper: read one file, summarize, and discard raw data immediately
 summarize_sqanti <- function(dir_path, file_vec, label_vec, tech_value) {
@@ -183,68 +161,14 @@ build_category_counts <- function(prefix, label_base, read_numbers) {
     dplyr::arrange(dplyr::desc(num_reads))
 }
 
-# Plot helper: one-row, five boxes, two bars per box
-# "Unaligned" bars get white fill with a black border.
 plot_sqanti_faceted <- function(counts_df, title = NULL) {
-  if (nrow(counts_df) == 0L || sum(counts_df$num_reads, na.rm = TRUE) <= 0) {
-    stop("No read counts to plot (empty category_counts).", call. = FALSE)
-  }
-
-  extended_fill <- c(cat.palette, "Unaligned" = "white")
-
-  legend_breaks <- c("Unaligned", display_levels[display_levels != "Unaligned"])
-  legend_labels <- c(
-    "Unaligned",
-    "Full\nSplice Match",
-    "Incomplete\nSplice Match",
-    "Novel\nIn Catalog",
-    "Novel Not\nIn Catalog",
-    "Genic\nGenomic",
-    "Antisense",
-    "Fusion",
-    "Intergenic",
-    "Genic\nIntron"
-  )
-
-  n_na <- sum(is.na(counts_df$category_label))
-  if (n_na > 0L) {
-    stop(
-      n_na, " rows have NA category_label (factor level mismatch). ",
-      "Check category_map vs SQANTI structural_category values.",
-      call. = FALSE
-    )
-  }
-
-  # Fill only (no colour aesthetic): ggplot2 4.x can drop stacked segments when
-  # colour is NA; do not use scale_fill_manual(limits=...) — it can hide all bars.
-  ggplot2::ggplot(
+  plot_read_level_sqanti_stacked(
     counts_df,
-    ggplot2::aes(x = .data$technology, y = .data$num_reads, fill = .data$category_label)
-  ) +
-    ggplot2::geom_bar(
-      stat = "identity",
-      width = 0.8,
-      position = ggplot2::position_stack(reverse = TRUE),
-      colour = "black",
-      linewidth = 0.15
-    ) +
-    ggplot2::scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
-    ggplot2::scale_fill_manual(
-      name = "Structural Category",
-      values = extended_fill,
-      breaks = legend_breaks,
-      labels = legend_labels,
-      drop = FALSE
-    ) +
-    ggplot2::facet_grid(. ~ sample, switch = "x") +
-    paper_read_count_y_scale() +
-    ggplot2::labs(x = NULL, y = "Number of reads", title = title) +
-    paper_read_level_theme() +
-    ggplot2::theme(
-      legend.position = "right",
-      legend.box = "vertical",
-      panel.border = ggplot2::element_rect(colour = "black", fill = NA, linewidth = 0.5)
-    )
+    display_levels = display_levels,
+    title = title,
+    include_unstranded = FALSE,
+    show_technology_axis = TRUE
+  )
 }
 
 ```
@@ -408,28 +332,7 @@ build_readnum_counts <- function(read_numbers, tissue = c("Brain", "Kidney")) {
 }
 
 plot_readnum_faceted <- function(read_numbers, tissue) {
-  tidy_counts <- build_readnum_counts(read_numbers, tissue)
-  assign_palette <- setNames(
-    RColorConesa::colorConesa(n = 2, palette = "complete"),
-    c("Aligned", "Unaligned")
-  )
-
-  ggplot(
-    tidy_counts,
-    aes(x = technology, y = num_reads, fill = assign_category,
-        order = as.numeric(assign_category == "Unaligned"))
-  ) +
-    geom_bar(stat = "identity", width = 0.7, position = position_stack(reverse = TRUE)) +
-    paper_read_count_y_scale() +
-    scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
-    scale_fill_manual(
-      values = assign_palette,
-      breaks = c("Unaligned", "Aligned"),
-      labels = c("Unaligned", "Aligned")
-    ) +
-    facet_grid(. ~ sample_label, switch = "x") +
-    labs(x = NULL, y = "Number of reads", fill = "Category", title = tissue) +
-    paper_read_level_theme()
+  plot_mouse_readnum_faceted(build_readnum_counts(read_numbers, tissue), tissue)
 }
 
 # Render Brain and Kidney plots
@@ -487,28 +390,12 @@ all_lengths_df <- build_lengths_df(lengths_base_dir)
 ```{r plot_read_length_violin_funcs, echo=FALSE, message=FALSE, warning=FALSE}
 
 plot_lengths_violin_from_df <- function(lengths_df_raw, tissue) {
-  df <- lengths_df_raw %>%
-    dplyr::filter(grepl(tissue, sample)) %>%
-    dplyr::group_by(sample, technology) %>%
-    dplyr::filter(length <= stats::quantile(length, 0.995, na.rm = TRUE)) %>%
-    dplyr::ungroup() %>%
-    dplyr::mutate(sample = factor(sample, levels = paste(tissue, 1:5)))
-
-  violin_fill <- RColorConesa::colorConesa(n = 3, palette = "complete")[3]
-
-  y_max <- max(df$length, na.rm = TRUE)
-  breaks_1k <- seq(0, ceiling(y_max / 1000) * 1000, by = 1000)
-
-  ggplot(df, aes(x = technology, y = length, fill = technology)) +
-    geom_violin(scale = "width", trim = TRUE) +
-    geom_boxplot(width = 0.12, outlier.shape = NA, alpha = 0.6) +
-    facet_grid(. ~ sample, switch = "x") +
-    scale_y_continuous(breaks = breaks_1k) +
-    scale_fill_manual(values = c(pacbio = violin_fill, ont = violin_fill)) +
-    scale_x_discrete(labels = c(pacbio = "PacBio", ont = "ONT")) +
-    labs(x = NULL, y = "Read length (nt)", fill = "Technology", title = tissue) +
-    paper_read_level_theme() +
-    theme(legend.position = "none")
+  paper_plot_lengths_violin(
+    lengths_df_raw,
+    tissue = tissue,
+    title = tissue,
+    show_technology_axis = TRUE
+  )
 }
 
 ```

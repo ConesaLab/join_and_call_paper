@@ -154,7 +154,7 @@ category_label_map <- c(
     title_size <- PAPER_FONTS$legend_title
   }
   list(
-    text_size = if (is.null(text_size)) 12L else text_size,
+    text_size = if (is.null(text_size)) 13L else text_size,
     title_size = if (is.null(title_size)) 14L else title_size
   )
 }

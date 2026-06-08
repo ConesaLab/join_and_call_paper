@@ -82,7 +82,8 @@ process_classification_only <- function(Bclass_df_list, Kclass_df_list, fl_thres
 
 
 process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, method,
-                             fl_threshold = 0) {
+                             fl_threshold = 0,
+                             upset_matrix_label_size = NULL) {
   
   for (df_name in names(Bclass_df_list)) {
     df <- Bclass_df_list[[df_name]]
@@ -168,7 +169,8 @@ process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, method,
     Bclass_df_list,
     sample_labels_Brain,
     method,
-    include_percentage_plots = TRUE
+    include_percentage_plots = TRUE,
+    upset_matrix_label_size = upset_matrix_label_size
   )
 
   UJC_counts_Kidney <- UJC_count_matrix(Kclass_df_list, sample_labels_Kidney)
@@ -180,7 +182,8 @@ process_and_plot <- function(Bclass_df_list, Kclass_df_list, technology, method,
     Kclass_df_list,
     sample_labels_Kidney,
     method,
-    include_percentage_plots = TRUE
+    include_percentage_plots = TRUE,
+    upset_matrix_label_size = upset_matrix_label_size
   )
   
   brain_compare_plots <- compare_isoform_plots(Bclass_df_list, condition_label = "brain")

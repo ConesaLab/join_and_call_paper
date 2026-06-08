@@ -1,53 +1,93 @@
 # 08_read_level_sy5y.R
-# Read-level plots (SQANTI-reads stacked categories, FASTQ vs primary-mapped counts,
-# BAM read-length violins) for ONT R10 SY5Y — mirrors mouse read_figure_plots.Rmd logic.
+# ONT R10 SY5Y read-level data loaders (plots in 08_read_level_plots.R).
+# Source 08_read_level_plots.R before this file.
 
-read_level_sy5y_cat_palette <- c(
-  "FSM" = "#6BAED6",
-  "ISM" = "#FC8D59",
-  "NIC" = "#78C679",
-  "NNC" = "#EE6A50",
-  "Genic\nGenomic" = "#969696",
-  "Antisense" = "#66C2A4",
-  "Fusion" = "goldenrod1",
-  "Intergenic" = "darksalmon",
-  "Genic\nIntron" = "#41B6C4"
-)
-
-read_level_sy5y_category_map <- c(
-  "full-splice_match" = "FSM",
-  "incomplete-splice_match" = "ISM",
-  "novel_in_catalog" = "NIC",
-  "novel_not_in_catalog" = "NNC",
-  "genic" = "Genic\nGenomic",
-  "antisense" = "Antisense",
-  "fusion" = "Fusion",
-  "intergenic" = "Intergenic",
-  "genic_intron" = "Genic\nIntron"
-)
+read_level_sy5y_cat_palette <- read_level_structural_cat_palette
+read_level_sy5y_category_map <- read_level_structural_category_map
 
 read_level_sy5y_display_levels <- c(
   "FSM", "ISM", "NIC", "NNC", "Genic\nGenomic", "Antisense", "Fusion",
   "Intergenic", "Genic\nIntron", "Unstranded", "Unaligned"
 )
 
-#' One SQANTI-reads classification file -> category counts (memory: structural_category only).
-summarize_sqanti_classification_file <- function(path, sample_label, tech_value) {
+#' Column spec: read only `structural_category`, skip all other fields (multi-GB TSV safe).
+sqanti_classification_col_spec <- function(path) {
+  hdr <- readr::read_lines(path, n_max = 1L)
+  cols <- strsplit(hdr, "\t", fixed = TRUE)[[1L]]
+  if (!"structural_category" %in% cols) {
+    stop(
+      "Column structural_category not found in ",
+      path,
+      call. = FALSE
+    )
+  }
+  spec <- stats::setNames(
+    rep(list(readr::col_skip()), length(cols)),
+    cols
+  )
+  spec[["structural_category"]] <- readr::col_character()
+  do.call(readr::cols, spec)
+}
+
+#' Per-category row counts from a SQANTI-reads classification TSV (chunked; safe for multi-GB files).
+sqanti_structural_category_tally <- function(path) {
   if (!file.exists(path)) {
     stop("Missing classification file: ", path, call. = FALSE)
   }
-  df <- readr::read_tsv(path, show_col_types = FALSE, col_select = "structural_category")
-  df <- dplyr::mutate(df, structural_category = as.character(.data$structural_category))
-  result <- df %>%
-    dplyr::transmute(
-      category_label = dplyr::recode(structural_category, !!!read_level_sy5y_category_map)
+  tallies <- new.env(hash = TRUE, parent = emptyenv())
+  add_chunk <- function(sc) {
+    sc <- as.character(sc)
+    tab <- table(sc, useNA = "ifany")
+    for (nm in names(tab)) {
+      key <- if (length(nm) == 1L && is.na(nm)) {
+        "<NA>"
+      } else {
+        nm
+      }
+      prev <- tallies[[key]]
+      tallies[[key]] <- (if (is.null(prev)) 0L else prev) + as.integer(tab[[nm]])
+    }
+  }
+  cb <- readr::SideEffectChunkCallback$new(function(x, pos) {
+    add_chunk(x$structural_category)
+  })
+  readr::read_tsv_chunked(
+    file = path,
+    callback = cb,
+    chunk_size = 250000L,
+    col_types = sqanti_classification_col_spec(path),
+    show_col_types = FALSE,
+    progress = FALSE
+  )
+  keys <- ls(tallies, all.names = TRUE)
+  if (!length(keys)) {
+    return(tibble::tibble(structural_category = character(), n = integer()))
+  }
+  sc <- keys
+  sc[sc == "<NA>"] <- NA_character_
+  tibble::tibble(
+    structural_category = sc,
+    n = vapply(keys, function(k) tallies[[k]], integer(1L))
+  )
+}
+
+#' One SQANTI-reads classification file -> category counts (uses [sqanti_structural_category_tally]).
+summarize_sqanti_classification_file <- function(path, sample_label, tech_value) {
+  tab <- sqanti_structural_category_tally(path)
+  tab %>%
+    dplyr::mutate(
+      category_label = dplyr::recode(
+        .data$structural_category,
+        !!!read_level_sy5y_category_map
+      )
     ) %>%
-    dplyr::filter(!is.na(category_label)) %>%
-    dplyr::count(category_label, name = "num_reads") %>%
-    dplyr::mutate(sample = sample_label, technology = tech_value)
-  rm(df)
-  gc()
-  result
+    dplyr::filter(!is.na(.data$category_label)) %>%
+    dplyr::transmute(
+      category_label = .data$category_label,
+      num_reads = .data$n,
+      sample = sample_label,
+      technology = tech_value
+    )
 }
 
 #' Per-sample SQANTI-reads classification diagnostics (read `structural_category` only).
@@ -76,25 +116,29 @@ read_level_sy5y_sqanti_diagnostics <- function(read_numbers,
       ))
     }
 
-    sc <- as.character(
-      readr::read_tsv(
-        path,
-        show_col_types = FALSE,
-        col_select = "structural_category"
-      )[[1L]]
+    tab <- sqanti_structural_category_tally(path)
+    n_row <- sum(tab$n)
+    tab <- dplyr::mutate(
+      tab,
+      category_label = dplyr::recode(
+        .data$structural_category,
+        !!!read_level_sy5y_category_map
+      )
     )
+    n_na <- sum(tab$n[is.na(tab$category_label)])
+    n_used <- sum(tab$n[!is.na(tab$category_label)])
 
-    n_row <- length(sc)
-    cat_lab <- dplyr::recode(sc, !!!read_level_sy5y_category_map)
-    n_na <- sum(is.na(cat_lab))
-    n_used <- sum(!is.na(cat_lab))
-
-    unk <- sc[is.na(cat_lab)]
-    top_u <- if (length(unk)) {
-      tb <- sort(table(unk), decreasing = TRUE)
-      k <- min(5L, length(tb))
-      idx <- seq_len(k)
-      paste0(names(tb)[idx], " (n=", unname(tb)[idx], ")", collapse = "; ")
+    unk_tab <- tab[is.na(tab$category_label), , drop = FALSE]
+    top_u <- if (nrow(unk_tab)) {
+      unk_tab <- unk_tab[order(-unk_tab$n), , drop = FALSE]
+      k <- min(5L, nrow(unk_tab))
+      paste0(
+        unk_tab$structural_category[seq_len(k)],
+        " (n=",
+        unk_tab$n[seq_len(k)],
+        ")",
+        collapse = "; "
+      )
     } else {
       NA_character_
     }
@@ -144,14 +188,15 @@ sy5y_sqanti_assigned_per_sample <- function(sample_ids, sqanti_reads_root) {
       if (!file.exists(path)) {
         stop("Missing classification file: ", path, call. = FALSE)
       }
-      sc <- as.character(
-        readr::read_tsv(
-          path,
-          show_col_types = FALSE,
-          col_select = "structural_category"
-        )[[1L]]
+      tab <- sqanti_structural_category_tally(path)
+      tab <- dplyr::mutate(
+        tab,
+        category_label = dplyr::recode(
+          .data$structural_category,
+          !!!read_level_sy5y_category_map
+        )
       )
-      sum(!is.na(dplyr::recode(sc, !!!read_level_sy5y_category_map)))
+      sum(tab$n[!is.na(tab$category_label)])
     }),
     sample_ids
   )
@@ -235,63 +280,17 @@ build_sy5y_sqanti_category_counts <- function(read_numbers,
     dplyr::arrange(dplyr::desc(.data$num_reads))
 }
 
-#' Same layout as mouse `plot_sqanti_faceted` in read_figure_plots.Rmd.
+#' SQANTI-reads stacked bars for SY5Y (ONT-only facets; includes Unstranded bucket).
 plot_read_level_sqanti_faceted <- function(counts_df, title = NULL) {
-  pal <- read_level_sy5y_cat_palette
-  extended_fill <- c(
-    pal,
-    "Unstranded" = "grey85",
-    "Unaligned" = "white"
+  plot_read_level_sqanti_stacked(
+    counts_df = counts_df,
+    display_levels = read_level_sy5y_display_levels,
+    title = title,
+    include_unstranded = TRUE,
+    show_technology_axis = FALSE,
+    technology_labels = NULL,
+    facet_col = sample
   )
-  dl <- read_level_sy5y_display_levels
-  legend_breaks <- c("Unaligned", "Unstranded", dl[!dl %in% c("Unaligned", "Unstranded")])
-  legend_labels <- c(
-    "Unaligned",
-    "Unstranded",
-    "Full\nSplice Match",
-    "Incomplete\nSplice Match",
-    "Novel\nIn Catalog",
-    "Novel Not\nIn Catalog",
-    "Genic\nGenomic",
-    "Antisense",
-    "Fusion",
-    "Intergenic",
-    "Genic\nIntron"
-  )
-
-  ggplot2::ggplot(
-    counts_df,
-    ggplot2::aes(
-      x = .data$technology,
-      y = .data$num_reads,
-      fill = .data$category_label
-    )
-  ) +
-    ggplot2::geom_bar(
-      stat = "identity",
-      width = 0.8,
-      position = ggplot2::position_stack(reverse = TRUE),
-      colour = "black",
-      linewidth = 0.15
-    ) +
-    ggplot2::scale_x_discrete(labels = NULL) +
-    ggplot2::scale_fill_manual(
-      name = "Structural Category",
-      values = extended_fill,
-      breaks = legend_breaks,
-      labels = legend_labels,
-      drop = FALSE
-    ) +
-    ggplot2::facet_grid(cols = ggplot2::vars(.data$sample), switch = "x") +
-    paper_read_count_y_scale() +
-    ggplot2::labs(x = NULL, y = "Number of reads", title = title) +
-    paper_read_level_theme() +
-    ggplot2::theme(
-      axis.text.x = ggplot2::element_blank(),
-      axis.ticks.x = ggplot2::element_blank(),
-      legend.position = "right",
-      legend.box = "vertical"
-    )
 }
 
 #' Tidy table for stacked SQANTI-classified / unstranded / unmapped reads (one facet per replicate).
@@ -363,48 +362,22 @@ build_sy5y_readnum_tidy <- function(read_numbers,
     )
 }
 
-#' Faceted read-number plot (ONT only; matches mouse styling).
+#' Faceted read-number plot (ONT only; same styling as mouse read-number stacks).
 plot_sy5y_readnum_faceted <- function(tidy_counts, title = "SY5Y") {
-  classified_fill <- RColorConesa::colorConesa(n = 2L, palette = "complete")[1L]
-  assign_palette <- c(
-    "Classified" = classified_fill,
-    "Unstranded" = "grey85",
-    "Unaligned" = "white"
-  )
-
-  ggplot2::ggplot(
+  paper_plot_readnum_stacked(
     tidy_counts,
-    ggplot2::aes(
-      x = .data$technology,
-      y = .data$num_reads,
-      fill = .data$assign_category,
-      order = dplyr::case_when(
-        .data$assign_category == "Unaligned" ~ 3L,
-        .data$assign_category == "Unstranded" ~ 2L,
-        TRUE ~ 1L
-      )
+    fill_values = read_level_sy5y_readnum_palette(),
+    legend_breaks = c("Unaligned", "Unstranded", "Classified"),
+    legend_labels = c("Unaligned", "Unstranded", "Classified"),
+    facet_col = sample_label,
+    title = title,
+    show_technology_axis = FALSE,
+    stack_order = dplyr::case_when(
+      tidy_counts$assign_category == "Unaligned" ~ 3L,
+      tidy_counts$assign_category == "Unstranded" ~ 2L,
+      TRUE ~ 1L
     )
-  ) +
-    ggplot2::geom_col(
-      width = 0.7,
-      position = ggplot2::position_stack(reverse = TRUE),
-      color = "black",
-      linewidth = 0.2
-    ) +
-    paper_read_count_y_scale() +
-    ggplot2::scale_x_discrete(labels = NULL) +
-    ggplot2::scale_fill_manual(
-      values = assign_palette,
-      breaks = c("Unaligned", "Unstranded", "Classified"),
-      labels = c("Unaligned", "Unstranded", "Classified")
-    ) +
-    ggplot2::facet_grid(cols = ggplot2::vars(.data$sample_label), switch = "x") +
-    ggplot2::labs(x = NULL, y = "Number of reads", fill = "Category", title = title) +
-    paper_read_level_theme() +
-    ggplot2::theme(
-      axis.text.x = ggplot2::element_blank(),
-      axis.ticks.x = ggplot2::element_blank()
-    )
+  )
 }
 
 read_lengths_sy5y_file <- function(file_path, sample_label, technology) {
@@ -434,35 +407,37 @@ build_sy5y_lengths_df <- function(length_ont_dir, sample_ids, sample_labels) {
     )
 }
 
-#' Violin + boxplot per replicate (mouse read_figure_plots.Rmd style).
+#' Violin + boxplot per replicate (same as mouse; ONT-only hides technology x labels).
 plot_sy5y_lengths_violin <- function(lengths_df, title = "SY5Y") {
-  df <- lengths_df %>%
-    dplyr::group_by(.data$sample, .data$technology) %>%
-    dplyr::filter(
-      .data$length <= stats::quantile(.data$length, 0.995, na.rm = TRUE)
-    ) %>%
-    dplyr::ungroup()
+  paper_plot_lengths_violin(
+    lengths_df,
+    title = title,
+    show_technology_axis = FALSE
+  )
+}
 
-  violin_fill <- RColorConesa::colorConesa(n = 3, palette = "complete")[3L]
-  y_max <- max(df$length, na.rm = TRUE)
-  breaks_1k <- seq(0, ceiling(y_max / 1000) * 1000, by = 1000)
-
-  ggplot2::ggplot(df, ggplot2::aes(
-    x = .data$technology,
-    y = .data$length,
-    fill = .data$technology
-  )) +
-    ggplot2::geom_violin(scale = "width", trim = TRUE) +
-    ggplot2::geom_boxplot(width = 0.12, outlier.shape = NA, alpha = 0.6) +
-    ggplot2::facet_grid(cols = ggplot2::vars(.data$sample), switch = "x") +
-    ggplot2::scale_y_continuous(breaks = breaks_1k) +
-    ggplot2::scale_fill_manual(values = c(pacbio = violin_fill, ont = violin_fill)) +
-    ggplot2::scale_x_discrete(labels = NULL) +
-    ggplot2::labs(x = NULL, y = "Read length (nt)", fill = "Technology", title = title) +
-    paper_read_level_theme() +
+#' Side-by-side SQANTI-reads stack + read-length violins (mouse `read_level_combo` layout).
+assemble_sy5y_read_level_combined <- function(sq_reads_plot, lengths_plot) {
+  combined <- patchwork::wrap_plots(
+    L = sq_reads_plot +
+      ggplot2::theme(
+        legend.position = "right",
+        plot.title = ggplot2::element_blank(),
+        plot.margin = ggplot2::margin(t = 5.5, r = 12, b = 5.5, l = 5.5, unit = "pt")
+      ),
+    R = lengths_plot +
+      ggplot2::theme(
+        plot.title = ggplot2::element_blank(),
+        plot.margin = ggplot2::margin(t = 5.5, r = 5.5, b = 5.5, l = 12, unit = "pt")
+      ),
+    design = "LR"
+  )
+  combined &
     ggplot2::theme(
-      axis.text.x = ggplot2::element_blank(),
-      axis.ticks.x = ggplot2::element_blank(),
-      legend.position = "none"
+      legend.title = ggplot2::element_text(
+        size = .paper_font("legend_title"),
+        face = "bold"
+      ),
+      legend.text = ggplot2::element_text(size = .paper_font("legend_text"))
     )
 }

@@ -196,7 +196,7 @@ for (sample_name in samples_of_interest) {
     geom_col(position = position_dodge(width = 0.8), width = 0.7) +
     geom_text(aes(label = round(Value, 1)),
               position = position_dodge(width = 0.8),
-              vjust = -0.3, size = 2.5) +
+              vjust = -0.3, size = PAPER_FONTS$axis / ggplot2::.pt) +
     facet_grid(Metric ~ platform, scales = "free", space = "free_x") +
     scale_fill_manual(values = annotation_palette, name = "Annotation") +
     scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
@@ -356,7 +356,7 @@ if (nrow(detection_both) > 0) {
          title = "Per-SIRV transcript detection") +
     paper_theme(base_size = PAPER_FONTS$tick) +
     theme(
-      strip.text = element_text(face = "bold", size = 11),
+      strip.text = element_text(face = "bold", size = PAPER_FONTS$strip),
       legend.position = "bottom"
     )
 }
@@ -403,7 +403,8 @@ if (nrow(detection_by_method) > 0) {
     ) +
     geom_text(data = method_label_df,
               aes(x = label_x, y = -Inf, label = method),
-              inherit.aes = FALSE, vjust = 2.5, size = 3, fontface = "bold") +
+              inherit.aes = FALSE, vjust = 2.5, size = PAPER_FONTS$axis / ggplot2::.pt,
+              fontface = "bold") +
     scale_fill_manual(values = status_palette, name = "Detection") +
     labs(x = NULL, y = NULL,
          title = "Per-SIRV transcript detection by method") +
@@ -528,6 +529,7 @@ build_sirv_comparison_dumbbell <- function(comparison_df, platform_filter, metho
     paper_geom_stripped_rows(
       data = metrics_wide, aes(y = metric), width = 1, nudge_y = 0
     ) +
+    paper_geom_dumbbell_vguides() +
     geom_segment(
       data = metrics_wide,
       aes(x = concat, xend = tama, y = metric, yend = metric, color = dataset),
@@ -567,7 +569,8 @@ build_sirv_comparison_dumbbell <- function(comparison_df, platform_filter, metho
         order = 2
       )
     ) +
-    coord_cartesian(xlim = c(0, 100), clip = "off") +
+    paper_dumbbell_x_scale() +
+    coord_cartesian(clip = "off") +
     labs(x = NULL, y = NULL, title = title) +
     paper_dumbbell_theme(legend_position = "right", legend_box = "horizontal")
 
@@ -602,62 +605,84 @@ assemble_sirv_comparison_dumbbells <- function(comparison_df) {
   }
   plots
 }
+
+#' Per-panel styling before patchwork (legend off; shared x title via figure caption).
+strip_sirv_dumbbell_panel <- function(p, hide_x_ticks = FALSE) {
+  p <- p +
+    theme(
+      legend.position = "none",
+      axis.title.x = element_blank()
+    )
+  if (isTRUE(hide_x_ticks)) {
+    p <- p +
+      theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()
+      )
+  }
+  p
+}
+
+assemble_sirv_comparison_dumbbell_figure <- function(
+    db_plots,
+    title = "SIRV evaluation: With vs. Without SIRV annotation",
+    x_label = "Metric value (%)") {
+  if (length(db_plots) == 0L) {
+    return(NULL)
+  }
+
+  legend_grob <- cowplot::get_legend(db_plots[[1]])
+  legend_panel <- ggpubr::as_ggplot(legend_grob)
+
+  isoseq_names <- grep("^IsoSeq", names(db_plots), value = TRUE)
+  ont_names    <- grep("^ONT", names(db_plots), value = TRUE)
+
+  isoseq_plots <- lapply(db_plots[isoseq_names], strip_sirv_dumbbell_panel)
+  ont_plots <- lapply(
+    db_plots[ont_names],
+    strip_sirv_dumbbell_panel,
+    hide_x_ticks = FALSE
+  )
+
+  while (length(isoseq_plots) < 6) {
+    isoseq_plots[[length(isoseq_plots) + 1]] <- plot_spacer()
+  }
+  while (length(ont_plots) < 4) {
+    ont_plots[[length(ont_plots) + 1]] <- plot_spacer()
+  }
+
+  db_heights <- c(1, 1, 0.15, 1)
+
+  db_plot <- (
+    isoseq_plots[[1]] + isoseq_plots[[2]] + isoseq_plots[[3]] + isoseq_plots[[4]] +
+    isoseq_plots[[5]] + isoseq_plots[[6]] + legend_panel +
+    plot_spacer() +
+    ont_plots[[1]] + ont_plots[[2]] + ont_plots[[3]] + ont_plots[[4]]
+  ) +
+    paper_mouse_10panel_plot_layout(
+      heights = db_heights,
+      design = PAPER_MOUSE_10PANEL_DESIGN_IJKM,
+      axes = "collect",
+      axis_titles = "keep"
+    ) +
+    paper_figure_annotation(title = title, x_label = x_label)
+
+  paper_inset_tags_rows(
+    wrap_elements(full = db_plot),
+    tag_by_row = c("1" = "a", "4" = "b"),
+    heights = db_heights
+  )
+}
 ```
 
 
 ```{r dumbbell-assembled, fig.width=18, fig.height=12}
 db_plots <- assemble_sirv_comparison_dumbbells(comparison_df)
 
-if (length(db_plots) > 0) {
-  legend_grob <- cowplot::get_legend(db_plots[[1]])
-  legend_panel <- ggpubr::as_ggplot(legend_grob)
+final_db <- assemble_sirv_comparison_dumbbell_figure(db_plots)
 
-  no_legend <- lapply(db_plots, function(p) p + theme(legend.position = "none"))
-
-  isoseq_names <- grep("^IsoSeq", names(no_legend), value = TRUE)
-  ont_names    <- grep("^ONT", names(no_legend), value = TRUE)
-
-  isoseq_plots <- no_legend[isoseq_names]
-  ont_plots    <- no_legend[ont_names]
-
-  while (length(isoseq_plots) < 6) isoseq_plots[[length(isoseq_plots) + 1]] <- plot_spacer()
-  while (length(ont_plots) < 4) ont_plots[[length(ont_plots) + 1]] <- plot_spacer()
-
-  x_label <- ggplot() +
-    annotate("text", x = 0.5, y = 0.5, label = "Metric value (%)",
-             size = 5, fontface = "plain") +
-    theme_void()
-
-  db_assembled <- (
-    isoseq_plots[[1]] + isoseq_plots[[2]] + isoseq_plots[[3]] + isoseq_plots[[4]] +
-    isoseq_plots[[5]] + isoseq_plots[[6]] + legend_panel +
-    plot_spacer() +
-    ont_plots[[1]] + ont_plots[[2]] + ont_plots[[3]] + ont_plots[[4]] +
-    x_label
-  ) +
-    plot_layout(
-      design = "
-        ABCD
-        EFGG
-        HHHH
-        IJKM
-        NNNN
-      ",
-      heights = c(1, 1, 0.15, 1, 0.08)
-    ) +
-    plot_annotation(
-      title = "SIRV evaluation: With vs. Without SIRV annotation",
-      theme = theme(plot.title = element_text(size = 22, face = "bold", hjust = 0.5))
-    )
-
-  final_db <- paper_inset_tags_rows(
-    wrap_elements(full = db_assembled),
-    tag_by_row = c("1" = "a", "4" = "b"),
-    heights = c(1, 1, 0.15, 1, 0.08)
-  )
-
+if (!is.null(final_db)) {
   print(final_db)
-
   paper_ggsave(
     file.path(out_dir, "sirv_comparison_dumbbell.pdf"),
     plot = final_db,

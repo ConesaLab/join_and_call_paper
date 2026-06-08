@@ -3,7 +3,7 @@ title: "NIH - Join & Call vs. Call & Join Plots"
 author: "Fabian Jetzinger"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 documentclass: article
-fontsize: 11pt
+fontsize: 13pt
 papersize: a4paper
 urlcolor: blue
 geometry: "left=2.5cm,right=2.5cm,top=2cm,bottom=2cm"
@@ -87,7 +87,8 @@ for (platform in names(src_dirs)) {
         df_lists$Kclass_df_list,
         technology = platform,
         method = method,
-        fl_threshold = fl_filter_level
+        fl_threshold = fl_filter_level,
+        upset_matrix_label_size = PAPER_MOUSE_UPSET_MATRIX_LABEL
       )
       all_results[[platform]][[method]][[as.character(fl_filter_level)]] <- results
     }
@@ -377,21 +378,69 @@ kidney_upset_plot
 
 ```{r assemble-brain-comb-bar}
 
-pb_ylims  <- c(0, 35000)
-ont_ylims <- c(0, 20000)
-brain_comb_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Unique Junction Chain occurrence across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_bar_plot", y_label = "# of UJCs")
-paper_ggsave(file.path(out_dir, "brain_comb_bar.pdf"), plot = brain_comb_bar_plot, size = "mouse_10panel")
-brain_comb_bar_plot
+comb_bar_title <- "Unique Junction Chain occurrence across samples; brain"
+
+brain_comb_bar_plot <- assemble_comb_plots(
+  all_results, "brain", 1, comb_bar_title,
+  pb_ylims = c(0, 35000),
+  ont_ylims = c(0, 20000),
+  plot_name_suffix = "_comb_bar_plot",
+  y_label = PAPER_UJC_YLAB$comb_bar
+)
+paper_ggsave(
+  file.path(out_dir, "brain_comb_bar.pdf"),
+  plot = brain_comb_bar_plot,
+  size = "mouse_10panel"
+)
+
+brain_perc_comb_bar_plot <- assemble_comb_plots(
+  all_results, "brain", 1, comb_bar_title,
+  pb_ylims = c(0, 65),
+  ont_ylims = c(0, 65),
+  plot_name_suffix = "_perc_comb_bar_plot",
+  y_label = PAPER_UJC_YLAB$perc_comb_bar
+)
+paper_ggsave(
+  file.path(out_dir, "brain_perc_comb_bar.pdf"),
+  plot = brain_perc_comb_bar_plot,
+  size = "mouse_10panel"
+)
+
+brain_perc_comb_bar_plot
 
 ```
 
 ```{r assemble-kidney-comb-bar}
 
-pb_ylims  <- c(0, 35000)
-ont_ylims <- c(0, 20000)
-kidney_comb_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Unique Junction Chain occurrence across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_bar_plot", y_label = "# of UJCs")
-paper_ggsave(file.path(out_dir, "kidney_comb_bar.pdf"), plot = kidney_comb_bar_plot, size = "mouse_10panel")
-kidney_comb_bar_plot
+comb_bar_title <- "Unique Junction Chain occurrence across samples; kidney"
+
+kidney_comb_bar_plot <- assemble_comb_plots(
+  all_results, "kidney", 1, comb_bar_title,
+  pb_ylims = c(0, 35000),
+  ont_ylims = c(0, 20000),
+  plot_name_suffix = "_comb_bar_plot",
+  y_label = PAPER_UJC_YLAB$comb_bar
+)
+paper_ggsave(
+  file.path(out_dir, "kidney_comb_bar.pdf"),
+  plot = kidney_comb_bar_plot,
+  size = "mouse_10panel"
+)
+
+kidney_perc_comb_bar_plot <- assemble_comb_plots(
+  all_results, "kidney", 1, comb_bar_title,
+  pb_ylims = c(0, 65),
+  ont_ylims = c(0, 65),
+  plot_name_suffix = "_perc_comb_bar_plot",
+  y_label = PAPER_UJC_YLAB$perc_comb_bar
+)
+paper_ggsave(
+  file.path(out_dir, "kidney_perc_comb_bar.pdf"),
+  plot = kidney_perc_comb_bar_plot,
+  size = "mouse_10panel"
+)
+
+kidney_perc_comb_bar_plot
 
 ```
 
@@ -399,20 +448,68 @@ kidney_comb_bar_plot
 
 ```{r assemble-brain-comb-fl-bar}
 
-pb_ylims  <- c(0, 20000000)
-ont_ylims <- c(0, 20000000)
-brain_comb_fl_bar_plot <- assemble_comb_plots(all_results, "brain", 1, "Expression of UJCs across samples; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_fl_bar_plot", y_label = PAPER_UJC_YLAB$comb_fl_bar)
-paper_ggsave(file.path(out_dir, "brain_comb_fl_bar.pdf"), plot = brain_comb_fl_bar_plot, size = "mouse_10panel")
-brain_comb_fl_bar_plot
+comb_fl_title <- "Expression of UJCs across samples; brain"
+
+brain_comb_fl_bar_plot <- assemble_comb_plots(
+  all_results, "brain", 1, comb_fl_title,
+  pb_ylims = c(0, 20000000),
+  ont_ylims = c(0, 20000000),
+  plot_name_suffix = "_comb_fl_bar_plot",
+  y_label = PAPER_UJC_YLAB$comb_fl_bar
+)
+paper_ggsave(
+  file.path(out_dir, "brain_comb_fl_bar.pdf"),
+  plot = brain_comb_fl_bar_plot,
+  size = "mouse_10panel"
+)
+
+brain_perc_comb_fl_bar_plot <- assemble_comb_plots(
+  all_results, "brain", 1, comb_fl_title,
+  pb_ylims = c(0, 100),
+  ont_ylims = c(0, 100),
+  plot_name_suffix = "_perc_comb_fl_bar_plot",
+  y_label = PAPER_UJC_YLAB$perc_comb_fl_bar
+)
+paper_ggsave(
+  file.path(out_dir, "brain_perc_comb_fl_bar.pdf"),
+  plot = brain_perc_comb_fl_bar_plot,
+  size = "mouse_10panel"
+)
+
+brain_perc_comb_fl_bar_plot
 
 ```
 ```{r assemble-kidney-comb-fl-bar}
 
-pb_ylims  <- c(0, 25000000)
-ont_ylims <- c(0, 25000000)
-kidney_comb_fl_bar_plot <- assemble_comb_plots(all_results, "kidney", 1, "Expression of UJCs across samples; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix = "_comb_fl_bar_plot", y_label = PAPER_UJC_YLAB$comb_fl_bar)
-paper_ggsave(file.path(out_dir, "kidney_comb_fl_bar.pdf"), plot = kidney_comb_fl_bar_plot, size = "mouse_10panel")
-kidney_comb_fl_bar_plot
+comb_fl_title <- "Expression of UJCs across samples; kidney"
+
+kidney_comb_fl_bar_plot <- assemble_comb_plots(
+  all_results, "kidney", 1, comb_fl_title,
+  pb_ylims = c(0, 25000000),
+  ont_ylims = c(0, 25000000),
+  plot_name_suffix = "_comb_fl_bar_plot",
+  y_label = PAPER_UJC_YLAB$comb_fl_bar
+)
+paper_ggsave(
+  file.path(out_dir, "kidney_comb_fl_bar.pdf"),
+  plot = kidney_comb_fl_bar_plot,
+  size = "mouse_10panel"
+)
+
+kidney_perc_comb_fl_bar_plot <- assemble_comb_plots(
+  all_results, "kidney", 1, comb_fl_title,
+  pb_ylims = c(0, 100),
+  ont_ylims = c(0, 100),
+  plot_name_suffix = "_perc_comb_fl_bar_plot",
+  y_label = PAPER_UJC_YLAB$perc_comb_fl_bar
+)
+paper_ggsave(
+  file.path(out_dir, "kidney_perc_comb_fl_bar.pdf"),
+  plot = kidney_perc_comb_fl_bar_plot,
+  size = "mouse_10panel"
+)
+
+kidney_perc_comb_fl_bar_plot
 
 ```
 
@@ -457,7 +554,7 @@ all_results$ONT$Bambu$`1`[["brain_ujc_stack_plot"]]$data %>%
   mutate(percent = 100 * mean_count / sum(mean_count)) %>%
   ungroup()
 
-all_results$ONT$Bambu$`1`$brain_comb_bar_plot$data 
+all_results$ONT$Bambu$`1`$brain_perc_comb_bar_plot$data
 
 
 ```

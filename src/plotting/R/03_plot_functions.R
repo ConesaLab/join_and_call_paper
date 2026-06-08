@@ -26,6 +26,7 @@ plot_classification_data <- function(class_combined_df, sample_labels,
     scale_fill_manual(values = cat.palette, labels = c("Full\nSplice Match", "Incomplete\nSplice Match", "Novel\nIn Catalog", "Novel Not\nIn Catalog", "Genic\nGenomic", "Antisense", "Fusion", "Intergenic", "Genic\nIntron")) +
     sx +
     paper_theme() +
+    labs(x = NULL) +
     theme(legend.position = "none", axis.title.x = element_blank()) +
     ylab("# isoforms") +
     theme(axis.text.x = paper_axis_text_x())
@@ -71,6 +72,7 @@ plot_classification_expression_data <- function(class_combined_df,
   extended_border <- c(Unassigned = border_color,     cat.palette)
 
   base_theme <- paper_theme() +
+    labs(x = NULL) +
     theme(
       legend.position = "none",
       axis.title.x    = element_blank(),
@@ -154,7 +156,8 @@ create_boxplot <- function(listUJC) {
 
 create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
                               combination_columns = NULL,
-                              include_percentage_plots = FALSE) {
+                              include_percentage_plots = FALSE,
+                              upset_matrix_label_size = NULL) {
   if (method == "isoseq_sqanti") {
     method <- "IsoSeq + SQANTI3"
   }
@@ -225,7 +228,8 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       ),
       n_intersections = n,
       width_ratio=0.1,
-      set_sizes=FALSE
+      set_sizes=FALSE,
+      themes = paper_upset_modify_themes(matrix_label_size = upset_matrix_label_size)
     )
   )
   
@@ -492,7 +496,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       x = "Number of samples included",
       y = "Mean unique UJCs discovered"
     ) +
-    paper_theme(base_size = 11)
+    paper_theme()
 
   perc_cumul_ujc_curve_plot <- NULL
   if (isTRUE(include_percentage_plots)) {
@@ -507,7 +511,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
         x = "Number of samples included",
         y = "Mean percentage UJCs discovered"
       ) +
-      paper_theme(base_size = 11)
+      paper_theme()
   }
 
 
@@ -549,7 +553,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       y = "Mean number of UJCs",
       fill = "Reproducibility"
     ) +
-    paper_theme(base_size = 11)
+    paper_theme()
 
   perc_cumul_ujc_stack_plot <- NULL
   if (isTRUE(include_percentage_plots)) {
@@ -562,7 +566,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
         y = "Mean % of UJCs",
         fill = "Reproducibility"
       ) +
-      paper_theme(base_size = 11)
+      paper_theme()
   }
 
 
@@ -642,7 +646,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       x     = "Number of samples included",
       y     = PAPER_UJC_YLAB$ujc_fl_stack
     ) +
-    paper_theme(base_size = 11)
+    paper_theme()
 
   perc_cumul_ujc_fl_stack_plot <- NULL
   if (isTRUE(include_percentage_plots)) {
@@ -657,7 +661,7 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
         x     = "Number of samples included",
         y     = PAPER_UJC_YLAB$perc_ujc_fl_stack
       ) +
-      paper_theme(base_size = 11)
+      paper_theme()
   }
 
 

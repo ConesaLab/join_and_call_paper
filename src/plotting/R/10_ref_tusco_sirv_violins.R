@@ -1,7 +1,6 @@
 # 10_ref_tusco_sirv_violins.R
-# Reference / TUSCO / SIRV violins (SQANTI-reads; PacBio + ONT).
-# Panel (a): GTF exonic lengths per transcript set; (b)/(c): FSM read counts (log10).
-# Depends on: 00_figure_config.R, 02_themes.R
+# Reference / TUSCO / SIRV length + expression violins (PacBio + ONT) for mouse read figures.
+# Knit via read_figure_plots.Rmd. Depends on: 00_figure_config.R, 02_themes.R
 
 REF_TUSCO_SIRV_SET_LEVELS <- c("Reference", "TUSCO", "SIRVs")
 
@@ -265,47 +264,97 @@ resolve_sqanti_reference_transcript_id <- function(
     associated_transcript,
     associated_gene,
     lookup) {
-  tx <- paper_strip_transcript_version(associated_transcript)
-  if (!is.na(tx) && nzchar(tx) && tx %in% names(lookup$by_id)) {
-    return(tx)
-  }
-  for (g in c(
-    paper_strip_transcript_version(associated_gene),
-    as.character(associated_gene)
-  )) {
-    if (!is.na(g) && nzchar(g) && g %in% names(lookup$by_gene_primary)) {
-      return(lookup$by_gene_primary[[g]])
-    }
-  }
-  NA_character_
+  resolve_sqanti_reference_transcript_id_vec(
+    associated_transcript,
+    associated_gene,
+    lookup
+  )[[1L]]
 }
 
-#' Map an FSM read to a catalog transcript ID (RefSeq / gene symbol / TUSCO Ensembl row).
+#' Vectorized SQANTI transcript / gene → reference ID (for large classification tables).
+resolve_sqanti_reference_transcript_id_vec <- function(
+    associated_transcript,
+    associated_gene,
+    lookup) {
+  tx <- paper_strip_transcript_version(associated_transcript)
+  ag1 <- paper_strip_transcript_version(associated_gene)
+  ag2 <- as.character(associated_gene)
+  n <- length(tx)
+  out <- rep(NA_character_, n)
+
+  hit_tx <- !is.na(tx) & nzchar(tx) & tx %in% names(lookup$by_id)
+  out[hit_tx] <- tx[hit_tx]
+
+  miss <- is.na(out)
+  hit_g1 <- miss & !is.na(ag1) & nzchar(ag1) & ag1 %in% names(lookup$by_gene_primary)
+  out[hit_g1] <- unname(lookup$by_gene_primary[ag1[hit_g1]])
+
+  miss <- is.na(out)
+  hit_g2 <- miss & !is.na(ag2) & nzchar(ag2) & ag2 %in% names(lookup$by_gene_primary)
+  out[hit_g2] <- unname(lookup$by_gene_primary[ag2[hit_g2]])
+
+  out
+}
+
+#' Map one SQANTI-reads row (any category with `associated_transcript`) to a catalog ID.
 resolve_expression_catalog_id <- function(
     associated_transcript,
     associated_gene,
     lookup,
     tusco_tbl,
     tusco_resolved) {
-  ref_tx <- resolve_sqanti_reference_transcript_id(
+  resolve_expression_catalog_id_vec(
+    associated_transcript,
+    associated_gene,
+    lookup,
+    tusco_tbl,
+    tusco_resolved
+  )[[1L]]
+}
+
+#' Vectorized read → catalog transcript ID.
+resolve_expression_catalog_id_vec <- function(
+    associated_transcript,
+    associated_gene,
+    lookup,
+    tusco_tbl,
+    tusco_resolved) {
+  out <- resolve_sqanti_reference_transcript_id_vec(
     associated_transcript,
     associated_gene,
     lookup
   )
-  if (!is.na(ref_tx)) {
-    return(ref_tx)
+  miss <- is.na(out)
+  if (!any(miss)) {
+    return(out)
   }
-  tx <- paper_strip_transcript_version(associated_transcript)
-  idx <- match(tx, paper_strip_transcript_version(tusco_tbl$transcript))
-  if (!is.na(idx) && !is.na(tusco_resolved[[idx]])) {
-    return(tusco_resolved[[idx]])
+
+  tx <- paper_strip_transcript_version(associated_transcript[miss])
+  tusco_tx <- paper_strip_transcript_version(tusco_tbl$transcript)
+  idx <- match(tx, tusco_tx)
+  fill <- tusco_resolved[idx]
+  ok <- !is.na(fill)
+  if (any(ok)) {
+    miss_sub <- which(miss)
+    out[miss_sub[ok]] <- fill[ok]
   }
-  ag <- paper_strip_transcript_version(associated_gene)
-  idx <- match(ag, paper_strip_transcript_version(tusco_tbl$ensembl))
-  if (!is.na(idx) && !is.na(tusco_resolved[[idx]])) {
-    return(tusco_resolved[[idx]])
+
+  miss <- is.na(out)
+  if (!any(miss)) {
+    return(out)
   }
-  NA_character_
+
+  ag <- paper_strip_transcript_version(associated_gene[miss])
+  tusco_en <- paper_strip_transcript_version(tusco_tbl$ensembl)
+  idx <- match(ag, tusco_en)
+  fill <- tusco_resolved[idx]
+  ok <- !is.na(fill)
+  if (any(ok)) {
+    miss_sub <- which(miss)
+    out[miss_sub[ok]] <- fill[ok]
+  }
+
+  out
 }
 
 #' Resolve all TUSCO TSV rows to reference transcript IDs (with validation message).
@@ -592,6 +641,8 @@ build_ref_tusco_sirv_transcript_catalog <- function(
   sirv_ids <- all_ids[stringr::str_starts(all_ids, "SIRV")]
   ref_ids <- setdiff(all_ids, c(sirv_ids, tusco_ref_ids))
 
+  tusco_sets <- load_tusco_annotation_sets(tusco_tissue)
+
   catalog <- dplyr::bind_rows(
     tibble::tibble(transcript_set = "Reference", catalog_id = ref_ids),
     tibble::tibble(transcript_set = "TUSCO", catalog_id = tusco_ref_ids),
@@ -605,8 +656,29 @@ build_ref_tusco_sirv_transcript_catalog <- function(
     catalog = catalog,
     lookup = lookup,
     tusco_tbl = tusco_tbl,
-    tusco_resolved = tusco_resolved
+    tusco_resolved = tusco_resolved,
+    tusco_ref_ids = tusco_ref_ids,
+    tusco_sets = tusco_sets,
+    tusco_tissue = tusco_tissue
   )
+}
+
+#' Expression catalog: Reference rows include tissue TUSCO IDs (for zero counts there).
+expression_catalog_df <- function(catalog_info) {
+  tusco_ref_ids <- catalog_info$tusco_ref_ids
+  if (is.null(tusco_ref_ids)) {
+    tusco_ref_ids <- unique(
+      catalog_info$tusco_resolved[!is.na(catalog_info$tusco_resolved)]
+    )
+  }
+  dplyr::bind_rows(
+    catalog_info$catalog,
+    tibble::tibble(
+      transcript_set = factor("Reference", levels = REF_TUSCO_SIRV_SET_LEVELS),
+      catalog_id = tusco_ref_ids
+    )
+  ) %>%
+    dplyr::distinct(.data$transcript_set, .data$catalog_id)
 }
 
 #' GTF exonic lengths by Reference / TUSCO / SIRVs (99.5% trim on Reference only).
@@ -639,52 +711,126 @@ build_ref_tusco_sirv_length_df <- function(
     )
 }
 
-#' Per-transcript FSM read counts; catalog transcripts with no reads get expression 0.
+#' Summarize per-set read counts (including catalog transcripts with zero reads).
+summarize_ref_tusco_sirv_expression <- function(expr_df) {
+  expr_df %>%
+    dplyr::group_by(.data$transcript_set) %>%
+    dplyr::summarise(
+      n_catalog = dplyr::n(),
+      n_zero = sum(.data$value == 0L),
+      n_positive = sum(.data$value > 0L),
+      min_positive = if (any(.data$value > 0L)) {
+        min(.data$value[.data$value > 0L])
+      } else {
+        NA_integer_
+      },
+      max_reads = max(.data$value),
+      total_reads = sum(.data$value),
+      .groups = "drop"
+    )
+}
+
+#' Per-transcript read counts; catalog left-joined so missing transcripts = 0.
+#'
+#' Counts every SQANTI-reads row with a non-empty `associated_transcript` (FSM, ISM,
+#' NIC, NNC, etc.), not FSM only. Each read is assigned to Reference / TUSCO / SIRVs
+#' ([assign_ref_tusco_sirv_set()]), mapped to a catalog transcript ID, and counted
+#' only when read set and catalog set agree.
+#'
+#' Reference rows with zero reads are dropped except tissue TUSCO transcript IDs
+#' (still shown at 0 in the Reference panel). TUSCO and SIRV keep all catalog zeros.
 build_ref_tusco_sirv_expression_df <- function(class_df, catalog_info) {
-  catalog_df <- catalog_info$catalog
+  tusco_ref_ids <- catalog_info$tusco_ref_ids
+  if (is.null(tusco_ref_ids)) {
+    tusco_ref_ids <- unique(
+      catalog_info$tusco_resolved[!is.na(catalog_info$tusco_resolved)]
+    )
+  }
+  catalog_df <- expression_catalog_df(catalog_info)
   lookup <- catalog_info$lookup
   tusco_tbl <- catalog_info$tusco_tbl
   tusco_resolved <- catalog_info$tusco_resolved
+  tusco_sets <- catalog_info$tusco_sets
+  if (is.null(tusco_sets)) {
+    tusco_sets <- load_tusco_annotation_sets(catalog_info$tusco_tissue)
+  }
 
   catalog_keys <- catalog_df %>%
-    dplyr::select(.data$transcript_set, .data$catalog_id) %>%
+    dplyr::select("transcript_set", "catalog_id") %>%
     dplyr::distinct()
 
-  observed <- class_df %>%
+  if (anyDuplicated(interaction(catalog_keys$transcript_set, catalog_keys$catalog_id))) {
+    stop(
+      "Duplicate (transcript_set, catalog_id) in expression catalog.",
+      call. = FALSE
+    )
+  }
+
+  with_tx <- class_df %>%
     dplyr::filter(
-      .data$structural_category == "full-splice_match",
-      !is.na(.data$associated_transcript)
-    ) %>%
-    dplyr::mutate(
-      catalog_id = resolve_expression_catalog_id(
-        .data$associated_transcript,
-        .data$associated_gene,
-        lookup,
-        tusco_tbl,
-        tusco_resolved
-      )
-    ) %>%
-    dplyr::filter(!is.na(.data$catalog_id)) %>%
-    dplyr::inner_join(catalog_keys, by = "catalog_id") %>%
-    dplyr::count(
-      .data$transcript_set,
-      .data$catalog_id,
-      name = "expression"
+      !is.na(.data$associated_transcript),
+      nzchar(as.character(.data$associated_transcript))
     )
 
-  catalog_df %>%
-    dplyr::left_join(observed, by = c("transcript_set", "catalog_id")) %>%
-    dplyr::mutate(value = dplyr::coalesce(.data$expression, 0L)) %>%
-    dplyr::select(-.data$expression) %>%
-    dplyr::group_by(.data$transcript_set) %>%
-    dplyr::filter(
-      .data$value <= stats::quantile(.data$value, 0.995, na.rm = TRUE)
+  chrom_col <- if ("chrom" %in% names(with_tx)) {
+    with_tx$chrom
+  } else {
+    rep(NA_character_, nrow(with_tx))
+  }
+
+  with_tx$read_set <- assign_ref_tusco_sirv_set(
+    with_tx$associated_transcript,
+    with_tx$associated_gene,
+    chrom_col,
+    tusco_sets
+  )
+  with_tx$catalog_id <- resolve_expression_catalog_id_vec(
+    with_tx$associated_transcript,
+    with_tx$associated_gene,
+    lookup,
+    tusco_tbl,
+    tusco_resolved
+  )
+
+  matched <- with_tx %>%
+    dplyr::filter(!is.na(.data$catalog_id), !is.na(.data$read_set)) %>%
+    dplyr::inner_join(
+      catalog_keys,
+      by = c("catalog_id", "read_set" = "transcript_set")
+    )
+
+  n_matched <- nrow(matched)
+  if (n_matched < sum(!is.na(with_tx$catalog_id))) {
+    message(
+      "Expression: dropped ",
+      sum(!is.na(with_tx$catalog_id)) - n_matched,
+      " reads with associated_transcript (not in catalog or set mismatch)"
+    )
+  }
+
+  observed <- matched %>%
+    dplyr::count(
+      .data$read_set,
+      .data$catalog_id,
+      name = "expression"
     ) %>%
-    dplyr::ungroup() %>%
+    dplyr::rename(transcript_set = read_set)
+
+  out <- catalog_df %>%
+    dplyr::left_join(observed, by = c("transcript_set", "catalog_id")) %>%
     dplyr::transmute(
       transcript_set = .data$transcript_set,
-      value = .data$value
+      catalog_id = .data$catalog_id,
+      value = dplyr::coalesce(.data$expression, 0L)
     )
+
+  out %>%
+    dplyr::filter(
+      .data$transcript_set != "Reference" |
+        .data$value > 0L |
+        .data$catalog_id %in% tusco_ref_ids
+    ) %>%
+    dplyr::select("transcript_set", "value")
 }
 
 plot_ref_tusco_sirv_violin <- function(
@@ -693,9 +839,17 @@ plot_ref_tusco_sirv_violin <- function(
     log_y = FALSE,
     show_x_axis = TRUE) {
   fill_col <- paper_ref_tusco_sirv_fill()
+  plot_df <- df
+  if (isTRUE(log_y)) {
+    # log10(reads + 1): catalog transcripts with 0 reads sit at 0 on the axis.
+    plot_df <- dplyr::mutate(
+      plot_df,
+      value = log10(.data$value + 1L)
+    )
+  }
 
   p <- ggplot2::ggplot(
-    df,
+    plot_df,
     ggplot2::aes(
       x = .data$transcript_set,
       y = .data$value,
@@ -728,13 +882,15 @@ plot_ref_tusco_sirv_violin <- function(
     ggplot2::theme(legend.position = "none")
 
   if (isTRUE(log_y)) {
-    sci <- scales::label_scientific(digits = 1)
     p <- p +
       ggplot2::scale_y_continuous(
-        trans = scales::log10_trans(),
         labels = function(x) {
-          counts <- 10^x
-          ifelse(counts < 1, "0", sci(counts))
+          counts <- pmax(0L, as.integer(round(10^x - 1L)))
+          ifelse(
+            counts < 1L,
+            "0",
+            scales::label_scientific(digits = 1)(counts)
+          )
         }
       )
   }
@@ -788,23 +944,21 @@ build_ref_tusco_sirv_tissue_figure_from_class <- function(
 
   expr_zero_frac <- function(class_df, tech_label) {
     expr_df <- build_ref_tusco_sirv_expression_df(class_df, catalog_info)
-    zeros <- expr_df %>%
-      dplyr::group_by(.data$transcript_set) %>%
-      dplyr::summarise(
-        n_zero = sum(.data$value == 0L),
-        n_total = dplyr::n(),
-        .groups = "drop"
-      )
+    summ <- summarize_ref_tusco_sirv_expression(expr_df)
     message(
-      "Expression zeros (", tissue_label, ", ", tech_label, "): ",
+      "Expression read counts (", tissue_label, ", ", tech_label, "): ",
       paste(
         sprintf(
-          "%s %d/%d",
-          zeros$transcript_set,
-          zeros$n_zero,
-          zeros$n_total
+          "%s catalog=%d zero=%d positive=%d (min>0=%s, max=%d, sum=%s)",
+          summ$transcript_set,
+          summ$n_catalog,
+          summ$n_zero,
+          summ$n_positive,
+          ifelse(is.na(summ$min_positive), "—", format(summ$min_positive, big.mark = ",")),
+          summ$max_reads,
+          format(summ$total_reads, big.mark = ",")
         ),
-        collapse = ", "
+        collapse = "; "
       )
     )
     expr_df

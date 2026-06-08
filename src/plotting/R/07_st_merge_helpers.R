@@ -163,7 +163,8 @@ create_tama_vs_st_upset <- function(tama_df, st_df, method = "") {
       "Intersection size" = intersection_size_annotation
     ),
     width_ratio = 0.1,
-    set_sizes = FALSE
+    set_sizes = FALSE,
+    themes = paper_upset_modify_themes()
   )
 
   upset_plot

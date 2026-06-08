@@ -355,7 +355,7 @@ p4 <- p2_kidney
 # Remove axes
 p1 <- p1 + ylab("# transcripts") + theme(
   plot.title = element_text(hjust = 0.5),
-  axis.title.y = element_text(size = 10),  
+  axis.title.y = element_text(size = 13),
   axis.title.x = element_blank(),
   axis.text.x = element_blank(),
   axis.ticks.x = element_blank()
@@ -373,13 +373,13 @@ p2 <- p2 + theme(
 
 p3 <- p3 + ylab("# transcripts") + xlab("Sample") + theme(
   plot.title = element_text(hjust = 0.5),
-  axis.title.y = element_text(size = 10),
-  axis.title.x = element_text(size = 10)
+  axis.title.y = element_text(size = 13),
+  axis.title.x = element_text(size = 13)
 )
 
 p4 <- p4 + xlab("Sample") + theme(
   plot.title = element_text(hjust = 0.5),
-  axis.title.x = element_text(size = 10),
+  axis.title.x = element_text(size = 13),
   axis.title.y = element_blank(),
   axis.text.y = element_blank(),
   axis.ticks.y = element_blank()

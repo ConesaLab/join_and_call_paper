@@ -56,7 +56,7 @@ sy5y_plot_title <- function(
   paste(main, condition, sep = "; ")
 }
 
-#' Per-panel theme (alias of `paper_panel_theme()` in `02_themes.R`).
+#' Per-panel theme for 2×2 data panels (fonts/grid; legend stripped — see corner grob).
 sy5y_mouse_panel_theme <- function() {
   if (!exists("paper_panel_theme", mode = "function")) {
     source(file.path(
@@ -64,7 +64,8 @@ sy5y_mouse_panel_theme <- function() {
       "02_themes.R"
     ))
   }
-  paper_panel_theme()
+  paper_panel_theme() +
+    ggplot2::theme(legend.position = "none")
 }
 
 #' Patchwork figure title (alias of `paper_figure_title_theme()`).
@@ -86,12 +87,17 @@ sy5y_figure_annotation <- function(title = NULL, x_label = NULL) {
       "02_themes.R"
     ))
   }
+  if (length(x_label) == 1L && identical(x_label, "Sample")) {
+    x_label <- NULL
+  }
   paper_figure_annotation(title = title, x_label = x_label)
 }
 
 # Denominator for expression-bar "Unassigned" (see sy5y_read_numbers_for_expression).
 ont_r10_sy5y_expression_total_col <- "ont_fastq"
 
+#' PDF size classes for ONT R10 figures (see `FIG_SIZE` in `00_figure_config.R`):
+#' `sy5y_2x2`, `sy5y_tpm_2x2` (12×9 in), `sy5y_legend_strip`, `sy5y_read_level_panel`, `sy5y_read_level_combo`.
 ont_r10_sy5y_ylims <- list(
   structural      = NULL,
   expression      = NULL,
@@ -106,7 +112,12 @@ ont_r10_sy5y_ylims <- list(
 )
 
 check_paths_ont_r10 <- function() {
-  required <- c("Bclass_df_list.RData")
+  #' Plot drivers load one of these (see [load_sy5y_bclass_list]).
+  rdata_files <- c(
+    "SY5Y_class_df_list.RData",
+    "Bclass_df_list.RData",
+    "all_class_data.RData"
+  )
   for (nm in names(ont_r10_report_dirs)) {
     d <- ont_r10_report_dirs[[nm]]
     if (!dir.exists(d)) {
@@ -114,19 +125,71 @@ check_paths_ont_r10 <- function() {
       next
     }
     cat(sprintf("[ONT R10] OK [%s]: %s\n", nm, d))
-    for (f in required) {
+
+    found_rdata <- NULL
+    for (f in rdata_files) {
       fp <- file.path(d, f)
-      if (!file.exists(fp)) {
-        cat(sprintf("  Missing file: %s (re-run prepare_report after generate_report_rdata.R update)\n", f))
-      } else {
+      if (file.exists(fp)) {
         cat(sprintf("  Found: %s\n", f))
+        found_rdata <- f
+        break
       }
     }
+    if (is.null(found_rdata)) {
+      cat(
+        "  Missing plot RData (need SY5Y_class_df_list.RData from generate_report_rdata.R)\n",
+        "  Note: Bclass_df_list.RData is only written for mouse condition B100K0, not SY5Y.\n",
+        sep = ""
+      )
+    }
+
     d_sy5y <- file.path(d, "data", "classification_SY5Y")
     if (!dir.exists(d_sy5y)) {
-      cat(sprintf("  Optional: no data/classification_SY5Y under report\n"))
+      cat("  Missing raw data: data/classification_SY5Y/\n")
+    } else {
+      n_class <- length(list.files(
+        d_sy5y,
+        pattern = "_classification\\.txt$",
+        full.names = FALSE
+      ))
+      cat(sprintf(
+        "  Raw SQANTI classifications: %d file(s) under data/classification_SY5Y/ (expect 6)\n",
+        n_class
+      ))
+      if (n_class < 6L) {
+        cat("  Incomplete replicate set — re-run prepare_report.sh for this tool.\n")
+      } else if (is.null(found_rdata)) {
+        cat(
+          "  Raw inputs look complete; run prepare_report.sh (R step) to create SY5Y_class_df_list.RData.\n"
+        )
+      }
+    }
+
+    fofn <- file.path(d, "data", "classification_SY5Y.fofn")
+    if (file.exists(fofn)) {
+      paths <- readLines(fofn, warn = FALSE)
+      paths <- paths[nzchar(paths)]
+      n_missing <- sum(!file.exists(paths))
+      if (n_missing > 0L) {
+        cat(sprintf(
+          "  Warning: %d path(s) in classification_SY5Y.fofn do not exist here (cluster paths?).\n",
+          n_missing
+        ))
+        cat("  Regenerate .fofn locally before running generate_report_rdata.R.\n")
+      }
     }
   }
+
+  rn <- file.path(ont_r10_read_qc_dir, "read_numbers_joint.tsv")
+  if (file.exists(rn)) {
+    cat(sprintf("[ONT R10 read-level] OK: %s\n", rn))
+  } else {
+    cat(sprintf(
+      "[ONT R10 read-level] Missing: %s (needed for expression + read_level Rmds)\n",
+      rn
+    ))
+  }
+
   invisible(ont_r10_report_dirs)
 }
 

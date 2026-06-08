@@ -64,7 +64,45 @@ paper_geom_stripped_rows <- function(
     ...,
     width = width,
     nudge_y = nudge_y,
-    color = PAPER_DUMBBELL_STRIPE_COLORS
+    odd = PAPER_DUMBBELL_STRIPE_COLORS[[1L]],
+    even = PAPER_DUMBBELL_STRIPE_COLORS[[2L]]
+  )
+}
+
+#' Default x breaks for dumbbell metric panels (0–100%).
+PAPER_DUMBBELL_X_BREAKS <- seq(0, 100, by = 20)
+
+#' Vertical guidelines for dumbbell plots.
+#' Striped-row geoms paint over `panel.grid`, so guides are drawn as a geom on top.
+paper_geom_dumbbell_vguides <- function(breaks = PAPER_DUMBBELL_X_BREAKS) {
+  ggplot2::geom_vline(
+    xintercept = breaks,
+    colour = PAPER_GRID_MAJOR,
+    linewidth = 0.4
+  )
+}
+
+#' Shared x scale for dumbbell metric panels.
+paper_dumbbell_x_scale <- function(
+    limits = c(0, 100),
+    breaks = PAPER_DUMBBELL_X_BREAKS) {
+  ggplot2::scale_x_continuous(
+    limits = limits,
+    breaks = breaks,
+    expand = ggplot2::expansion(mult = c(0.03, 0.03))
+  )
+}
+
+#' Vertical x-axis grid via theme (backup; usually hidden under striped rows).
+paper_dumbbell_grid_theme <- function() {
+  ggplot2::theme(
+    panel.grid.major.x = ggplot2::element_line(
+      colour = PAPER_GRID_MAJOR,
+      linewidth = 0.4
+    ),
+    panel.grid.minor.x = ggplot2::element_blank(),
+    panel.grid.major.y = ggplot2::element_blank(),
+    panel.grid.minor.y = ggplot2::element_blank()
   )
 }
 
@@ -74,7 +112,8 @@ paper_dumbbell_theme <- function(
     legend_box = NULL,
     show_legend = TRUE) {
   f <- .paper_font
-  th <- paper_theme(base_size = 12) +
+  th <- paper_theme() +
+    paper_dumbbell_grid_theme() +
     ggplot2::theme(
       plot.title         = ggplot2::element_text(
         hjust = 0.5, face = "bold", size = f("panel")
@@ -83,9 +122,7 @@ paper_dumbbell_theme <- function(
       axis.text.y        = ggplot2::element_text(face = "bold", size = f("tick")),
       legend.title       = ggplot2::element_text(size = f("legend_title"), face = "bold"),
       legend.text        = ggplot2::element_text(size = f("legend_text")),
-      legend.position    = if (isTRUE(show_legend)) legend_position else "none",
-      panel.grid.major   = ggplot2::element_blank(),
-      panel.grid.minor   = ggplot2::element_blank()
+      legend.position    = if (isTRUE(show_legend)) legend_position else "none"
     )
   if (!is.null(legend_box)) {
     th <- th + ggplot2::theme(legend.box = legend_box)
@@ -110,7 +147,7 @@ paper_axis_text_y <- function() {
 }
 
 #' Base minimal theme with paper typography.
-paper_theme <- function(base_size = 11, facet_dense = FALSE) {
+paper_theme <- function(base_size = 13, facet_dense = FALSE) {
   f <- .paper_font
   ggplot2::theme_minimal(base_size = base_size) +
     paper_white_background_theme() +
@@ -172,6 +209,91 @@ paper_read_level_theme <- function() {
     )
 }
 
+#' Outline colours for stacked SQANTI bars (black border on Unaligned only).
+paper_sqanti_stack_outline_values <- function(
+    fill_values,
+    unaligned_label = "Unaligned") {
+  outline <- fill_values
+  if (unaligned_label %in% names(outline)) {
+    outline[[unaligned_label]] <- "black"
+  }
+  outline
+}
+
+#' Faceted SQANTI-reads structural-category stacked bars (mouse NIH + SY5Y).
+#'
+#' Only the white Unaligned segment gets a black outline; other categories use an
+#' outline colour matching fill so segment borders are not visible.
+paper_plot_sqanti_faceted <- function(
+    counts_df,
+    fill_values,
+    legend_breaks,
+    legend_labels,
+    title = NULL,
+    technology_labels = c(pacbio = "PacBio", ont = "ONT"),
+    unaligned_label = "Unaligned",
+    show_technology_axis = TRUE) {
+  if (nrow(counts_df) == 0L || sum(counts_df$num_reads, na.rm = TRUE) <= 0) {
+    stop("No read counts to plot (empty category_counts).", call. = FALSE)
+  }
+  if (any(is.na(counts_df$category_label))) {
+    stop(
+      sum(is.na(counts_df$category_label)),
+      " rows have NA category_label (factor level mismatch).",
+      call. = FALSE
+    )
+  }
+
+  outline_values <- paper_sqanti_stack_outline_values(
+    fill_values,
+    unaligned_label = unaligned_label
+  )
+
+  p <- ggplot2::ggplot(
+    counts_df,
+    ggplot2::aes(
+      x = .data$technology,
+      y = .data$num_reads,
+      fill = .data$category_label,
+      colour = .data$category_label
+    )
+  ) +
+    ggplot2::geom_bar(
+      stat = "identity",
+      width = 0.8,
+      position = ggplot2::position_stack(reverse = TRUE),
+      linewidth = 0.15
+    ) +
+    ggplot2::scale_colour_manual(values = outline_values, guide = "none") +
+    ggplot2::scale_fill_manual(
+      name = "Structural Category",
+      values = fill_values,
+      breaks = legend_breaks,
+      labels = legend_labels,
+      drop = FALSE
+    ) +
+    paper_read_count_y_scale() +
+    ggplot2::labs(x = NULL, y = "Number of reads", title = title) +
+    paper_read_level_theme() +
+    ggplot2::theme(
+      legend.position = "right",
+      legend.box = "vertical"
+    )
+
+  if (isTRUE(show_technology_axis)) {
+    p <- p + ggplot2::scale_x_discrete(labels = technology_labels)
+  } else {
+    p <- p +
+      ggplot2::scale_x_discrete(labels = NULL) +
+      ggplot2::theme(
+        axis.text.x = ggplot2::element_blank(),
+        axis.ticks.x = ggplot2::element_blank()
+      )
+  }
+
+  p
+}
+
 #' Read-level count y-axis: scientific notation; limits and breaks are per-plot.
 paper_read_count_y_scale <- function() {
   sci <- scales::label_scientific(digits = 1)
@@ -209,7 +331,7 @@ tpm_panel_theme <- function(
     )
   }
   bottom_margin <- if (isTRUE(log_x)) 12 else 10
-  paper_panel_theme() +
+  tpm_line_theme() +
     x_theme +
     ggplot2::theme(
       plot.margin = ggplot2::margin(
@@ -247,6 +369,44 @@ paper_figure_annotation <- function(title = NULL, x_label = NULL) {
   do.call(patchwork::plot_annotation, args)
 }
 
+#' Patchwork design for mouse 10-panel figures (`all_plots.Rmd`).
+PAPER_MOUSE_10PANEL_DESIGN_IJKM <- "
+        ABCD
+        EFGG
+        HHHH
+        IJKM
+"
+
+PAPER_MOUSE_10PANEL_DESIGN_IJKL <- "
+        ABCD
+        EFGG
+        HHHH
+        IJKL
+"
+
+#' @param heights Row heights (top → bottom), including spacer row.
+#' @param design One of [PAPER_MOUSE_10PANEL_DESIGN_IJKM] or `_IJKL`.
+paper_mouse_10panel_plot_layout <- function(
+    heights,
+    design = PAPER_MOUSE_10PANEL_DESIGN_IJKM,
+    axes = "collect_y",
+    axis_titles = "collect") {
+  patchwork::plot_layout(
+    design = design,
+    heights = heights,
+    axes = axes,
+    axis_titles = axis_titles
+  )
+}
+
+#' Theme applied to assembled patchwork figures (legend off; shared x title centered).
+paper_figure_patchwork_theme <- function() {
+  ggplot2::theme(
+    legend.position = "none",
+    axis.title.x = ggplot2::element_text(hjust = 0.5)
+  )
+}
+
 #' UpSet / boxplot subpanels (replaces theme_Publication for paper figures).
 paper_upset_theme <- function() {
   paper_theme() +
@@ -256,6 +416,32 @@ paper_upset_theme <- function() {
       axis.text.x = ggplot2::element_blank(),
       axis.ticks.x = ggplot2::element_blank()
     )
+}
+
+#' ComplexUpset sub-panel themes (matrix set labels at `matrix_label_size` or PAPER_FONTS$tick).
+paper_upset_modify_themes <- function(matrix_label_size = NULL, extra = list()) {
+  matrix_text <- if (is.null(matrix_label_size)) {
+    paper_axis_text_y()
+  } else {
+    ggplot2::element_text(size = matrix_label_size)
+  }
+  base <- list(
+    intersections_matrix = ggplot2::theme(
+      axis.text.y = matrix_text,
+      axis.title.x = ggplot2::element_blank(),
+      axis.text.x = ggplot2::element_blank(),
+      axis.ticks.x = ggplot2::element_blank()
+    ),
+    `Intersection size` = ggplot2::theme(
+      axis.title.x = ggplot2::element_blank(),
+      axis.text.x = ggplot2::element_blank(),
+      axis.ticks.x = ggplot2::element_blank()
+    )
+  )
+  if (length(extra)) {
+    base <- c(base, extra)
+  }
+  ComplexUpset::upset_modify_themes(base)
 }
 
 #' @rdname paper_upset_theme
@@ -268,7 +454,11 @@ bar_theme <- function(plot, title, ylims) {
     ggplot2::scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) +
     ggplot2::ggtitle(title) +
     paper_panel_theme() +
-    ggplot2::theme(legend.position = "none") +
+    ggplot2::labs(x = NULL) +
+    ggplot2::theme(
+      legend.position = "none",
+      axis.title.x = ggplot2::element_blank()
+    ) +
     ggplot2::coord_cartesian(ylim = ylims)
 }
 

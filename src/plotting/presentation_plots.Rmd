@@ -86,7 +86,7 @@ make_pres_bar <- function(results, tissue, title, ylims, labels) {
     paper_panel_theme() +
     theme(
       plot.title   = element_text(hjust = 0.5, size = 18, face = "bold"),
-      axis.text.x  = element_text(size = 11, angle = 45, hjust = 1),
+      axis.text.x  = element_text(size = 13, angle = 45, hjust = 1),
       axis.title.x = element_blank(),
       legend.position = "none"
     ) +
@@ -145,7 +145,7 @@ fl_upset <- create_upset_plot(fl_b_filtered, pres_upset_labels_brain,
 upset_legend_src <- iq_upset[["comb_bar"]] +
   theme(legend.position = "right",
         legend.title = element_text(size = 13, face = "bold"),
-        legend.text  = element_text(size = 11)) +
+        legend.text  = element_text(size = 13)) +
   guides(fill = guide_legend(ncol = 1, title = "Structural Category"))
 upset_legend <- cowplot::get_legend(upset_legend_src)
 
@@ -175,7 +175,7 @@ iq_comb_fl <- pres_data$IsoSeq$IsoQuant$brain_comb_fl_bar_plot +
   ggtitle("IsoQuant") +
   theme(
     plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
-    axis.text  = element_text(size = 11),
+    axis.text  = element_text(size = 13),
     axis.title = element_text(size = 13),
     legend.position = "none"
   ) +
@@ -186,7 +186,7 @@ fl_comb_fl <- pres_data$IsoSeq$FLAIR$brain_comb_fl_bar_plot +
   ylab(NULL) +
   theme(
     plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
-    axis.text  = element_text(size = 11),
+    axis.text  = element_text(size = 13),
     axis.title = element_text(size = 13),
     legend.position = "none"
   ) +
@@ -316,6 +316,7 @@ build_pres_dumbbell <- function(metrics_long, title) {
       data = metrics_wide, aes(y = metric),
       width = 1, nudge_y = 0
     ) +
+    paper_geom_dumbbell_vguides() +
     geom_segment(
       data = metrics_wide,
       aes(x = concat, xend = tama, y = metric, yend = metric,
@@ -352,8 +353,7 @@ build_pres_dumbbell <- function(metrics_long, title) {
       guide = guide_legend(
         override.aes = list(fill = "black", size = 3), order = 2)
     ) +
-    scale_x_continuous(limits = c(0, 100),
-                       expand = expansion(mult = c(0.03, 0.03))) +
+    paper_dumbbell_x_scale() +
     scale_y_discrete(labels = metric_full_names) +
     coord_cartesian(clip = "off") +
     labs(x = "Metric value (%)", y = NULL, title = title) +
@@ -384,7 +384,7 @@ legend_src_db <- build_pres_dumbbell(iq_long, "") +
   theme(legend.position = "right",
         legend.box = "vertical",
         legend.title = element_text(size = 13, face = "bold"),
-        legend.text  = element_text(size = 11))
+        legend.text  = element_text(size = 13))
 db_legend <- cowplot::get_legend(legend_src_db)
 
 x_title_grob <- wrap_elements(full = grid::textGrob(

@@ -59,7 +59,7 @@ From there, plots can be generated with the scripts in `src/plotting/`, primaril
 
 - Mouse/paper PDFs → repository root `plot_creation/` (via `plot_creation_dir()` and `paper_ggsave()`).
 - ONT R10 SY5Y PDFs → `plot_creation_ont_r10/` (via `plot_creation_ont_r10_dir()`).
-- Shared point sizes in `PAPER_FONTS`: tick 11 is the minimum (axis 12, strip 11, legend 12/14, panel 16, figure 22); rotated x tick labels use 90° via `paper_axis_text_x()`.
+- Shared point sizes in `PAPER_FONTS`: tick 13 is the minimum (axis 13, strip 13, legend 13/14, panel 16, figure 22); rotated x tick labels use 90° via `paper_axis_text_x()`.
 - Canonical export widths: **18 in** for full-width multi-panel figures (`FIG_SIZE$mouse_10panel`, `FIG_SIZE$sy5y_2x2`, etc.) so LaTeX `\textwidth` scaling is consistent.
 
 Source `00_figure_config.R` before `02_themes.R` in each driver notebook.

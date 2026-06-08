@@ -94,10 +94,12 @@ create_cross_tool_upset <- function(all_results, platform, tissue,
   ) +
     scale_fill_manual(values = cross_tool_category_colors, name = "Structural Category") +
     ggtitle(platform) +
-    paper_panel_theme() +
-    theme(
-      axis.title.y = element_blank(),
-      legend.position = "none"
+    paper_upset_theme() +
+    ggplot2::theme(
+      axis.title.y = ggplot2::element_blank(),
+      plot.title = ggplot2::element_text(
+        hjust = 0.5, size = .paper_font("panel"), face = "bold"
+      )
     )
 
   upset_plot <- ComplexUpset::upset(
@@ -110,12 +112,52 @@ create_cross_tool_upset <- function(all_results, platform, tissue,
     ),
     n_intersections = n_intersections,
     width_ratio     = 0.1,
-    set_sizes       = FALSE
+    set_sizes       = FALSE,
+    themes = paper_upset_modify_themes()
   )
 
   upset_plot
 }
 
+
+#' Shared y limits for paired Iso-Seq / ONT cross-tool bar panels.
+cross_tool_bar_shared_ylim <- function(..., expand = 0.05) {
+  ymax <- 0
+  for (p in list(...)) {
+    if (!inherits(p, "ggplot")) next
+    built <- ggplot2::ggplot_build(p)
+    ymax <- max(
+      ymax,
+      built$layout$panel_params[[1L]]$y.range[2L],
+      na.rm = TRUE
+    )
+  }
+  c(0, ymax * (1 + expand))
+}
+
+#' Shared x-axis label for cross-tool bar figures (centered via [paper_figure_annotation]).
+CROSS_TOOL_BAR_X_LABEL <- "# tools detecting UJC"
+
+#' Per-panel styling before patchwork assembly (shared ylim; no per-panel xlab).
+strip_cross_tool_bar_panel <- function(p, ylims = NULL, strip_ylab = FALSE) {
+  if (!is.null(ylims)) {
+    p <- p +
+      ggplot2::scale_y_continuous(
+        limits = ylims,
+        labels = function(x) format(x, big.mark = ",", scientific = FALSE)
+      )
+  }
+  p <- p +
+    ggplot2::labs(x = NULL) +
+    ggplot2::theme(
+      legend.position = "none",
+      axis.title.x = ggplot2::element_blank()
+    )
+  if (isTRUE(strip_ylab)) {
+    p <- p + ggplot2::theme(axis.title.y = ggplot2::element_blank())
+  }
+  p
+}
 
 create_cross_tool_bar <- function(all_results, platform, tissue,
                                   fl_filter_level = "1") {
@@ -135,8 +177,8 @@ create_cross_tool_bar <- function(all_results, platform, tissue,
     geom_col(width = 0.7) +
     scale_fill_manual(values = cross_tool_category_colors, name = "Structural Category") +
     scale_y_continuous(labels = function(x) format(x, big.mark = ",", scientific = FALSE)) +
-    labs(x = "# tools detecting UJC", y = "# UJCs", title = platform) +
-    paper_theme() +
+    labs(x = NULL, y = "# UJCs", title = platform) +
+    paper_panel_theme() +
     theme(legend.position = "none")
 }
 
@@ -161,9 +203,15 @@ assemble_cross_tool_figure <- function(isoseq_upset, ont_upset, title) {
 }
 
 
-assemble_cross_tool_bar_figure <- function(isoseq_bar, ont_bar, title) {
+assemble_cross_tool_bar_figure <- function(
+    isoseq_bar,
+    ont_bar,
+    title,
+    x_label = CROSS_TOOL_BAR_X_LABEL) {
 
-  legend_src <- isoseq_bar +
+  ylims <- cross_tool_bar_shared_ylim(isoseq_bar, ont_bar)
+
+  legend_src <- strip_cross_tool_bar_panel(isoseq_bar, ylims) +
     ggplot2::theme(legend.position = "right") +
     ggplot2::guides(
       fill = ggplot2::guide_legend(
@@ -177,21 +225,26 @@ assemble_cross_tool_bar_figure <- function(isoseq_bar, ont_bar, title) {
   }
 
   isoseq_panel <- paper_tag_panel(
-    isoseq_bar + ggplot2::theme(legend.position = "none"),
+    strip_cross_tool_bar_panel(isoseq_bar, ylims),
     "a"
   )
   ont_panel <- paper_tag_panel(
-    ont_bar + ggplot2::theme(legend.position = "none"),
+    strip_cross_tool_bar_panel(ont_bar, ylims, strip_ylab = TRUE),
     "b"
   )
 
-  (isoseq_panel | ont_panel | legend_grob) +
+  figure <- (isoseq_panel | ont_panel | legend_grob) +
     patchwork::plot_layout(
       widths = c(1, 1, 0.32),
-      guides = "keep"
-    ) +
-    patchwork::plot_annotation(
-      title = title,
-      theme = paper_figure_title_theme()
+      guides = "keep",
+      axes = "collect_y",
+      axis_titles = "keep"
     )
+
+  ann <- paper_figure_annotation(title = title, x_label = x_label)
+  if (!is.null(ann)) {
+    figure <- figure + ann
+  }
+
+  figure & paper_figure_patchwork_theme()
 }

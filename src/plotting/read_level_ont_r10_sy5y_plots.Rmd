@@ -15,8 +15,8 @@ output:
 ---
 
 Read-level figures aligned with mouse `read_figure_plots.Rmd`: SQANTI-reads structural
-categories, stacked FASTQ vs primary-mapped counts, and BAM read-length violins
-(99.5% quantile trim). **ONT only** (four SY5Y replicates).
+categories and primary-alignment read-length violins. **ONT only** (four SY5Y replicates).
+Plot styling is shared via `08_read_level_plots.R` (same as mouse).
 
 ### Mouse (NIH) vs this R10 pipeline (important)
 
@@ -44,8 +44,8 @@ knitr::opts_chunk$set(
   message = FALSE,
   warning = FALSE,
   fig.align = "center",
-  fig.width = 12,
-  fig.height = 8
+  fig.width = 10,
+  fig.height = 6
 )
 
 required_cran <- c(
@@ -79,6 +79,7 @@ library(forcats)
 r_source_dir <- if (dir.exists("R")) "R" else "src/plotting/R"
 source(file.path(r_source_dir, "00_figure_config.R"))
 source(file.path(r_source_dir, "02_themes.R"))
+source(file.path(r_source_dir, "08_read_level_plots.R"))
 source(file.path(r_source_dir, "01_config_ont_r10.R"))
 source(file.path(r_source_dir, "08_read_level_sy5y.R"))
 
@@ -135,39 +136,32 @@ sq_reads_plot <- plot_read_level_sqanti_faceted(
   title = ont_r10_sy5y_condition_label
 )
 sq_reads_plot
+paper_ggsave(
+  file.path(out_dir, "sy5y_sq_reads_plot.pdf"),
+  plot = sq_reads_plot,
+  size = "sy5y_read_level_panel"
+)
 ```
 
-```{r readnum-plot}
-readnum_tidy <- build_sy5y_readnum_tidy(
-  read_numbers,
-  sample_ids,
-  sample_labels,
-  category_counts = category_counts_sy5y
-)
-readnum_plot <- plot_sy5y_readnum_faceted(
-  readnum_tidy,
-  title = ont_r10_sy5y_condition_label
-)
-readnum_plot
-```
-
-```{r lengths}
+```{r read-lengths}
 length_ont_dir <- file.path(ont_r10_read_qc_dir, "lengths_seq_only", "ont")
-all_lengths_df <- build_sy5y_lengths_df(length_ont_dir, sample_ids, sample_labels)
+lengths_df <- build_sy5y_lengths_df(length_ont_dir, sample_ids, sample_labels)
 lengths_violin <- plot_sy5y_lengths_violin(
-  all_lengths_df,
+  lengths_df,
   title = ont_r10_sy5y_condition_label
 )
 lengths_violin
+paper_ggsave(
+  file.path(out_dir, "sy5y_lengths_violin.pdf"),
+  plot = lengths_violin,
+  size = "sy5y_read_level_panel"
+)
 ```
 
 ```{r combined-patchwork}
-sy5y_read_level_combined <- patchwork::wrap_plots(
-  L = sq_reads_plot +
-    theme(legend.position = "right", plot.title = element_blank(), plot.margin = margin(r = 12)),
-  R = lengths_violin +
-    theme(plot.title = element_blank(), plot.margin = margin(l = 12)),
-  design = "LR"
+sy5y_read_level_combined <- assemble_sy5y_read_level_combined(
+  sq_reads_plot,
+  lengths_violin
 )
 sy5y_read_level_combined
 ```
@@ -176,12 +170,13 @@ sy5y_read_level_combined
 paper_ggsave(
   file.path(out_dir, "sy5y_read_level_combined.pdf"),
   plot = sy5y_read_level_combined,
-  size = "read_level_combo"
+  size = "sy5y_read_level_combo"
 )
 ```
 
 PDF written under `plot_creation_ont_r10/`:
 
+- `sy5y_sq_reads_plot.pdf`, `sy5y_lengths_violin.pdf`
 - `sy5y_read_level_combined.pdf` (SQANTI-reads stack + read-length violins)
 
 Render from the repository:

@@ -190,13 +190,14 @@ sy5y_panel_tool_title <- function(plot, tool_name) {
 
 sy5y_structural_panel <- function(panels, tool_name) {
   ylims <- ont_r10_sy5y_ylims$structural
-  p <- style_sy5y_count_y(strip_legend(panels$count)) +
+  p <- style_sy5y_count_y(panels$count) +
     ggplot2::labs(y = "# isoforms")
   if (!is.null(ylims) && length(ylims) == 2L && !any(is.na(ylims))) {
-    bar_theme(p, tool_name, ylims)
+    p <- bar_theme(p, tool_name, ylims)
   } else {
-    sy5y_panel_tool_title(p, tool_name)
+    p <- sy5y_panel_tool_title(p, tool_name)
   }
+  strip_legend(p)
 }
 
 sy5y_comb_panel_theme <- function(
@@ -206,8 +207,8 @@ sy5y_comb_panel_theme <- function(
     ylab = NULL,
     show_ylab = TRUE,
     show_y_ticks = TRUE) {
-  p <- strip_legend(plot) +
-    ggplot2::labs(title = tool_name) +
+  p <- plot +
+    ggplot2::labs(title = tool_name, x = NULL) +
     sy5y_mouse_panel_theme()
   if (!is.null(ylims) && length(ylims) == 2L && !any(is.na(ylims)) &&
       ylims[1] == 0 && ylims[2] %in% c(50, 65, 100)) {
@@ -218,12 +219,13 @@ sy5y_comb_panel_theme <- function(
   if (!is.null(ylab) && nzchar(ylab) && isTRUE(show_ylab)) {
     p <- p + ggplot2::labs(y = ylab)
   } else {
+    p <- p + ggplot2::labs(y = NULL)
     p <- sy5y_strip_ylab(p)
   }
   if (!isTRUE(show_y_ticks)) {
     p <- sy5y_strip_y_ticks(p)
   }
-  p
+  strip_legend(p)
 }
 
 #' Percent UJC occurrence / expression panels (shared 0–100% y-scale).
@@ -231,23 +233,28 @@ sy5y_ujc_percent_panel <- function(panel_name) {
   panel_name %in% c("perc_comb_bar", "perc_comb_fl_bar")
 }
 
-sy5y_legend_from_plot <- function(legend_plot) {
-  cowplot::get_legend(
-    legend_plot +
-      ggplot2::theme(
-        legend.position = "right",
-        legend.key.size = grid::unit(0.5, "cm"),
-        legend.text = ggplot2::element_text(size = 12),
-        legend.title = ggplot2::element_text(size = 14)
-      )
+#' Legend theme for extracted grobs (matches [PAPER_FONTS]).
+sy5y_legend_theme <- function() {
+  ggplot2::theme(
+    legend.position = "right",
+    legend.key.size = grid::unit(0.5, "cm"),
+    legend.text = ggplot2::element_text(size = .paper_font("legend_text")),
+    legend.title = ggplot2::element_text(
+      size = .paper_font("legend_title"),
+      face = "bold"
+    )
   )
+}
+
+sy5y_legend_from_plot <- function(legend_plot) {
+  cowplot::get_legend(legend_plot + sy5y_legend_theme())
 }
 
 sy5y_legend_column <- function(legend_grob) {
   patchwork::wrap_elements(full = legend_grob, clip = FALSE)
 }
 
-#' Patchwork layout: y/x ticks on every panel; one ylab per row via [sy5y_strip_ylab] (not patchwork title collect).
+#' Patchwork layout: y/x ticks on every panel; ylab on left column only (top-right FLAIR stripped).
 sy5y_ont_r10_patchwork_layout <- function(widths = c(1, 1), heights = c(1, 1)) {
   patchwork::plot_layout(
     widths = widths,
@@ -261,7 +268,9 @@ sy5y_ont_r10_patchwork_layout <- function(widths = c(1, 1), heights = c(1, 1)) {
 #' Remove y-axis title (right-hand panels; left column in each row keeps ylab).
 sy5y_strip_ylab <- function(p) {
   if (inherits(p, "ggplot")) {
-    p <- p + ggplot2::theme(axis.title.y = ggplot2::element_blank())
+    p <- p +
+      ggplot2::labs(y = NULL) +
+      ggplot2::theme(axis.title.y = ggplot2::element_blank())
   }
   p
 }
@@ -298,29 +307,27 @@ sy5y_ujc_default_x_label <- function(panel_name) {
   }
 }
 
-#' TPM / filter-level panel: ylab on left column only; x tick labels on every panel; shared xlab via caption.
+#' TPM / filter-level panel: no legend; ylab on top-left only; shared xlab via [sy5y_figure_annotation].
 sy5y_tpm_panel <- function(
     plot,
     ylab,
-    strip_x_title = TRUE,
-    show_ylab = TRUE,
+    show_ylab = FALSE,
     log_x = FALSE,
     x_tick_angle = 0,
     x_tick_hjust = NULL) {
-  p <- plot
-  if (isTRUE(show_ylab)) {
-    p <- p + ggplot2::labs(y = ylab)
-  } else {
-    p <- p + ggplot2::theme(axis.title.y = ggplot2::element_blank())
-  }
-  if (isTRUE(strip_x_title)) {
-    p <- sy5y_strip_x_title(p)
-  }
-  p + tpm_panel_theme(
+  p <- plot +
+    ggplot2::labs(x = NULL, y = if (isTRUE(show_ylab)) ylab else NULL) +
+    ggplot2::theme(legend.position = "none")
+  p <- sy5y_strip_x_title(p)
+  p <- p + tpm_panel_theme(
     x_tick_angle = x_tick_angle,
     x_tick_hjust = x_tick_hjust,
     log_x = log_x
   )
+  if (!isTRUE(show_ylab)) {
+    p <- sy5y_strip_ylab(p)
+  }
+  p
 }
 
 #' Core 2×2 layout: IsoQuant | FLAIR / Bambu | legend.
@@ -336,6 +343,9 @@ assemble_ont_r10_three_tool_grid <- function(
     flair_col <- sy5y_strip_x_title(flair_col)
     bambu_col <- sy5y_strip_x_title(bambu_col)
   }
+  iso_col <- strip_legend(iso_col)
+  flair_col <- strip_legend(flair_col)
+  bambu_col <- strip_legend(bambu_col)
   leg_col <- sy5y_legend_column(legend_grob)
   core <- (
     iso_col | sy5y_strip_ylab(flair_col)
@@ -347,18 +357,32 @@ assemble_ont_r10_three_tool_grid <- function(
   if (!is.null(ann)) {
     core <- core + ann
   }
-  core
+  core &
+    ggplot2::theme(
+      legend.position = "none",
+      legend.title = ggplot2::element_text(
+        size = .paper_font("legend_title"),
+        face = "bold"
+      ),
+      legend.text = ggplot2::element_text(size = .paper_font("legend_text"))
+    )
 }
 
 #' 2×2 structural category count grid.
-assemble_ont_r10_tool_grid <- function(iso_panels, flair_panels, bambu_panels, title = NULL) {
+assemble_ont_r10_tool_grid <- function(
+    iso_panels,
+    flair_panels,
+    bambu_panels,
+    title = NULL,
+    x_label = NULL) {
   leg <- sy5y_legend_from_plot(iso_panels$count)
   assemble_ont_r10_three_tool_grid(
     sy5y_structural_panel(iso_panels, "IsoQuant"),
     sy5y_structural_panel(flair_panels, "FLAIR"),
     sy5y_structural_panel(bambu_panels, "Bambu"),
     leg,
-    title = title
+    title = title,
+    x_label = x_label
   )
 }
 
@@ -468,7 +492,7 @@ assemble_ont_r10_ujc_ggplot_grid <- function(
     ),
     sy5y_comb_panel_theme(
       fl_p, "FLAIR", ylims, ylab,
-      show_ylab = !pct, show_y_ticks = !pct
+      show_ylab = FALSE, show_y_ticks = !pct
     ),
     sy5y_comb_panel_theme(
       bm_p, "Bambu", ylims, ylab,
@@ -508,12 +532,7 @@ assemble_ont_r10_compare_grid <- function(
   leg <- cowplot::get_legend(
     iso_base +
       ggplot2::guides(fill = ggplot2::guide_legend(ncol = 3, nrow = 2)) +
-      ggplot2::theme(
-        legend.position = "right",
-        legend.key.size = grid::unit(0.5, "cm"),
-        legend.text = ggplot2::element_text(size = 12),
-        legend.title = ggplot2::element_text(size = 14)
-      )
+      sy5y_legend_theme()
   )
   cmp_col <- function(tool_name) {
     compare_theme(all_results[[tool_name]]$compare[[panel_name]], tool_name)
@@ -661,25 +680,32 @@ sy5y_expression_panel <- function(
   list(count = ps[[1L]])
 }
 
-assemble_ont_r10_expression_grid <- function(all_results, title = NULL) {
+assemble_ont_r10_expression_grid <- function(
+    all_results,
+    title = NULL,
+    x_label = NULL) {
   ylims <- ont_r10_sy5y_ylims$expression
-  expr_col <- function(tool_name) {
-    p <- all_results[[tool_name]]$expression$count
-    p <- strip_legend(style_sy5y_expr_y(p))
+  expr_col <- function(tool_name, show_ylab = TRUE) {
+    p <- style_sy5y_expr_y(all_results[[tool_name]]$expression$count)
     if (!is.null(ylims) && length(ylims) == 2L && !any(is.na(ylims))) {
       p <- bar_theme(p, tool_name, ylims)
     } else {
       p <- sy5y_panel_tool_title(p, tool_name)
     }
-    p + ggplot2::labs(y = "# reads")
+    p <- p + ggplot2::labs(y = "# reads", x = NULL)
+    if (!isTRUE(show_ylab)) {
+      p <- sy5y_strip_ylab(p)
+    }
+    strip_legend(p)
   }
   leg <- sy5y_legend_from_plot(all_results$IsoQuant$expression$count)
   assemble_ont_r10_three_tool_grid(
-    expr_col("IsoQuant"),
-    expr_col("FLAIR"),
-    expr_col("Bambu"),
+    expr_col("IsoQuant", show_ylab = TRUE),
+    expr_col("FLAIR", show_ylab = FALSE),
+    expr_col("Bambu", show_ylab = TRUE),
     leg,
-    title = title
+    title = title,
+    x_label = x_label
   )
 }
 
@@ -733,29 +759,39 @@ build_sy5y_tpm_curve_data <- function(class_df_list, fl_threshold = 1) {
   )
 }
 
-#' 2×2 TPM line-plot figure (log or linear x).
+#' 2×2 TPM line-plot figure (log or linear x); legends in bottom-right column only.
 assemble_ont_r10_tpm_line_figure <- function(
     line_plots,
     title,
     log_x = FALSE,
     ylab = "# transcripts") {
-  p_iso <- sy5y_tpm_panel(line_plots$IsoQuant, ylab, show_ylab = TRUE, log_x = log_x)
+  p_iso <- sy5y_tpm_panel(
+    line_plots$IsoQuant,
+    ylab,
+    show_ylab = TRUE,
+    log_x = log_x
+  )
   p_fl <- sy5y_tpm_panel(line_plots$FLAIR, ylab, show_ylab = FALSE, log_x = log_x)
   p_bm <- sy5y_tpm_panel(line_plots$Bambu, ylab, show_ylab = TRUE, log_x = log_x)
   leg_col <- patchwork::wrap_elements(
     full = build_tpm_line_legend_figure(category_layout = c(2, 3)),
     clip = FALSE
   )
-  (
-    p_iso | p_fl
+  figure <- (
+    p_iso | sy5y_strip_ylab(p_fl)
   ) / (
     p_bm | leg_col
   ) +
-    sy5y_ont_r10_patchwork_layout() +
-    sy5y_figure_annotation(
-      title = title,
-      x_label = tpm_x_axis_label(log_x)
-    )
+    sy5y_ont_r10_patchwork_layout()
+
+  ann <- sy5y_figure_annotation(
+    title = title,
+    x_label = tpm_x_axis_label(log_x)
+  )
+  if (!is.null(ann)) {
+    figure <- figure + ann
+  }
+  figure
 }
 
 #' Print max y values per tool/panel to tune ont_r10_sy5y_ylims.

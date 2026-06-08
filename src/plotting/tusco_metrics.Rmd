@@ -321,8 +321,8 @@ assemble_radar_plots <- function(tusco_plot_list) {
         plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
         axis.text.x = paper_axis_text_x(0),
         axis.text.y = paper_axis_text_y(),
-        axis.title = element_text(size = 12),
-        legend.text = element_text(size = 12),
+        axis.title = element_text(size = 13),
+        legend.text = element_text(size = 13),
         legend.title = element_text(size = 14),
         legend.position = "right"  # Ensure legend is enabled
       )
@@ -382,7 +382,7 @@ legend_plot <- ggplot(legend_df, aes(x, y, color = label)) +
   theme_void() +
   theme(
     legend.position   = "right",
-    legend.text       = element_text(size = 12),
+    legend.text       = element_text(size = 13),
     legend.key.size   = unit(1, "lines")
   )
 
@@ -468,6 +468,7 @@ build_dumbbell_plot <- function(metrics_long,
       width   = 1,
       nudge_y = 0
     ) +
+    paper_geom_dumbbell_vguides() +
     # segments
     geom_segment(
       data = metrics_wide,
@@ -517,10 +518,7 @@ build_dumbbell_plot <- function(metrics_long,
       )
     ) +
     # axes, padding, clipping & theme
-    scale_x_continuous(
-      limits = c(0, 100),
-      expand = expansion(mult = c(0.03, 0.03))
-    ) +
+    paper_dumbbell_x_scale() +
     scale_y_discrete() +               # uses levels of metric factor
     coord_cartesian(clip = "off") +
     labs(x = "Metric value (%)", y = NULL, title = title) +
@@ -570,6 +568,7 @@ build_indiv_dumbbell_plot <- function(metrics_long,
       width   = 1,
       nudge_y = 0
     ) +
+    paper_geom_dumbbell_vguides() +
     # segments
     geom_segment(
       data = metrics_wide,
@@ -604,10 +603,7 @@ build_indiv_dumbbell_plot <- function(metrics_long,
       )
     ) +
     # axes, padding, clipping & theme
-    scale_x_continuous(
-      limits = c(0, 100),
-      expand = expansion(mult = c(0.03, 0.03))
-    ) +
+    paper_dumbbell_x_scale() +
     scale_y_discrete() +           # uses levels of metric factor
     coord_cartesian(clip = "off") +
     labs(x = "Metric value (%)", y = NULL, title = title) +
@@ -720,48 +716,45 @@ assemble_dumbbell_plots <- function(results, tissue, tusco_type, plot_name="dumb
   } else {
     stop("Error: unknown plot_name '", plot_name, "'")
   }
+
+  #' Per-panel theme: no legend; no x title (shared via figure caption).
+  strip_db_panel <- function(p, hide_x_ticks = FALSE) {
+    p <- p +
+      ggplot2::theme(
+        legend.position = "none",
+        axis.title.x = ggplot2::element_blank()
+      )
+    if (isTRUE(hide_x_ticks)) {
+      p <- p +
+        ggplot2::theme(
+          axis.text.x = ggplot2::element_blank(),
+          axis.ticks.x = ggplot2::element_blank()
+        )
+    }
+    p
+  }
   
   raw_legend   <- get_legend(
     results[[tusco_type]]$isoseq$isoquant[[tissue]][[plot_name]]
   )
   legend_panel <- as_ggplot(raw_legend)
   
-  db_1_1 <- results[[tusco_type]]$isoseq$isoquant[[tissue]][[plot_name]] +
-    theme(legend.position = "none")
-  db_1_2 <- results[[tusco_type]]$isoseq$flair_ar_sr[[tissue]][[plot_name]] +
-    theme(legend.position = "none")
-  db_1_3 <- results[[tusco_type]]$isoseq$bambu[[tissue]][[plot_name]] +
-    theme(
-      legend.position = "none", 
-      axis.title.x = element_blank(),
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank()
-      )
-  db_1_4 <- results[[tusco_type]]$isoseq$talon[[tissue]][[plot_name]] +
-    theme(
-      legend.position = "none", 
-      axis.title.x = element_blank(),
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank()
-      )
-  db_2_1 <- results[[tusco_type]]$isoseq$mandalorion[[tissue]][[plot_name]] +
-    theme(legend.position = "none")
-  db_2_2 <- results[[tusco_type]]$isoseq$isoseq[[tissue]][[plot_name]] +
-    theme(legend.position = "none")
-  db_3_1 <- results[[tusco_type]]$ont$isoquant[[tissue]][[plot_name]] +
-    theme(legend.position = "none")
-  db_3_2 <- results[[tusco_type]]$ont$flair_ar_sr[[tissue]][[plot_name]] +
-    theme(legend.position = "none")
-  db_3_3 <- results[[tusco_type]]$ont$bambu[[tissue]][[plot_name]] +
-    theme(
-      legend.position = "none", 
-      axis.title.x = element_blank()
-      )
-  db_3_4 <- results[[tusco_type]]$ont$talon[[tissue]][[plot_name]] +
-    theme(
-      legend.position = "none", 
-      axis.title.x = element_blank()
-      )
+  db_1_1 <- strip_db_panel(results[[tusco_type]]$isoseq$isoquant[[tissue]][[plot_name]])
+  db_1_2 <- strip_db_panel(results[[tusco_type]]$isoseq$flair_ar_sr[[tissue]][[plot_name]])
+  db_1_3 <- strip_db_panel(
+    results[[tusco_type]]$isoseq$bambu[[tissue]][[plot_name]],
+    hide_x_ticks = TRUE
+  )
+  db_1_4 <- strip_db_panel(
+    results[[tusco_type]]$isoseq$talon[[tissue]][[plot_name]],
+    hide_x_ticks = TRUE
+  )
+  db_2_1 <- strip_db_panel(results[[tusco_type]]$isoseq$mandalorion[[tissue]][[plot_name]])
+  db_2_2 <- strip_db_panel(results[[tusco_type]]$isoseq$isoseq[[tissue]][[plot_name]])
+  db_3_1 <- strip_db_panel(results[[tusco_type]]$ont$isoquant[[tissue]][[plot_name]])
+  db_3_2 <- strip_db_panel(results[[tusco_type]]$ont$flair_ar_sr[[tissue]][[plot_name]])
+  db_3_3 <- strip_db_panel(results[[tusco_type]]$ont$bambu[[tissue]][[plot_name]])
+  db_3_4 <- strip_db_panel(results[[tusco_type]]$ont$talon[[tissue]][[plot_name]])
   
   db_plot <- (
     db_1_1 + db_1_2 + db_1_3 + db_1_4 +
@@ -769,23 +762,15 @@ assemble_dumbbell_plots <- function(results, tissue, tusco_type, plot_name="dumb
     plot_spacer() +
     db_3_1 + db_3_2 + db_3_3 + db_3_4
   ) +
-    plot_layout(
-      design = "
-        ABCD
-        EFGG
-        HHHH
-        IJKM
-      ",
+    paper_mouse_10panel_plot_layout(
       heights = c(1, 1, 0.2, 1),
-      axes         = "collect"
+      axes = "collect",
+      axis_titles = "keep"
     ) +
-    plot_annotation(
+    paper_figure_annotation(
       title = plot_title,
-      theme = theme(
-        plot.title = element_text(size = 22, face = "bold", hjust = 0.5)
-      )
+      x_label = "Metric value (%)"
     )
-  
   
   paper_inset_tags_rows(
     wrap_elements(full = db_plot),

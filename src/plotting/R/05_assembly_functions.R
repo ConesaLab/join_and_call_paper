@@ -2,6 +2,31 @@
 # Functions that assemble individual plots into multi-panel figures
 # NOTE: all_results$ references from the original code have been fixed to use the results parameter
 
+#' One UJC comb panel for mouse 10-panel grids; ylab on left column of each row only.
+mouse_comb_panel <- function(
+    plot,
+    title,
+    ylims,
+    y_label = NULL,
+    show_ylab = FALSE) {
+  ylab_val <- if (isTRUE(show_ylab) && length(y_label) && nzchar(y_label)) {
+    y_label
+  } else {
+    NULL
+  }
+  p <- plot +
+    ggplot2::labs(title = title, x = NULL, y = ylab_val) +
+    ggplot2::scale_y_continuous(limits = ylims) +
+    paper_panel_theme() +
+    ggplot2::theme(legend.position = "none")
+  if (!isTRUE(show_ylab)) {
+    p <- p +
+      ggplot2::labs(y = NULL) +
+      ggplot2::theme(axis.title.y = ggplot2::element_blank())
+  }
+  p
+}
+
 assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle,
                                pb_ylims = c(0, 325000), ont_ylims = c(0, 125000), 
                                plot_name_suffix = "_plots", use_scientific = FALSE) {
@@ -94,22 +119,13 @@ assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle
     plot_spacer() +
     bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
   ) +
-    plot_layout(
-      design = "
-        ABCD
-        EFGG
-        HHHH
-        IJKM
-      ",
-      heights = c(1, 1, 0.2, 1),
-      axes = "collect_y"
-    ) +
+    paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.2, 1)) +
     plot_annotation(
       title = title,
       subtitle = subtitle,
       theme = paper_figure_title_theme()
     ) &
-    ggplot2::theme(legend.position = "none")
+    paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
     wrap_elements(full = bar_plot),
@@ -213,21 +229,12 @@ assemble_expr_bar_plots <- function(results, tissue, fl_filter_level, title,
     plot_spacer() +
     bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
   ) +
-    plot_layout(
-      design = "
-        ABCD
-        EFGG
-        HHHH
-        IJKM
-      ",
-      heights = c(1, 1, 0.2, 1),
-      axes = "collect_y"
-    ) +
+    paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.2, 1)) +
     plot_annotation(
       title = title,
       theme = paper_figure_title_theme()
     ) &
-    ggplot2::theme(legend.position = "none")
+    paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
     wrap_elements(full = bar_plot),
@@ -309,23 +316,21 @@ assemble_bar_sirv_plots <- function(results, tissue, fl_filter_level, title, sub
                 bar_2_1 + bar_2_2 + plot_spacer() +
                 plot_spacer() +
                 bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4 +
-                plot_layout(design = "
-                ABCD
-                EFGG
-                HHHH
-                IJKL
-                ",
-                heights = c(1, 1, 0.1, 1),
-                axes = "collect_y") +
+    paper_mouse_10panel_plot_layout(
+      heights = c(1, 1, 0.1, 1),
+      design = PAPER_MOUSE_10PANEL_DESIGN_IJKL
+    ) +
     plot_annotation(
       title = title,
       subtitle = subtitle,
       theme = theme(
-        plot.title = element_text(size = 12, face = "bold", hjust = 0.5),
+        plot.title = element_text(
+          size = PAPER_FONTS$caption, face = "bold", hjust = 0.5
+        ),
         plot.subtitle = element_text(size = PAPER_FONTS$caption, hjust = 0.5)
       )
     ) &
-    ggplot2::theme(legend.position = "none")
+    paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
     wrap_elements(full = bar_plot),
@@ -359,19 +364,12 @@ assemble_upset_plots <- function(results, tissue, fl_filter_level, title, plot_n
     plot_spacer() +
     upset_3_1 + upset_3_2 + upset_3_3 + upset_3_4
   ) +
-    plot_layout(
-      design = "
-        ABCD
-        EFGG
-        HHHH
-        IJKM
-      ",
-      heights = c(1, 1, 0.1, 1)
-    ) +
+    paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.1, 1)) +
     plot_annotation(
       title = title,
       theme = paper_figure_title_theme()
-    )
+    ) &
+    paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
     wrap_elements(full = upset_plot),
@@ -387,98 +385,72 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
   
   fl_filter_level <- as.character(fl_filter_level)
   plot_name <- paste(tissue, plot_name_suffix, sep = "")
-  
-  comb_1_1 <- results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]] +
-    labs(title = "IsoQuant") +
-    scale_y_continuous(limits = pb_ylims) +
-    paper_panel_theme() +
-    theme(legend.position = "none")
-  
-  comb_1_2 <- results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]] +
-    labs(title = "FLAIR") +
-    scale_y_continuous(limits = pb_ylims) +
-    paper_panel_theme() +
-    theme(legend.position = "none")
-  
-  comb_1_3 <- results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]] +
-    labs(title = "Bambu") +
-    scale_y_continuous(limits = pb_ylims) +
-    paper_panel_theme() +
-    theme(legend.position = "none")
-  
-  comb_1_4 <- results$IsoSeq$TALON[[fl_filter_level]][[plot_name]] +
-    labs(title = "TALON") +
-    scale_y_continuous(limits = pb_ylims) +
-    paper_panel_theme() +
-    theme(legend.position = "none")
-  
-  comb_2_1 <- results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]] +
-    labs(title = "Mandalorion") +
-    scale_y_continuous(limits = pb_ylims)+
-    paper_panel_theme() +
-    theme(legend.position = "none")
-  
-  comb_2_2 <- results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]] +
-    labs(title = "IsoSeq + SQANTI3") +
-    scale_y_continuous(limits = pb_ylims) +
-    paper_panel_theme() +
-    theme(legend.position = "none")
-  
-  comb_3_1 <- results$ONT$IsoQuant[[fl_filter_level]][[plot_name]] +
-    labs(title = "IsoQuant") +
-    scale_y_continuous(limits = ont_ylims) +
-    paper_panel_theme() +
-    theme(legend.position = "none")
-  
-  comb_3_2 <- results$ONT$FLAIR[[fl_filter_level]][[plot_name]] +
-    labs(title = "FLAIR") +
-    scale_y_continuous(limits = ont_ylims) +
-    paper_panel_theme() +
-    theme(legend.position = "none")
-  
-  comb_3_3 <- results$ONT$Bambu[[fl_filter_level]][[plot_name]] +
-    labs(title = "Bambu") +
-    scale_y_continuous(limits = ont_ylims) +
-    paper_panel_theme() +
-    theme(legend.position = "none")
-  
-  comb_3_4 <- results$ONT$TALON[[fl_filter_level]][[plot_name]] +
-    labs(title = "TALON") +
-    scale_y_continuous(limits = ont_ylims) +
-    paper_panel_theme() +
-    theme(legend.position = "none")
-  
+  prep <- function(plot, panel_title, ylims, show_ylab = FALSE) {
+    mouse_comb_panel(plot, panel_title, ylims, y_label, show_ylab = show_ylab)
+  }
+
+  comb_1_1 <- prep(
+    results$IsoSeq$IsoQuant[[fl_filter_level]][[plot_name]],
+    "IsoQuant", pb_ylims, show_ylab = TRUE
+  )
+  comb_1_2 <- prep(
+    results$IsoSeq$FLAIR[[fl_filter_level]][[plot_name]],
+    "FLAIR", pb_ylims
+  )
+  comb_1_3 <- prep(
+    results$IsoSeq$Bambu[[fl_filter_level]][[plot_name]],
+    "Bambu", pb_ylims
+  )
+  comb_1_4 <- prep(
+    results$IsoSeq$TALON[[fl_filter_level]][[plot_name]],
+    "TALON", pb_ylims
+  )
+  comb_2_1 <- prep(
+    results$IsoSeq$Mandalorion[[fl_filter_level]][[plot_name]],
+    "Mandalorion", pb_ylims, show_ylab = TRUE
+  )
+  comb_2_2 <- prep(
+    results$IsoSeq$isoseq_sqanti[[fl_filter_level]][[plot_name]],
+    "IsoSeq + SQANTI3", pb_ylims
+  )
+  comb_3_1 <- prep(
+    results$ONT$IsoQuant[[fl_filter_level]][[plot_name]],
+    "IsoQuant", ont_ylims, show_ylab = TRUE
+  )
+  comb_3_2 <- prep(
+    results$ONT$FLAIR[[fl_filter_level]][[plot_name]],
+    "FLAIR", ont_ylims
+  )
+  comb_3_3 <- prep(
+    results$ONT$Bambu[[fl_filter_level]][[plot_name]],
+    "Bambu", ont_ylims
+  )
+  comb_3_4 <- prep(
+    results$ONT$TALON[[fl_filter_level]][[plot_name]],
+    "TALON", ont_ylims
+  )
+
   comb_plot <- (
     comb_1_1 + comb_1_2 + comb_1_3 + comb_1_4 +
     comb_2_1 + comb_2_2 + plot_spacer() +
     plot_spacer() +
     comb_3_1 + comb_3_2 + comb_3_3 + comb_3_4
   ) +
-    plot_layout(
-      design = "
-        ABCD
-        EFGG
-        HHHH
-        IJKM
-      ",
+    paper_mouse_10panel_plot_layout(
       heights = c(1, 1, 0.2, 1),
-      axes = "collect_y"
+      axes = "collect_y",
+      axis_titles = "keep"
     ) +
     plot_annotation(
       title = title,
       theme = paper_figure_title_theme()
     ) &
-    ggplot2::theme(legend.position = "none")
-  
-  if (!is.null(y_label)) {
-    comb_plot <- comb_plot &
-      ylab(y_label)
+    paper_figure_patchwork_theme()
+
+  if (length(x_label) && nzchar(x_label)) {
+    comb_plot <- comb_plot & ggplot2::xlab(x_label)
   }
-  if(!is.null(x_label)) {
-    comb_plot <- comb_plot &
-      xlab(x_label)
-  }
-  
+
   paper_inset_tags_rows(
     wrap_elements(full = comb_plot),
     tag_by_row = c("1" = "a", "4" = "b"),
@@ -560,21 +532,15 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
     plot_spacer() +
     comb_3_1 + comb_3_2 + comb_3_3 + comb_3_4
   ) +
-    plot_layout(
-      design = "
-        ABCD
-        EFGG
-        HHHH
-        IJKL
-      ",
+    paper_mouse_10panel_plot_layout(
       heights = c(1, 1, 0.2, 1),
-      axes = "collect_y"
+      design = PAPER_MOUSE_10PANEL_DESIGN_IJKL
     ) +
     plot_annotation(
       title = title,
       theme = paper_figure_title_theme()
     ) &
-    ggplot2::theme(legend.position = "none") 
+    paper_figure_patchwork_theme()
   
   if (!is.null(y_label)) {
     comb_plot <- comb_plot &
@@ -617,19 +583,12 @@ assemble_tama_st_upset_plots <- function(results, tissue, fl_filter_level, title
     plot_spacer() +
     upset_3_1 + upset_3_2 + upset_3_3 + upset_3_4
   ) +
-    plot_layout(
-      design = "
-        ABCD
-        EFGG
-        HHHH
-        IJKM
-      ",
-      heights = c(1, 1, 0.1, 1)
-    ) +
+    paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.1, 1)) +
     plot_annotation(
       title = title,
       theme = paper_figure_title_theme()
-    )
+    ) &
+    paper_figure_patchwork_theme()
 
   paper_inset_tags_rows(
     wrap_elements(full = upset_plot),
@@ -721,22 +680,12 @@ assemble_compare_plots <- function(results, tissue, fl_filter_level) {
       plot_spacer() +
       bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
     ) +
-      plot_layout(
-        design = "
-          ABCD
-          EFGG
-          HHHH
-          IJKM
-        ",
-        heights = c(1, 1, 0.2, 1),
-        axes = "collect_y",
-        axis_titles = "collect"
-      ) +
+      paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.2, 1)) +
       plot_annotation(
         title = paste0(subplot_title, "; ", tissue),
         theme = paper_figure_title_theme()
       ) &
-      ggplot2::theme(legend.position = "none")
+      paper_figure_patchwork_theme()
     
     final_plots[[subplot_name]] <- paper_inset_tags_rows(
       wrap_elements(full = bar_plot),
