@@ -226,26 +226,41 @@ print(kidney_fl_summary)
   NULL
 }
 
+# Aggregate raw geom_bar(..count..) rows to the plotted per-category counts.
+.sd_bar_counts <- function(df) {
+  if (is.null(df) || !nrow(df)) return(NULL)
+  dplyr::count(df, sample, structural_category, name = "n_isoforms")
+}
+
+# Aggregate the UJC membership matrix to plotted UpSet intersection sizes:
+# count of UJCs per presence pattern (across sets) and structural category.
+.sd_upset_counts <- function(df) {
+  if (is.null(df) || !nrow(df)) return(NULL)
+  set_cols <- setdiff(names(df), c("UJC", "structural_category"))
+  dplyr::count(df, dplyr::across(dplyr::all_of(set_cols)), structural_category,
+               name = "n_UJC")
+}
+
 add_source_sheet("Fig 2",
-  "Figure 2: SQANTI3 structural category of transcripts per sample, tool and combination strategy (brain).",
-  .sd_bind(all_results, function(res) .sd_panel_data(res$brain_plots)))
+  "Figure 2: number of transcripts per SQANTI3 structural category, per sample and combination strategy (brain).",
+  .sd_bind(all_results, function(res) .sd_bar_counts(.sd_panel_data(res$brain_plots))))
 add_source_sheet("Supplementary Fig 2",
-  "Supplementary Fig. 2: SQANTI3 structural category of transcripts (kidney).",
-  .sd_bind(all_results, function(res) .sd_panel_data(res$kidney_plots)))
+  "Supplementary Fig. 2: number of transcripts per SQANTI3 structural category (kidney).",
+  .sd_bind(all_results, function(res) .sd_bar_counts(.sd_panel_data(res$kidney_plots))))
 
 add_source_sheet("Supplementary Fig 3",
-  "Supplementary Fig. 3: Transcripts per structural category across read-support filters (brain).",
+  "Supplementary Fig. 3: read (FL) counts per SQANTI3 structural category per sample, including unassigned reads (brain).",
   .sd_bind(all_results, function(res) .sd_panel_data(res$brain_expression_plot)))
 add_source_sheet("Supplementary Fig 5",
-  "Supplementary Fig. 5: Transcripts per structural category across read-support filters (kidney).",
+  "Supplementary Fig. 5: read (FL) counts per SQANTI3 structural category per sample, including unassigned reads (kidney).",
   .sd_bind(all_results, function(res) .sd_panel_data(res$kidney_expression_plot)))
 
 add_source_sheet("Fig 5",
-  "Figure 5: Unique junction chain (UJC) presence/absence across samples and strategies (brain).",
-  .sd_bind(all_results, function(res) res$brain_upset_data))
+  "Figure 5: UJC intersection sizes (number of unique junction chains per presence pattern across samples/strategies) by structural category (brain).",
+  .sd_bind(all_results, function(res) .sd_upset_counts(res$brain_upset_data)))
 add_source_sheet("Supplementary Fig 6",
-  "Supplementary Fig. 6: UJC presence/absence membership matrix (kidney).",
-  .sd_bind(all_results, function(res) res$kidney_upset_data))
+  "Supplementary Fig. 6: UJC intersection sizes by structural category (kidney).",
+  .sd_bind(all_results, function(res) .sd_upset_counts(res$kidney_upset_data)))
 
 add_source_sheet("Fig 6",
   "Figure 6: UJC distribution across number of samples, by structural category (brain).",
