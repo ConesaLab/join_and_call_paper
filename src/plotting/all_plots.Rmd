@@ -196,6 +196,73 @@ print(kidney_fl_summary)
 ```
 
 
+```{r source-data-capture}
+# ---- Source Data capture: figures built from all_results ---------------------
+# Sheets: F2, SF2, SF3, SF5, F5, SF6, F6, SF7, F7, SF8. One long tidy table per
+# figure, binding the 10 per-(platform, method) panels with platform/tool cols.
+# (Fragments persist to disk; write_source_data() assembles the workbook later.)
+
+# Bind a per-(platform, method) panel frame into one long tidy table.
+.sd_bind <- function(all_results, accessor, fl = "1") {
+  rows <- list()
+  for (platform in names(all_results)) {
+    for (method in names(all_results[[platform]])) {
+      res <- all_results[[platform]][[method]][[fl]]
+      d <- tryCatch(accessor(res), error = function(e) NULL)
+      if (is.null(d) || !is.data.frame(d) || !nrow(d)) next
+      d <- as.data.frame(d)
+      d$platform <- platform
+      d$tool <- method
+      rows[[paste(platform, method)]] <- d
+    }
+  }
+  dplyr::bind_rows(rows)
+}
+
+# $data from a panel that may be a ggplot or a list of ggplots.
+.sd_panel_data <- function(p) {
+  if (inherits(p, "ggplot")) return(p$data)
+  if (is.list(p) && length(p) && inherits(p[[1]], "ggplot")) return(p[[1]]$data)
+  NULL
+}
+
+add_source_sheet("Fig 2",
+  "Figure 2: SQANTI3 structural category of transcripts per sample, tool and combination strategy (brain).",
+  .sd_bind(all_results, function(res) .sd_panel_data(res$brain_plots)))
+add_source_sheet("Supplementary Fig 2",
+  "Supplementary Fig. 2: SQANTI3 structural category of transcripts (kidney).",
+  .sd_bind(all_results, function(res) .sd_panel_data(res$kidney_plots)))
+
+add_source_sheet("Supplementary Fig 3",
+  "Supplementary Fig. 3: Transcripts per structural category across read-support filters (brain).",
+  .sd_bind(all_results, function(res) .sd_panel_data(res$brain_expression_plot)))
+add_source_sheet("Supplementary Fig 5",
+  "Supplementary Fig. 5: Transcripts per structural category across read-support filters (kidney).",
+  .sd_bind(all_results, function(res) .sd_panel_data(res$kidney_expression_plot)))
+
+add_source_sheet("Fig 5",
+  "Figure 5: Unique junction chain (UJC) presence/absence across samples and strategies (brain).",
+  .sd_bind(all_results, function(res) res$brain_upset_data))
+add_source_sheet("Supplementary Fig 6",
+  "Supplementary Fig. 6: UJC presence/absence membership matrix (kidney).",
+  .sd_bind(all_results, function(res) res$kidney_upset_data))
+
+add_source_sheet("Fig 6",
+  "Figure 6: UJC distribution across number of samples, by structural category (brain).",
+  .sd_bind(all_results, function(res) res$brain_perc_comb_bar_plot$data))
+add_source_sheet("Supplementary Fig 7",
+  "Supplementary Fig. 7: UJC distribution across number of samples (kidney).",
+  .sd_bind(all_results, function(res) res$kidney_perc_comb_bar_plot$data))
+
+add_source_sheet("Fig 7",
+  "Figure 7: Read (FL) distribution of UJCs across number of samples, by structural category (brain).",
+  .sd_bind(all_results, function(res) res$brain_perc_comb_fl_bar_plot$data))
+add_source_sheet("Supplementary Fig 8",
+  "Supplementary Fig. 8: Read (FL) distribution of UJCs across number of samples (kidney).",
+  .sd_bind(all_results, function(res) res$kidney_perc_comb_fl_bar_plot$data))
+```
+
+
 ```{r assemble-brain-bar}
 
 pb_ylims = c(0, 160000)

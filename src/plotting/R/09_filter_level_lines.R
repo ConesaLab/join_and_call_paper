@@ -101,8 +101,8 @@ create_tpm_line_plot <- function(curve_data, title, log_x = FALSE,
          aes(x = tpm_threshold, y = n_transcripts,
              color = category,
              group = interaction(category, strategy))) +
-    geom_line(data = jc_data, linewidth = 0.8) +
-    geom_line(data = cj_data, linewidth = 0.8, linetype = "dashed") +
+    geom_line(data = jc_data, linewidth = 0.8 * PAPER_SCALE) +
+    geom_line(data = cj_data, linewidth = 0.8 * PAPER_SCALE, linetype = "dashed") +
     scale_color_manual(values = simplified_cat_palette, name = "Category") +
     scale_y_continuous(labels = function(x) format(x, big.mark = ",",
                                                     scientific = FALSE)) +
@@ -190,7 +190,7 @@ build_tpm_strategy_legend <- function(text_size = NULL, title_size = NULL) {
                       levels = c("J&C", "C&J"))
   )
   ggplot(strategy_df, aes(x, y, linetype = strategy)) +
-    geom_line(linewidth = 0.9, na.rm = TRUE) +
+    geom_line(linewidth = 0.9 * PAPER_SCALE, na.rm = TRUE) +
     scale_linetype_manual(
       values = c("J&C" = "solid", "C&J" = "dashed"),
       labels = strategy_label_map,
@@ -199,7 +199,7 @@ build_tpm_strategy_legend <- function(text_size = NULL, title_size = NULL) {
     ) +
     guides(linetype = guide_legend(
       nrow = 2, title.position = "top",
-      override.aes = list(linewidth = 1.1)
+      override.aes = list(linewidth = 1.1 * PAPER_SCALE)
     )) +
     legend_only_theme(text_size = fs$text_size, title_size = fs$title_size)
 }

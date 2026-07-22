@@ -120,11 +120,7 @@ assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle
     bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
   ) +
     paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.2, 1)) +
-    plot_annotation(
-      title = title,
-      subtitle = subtitle,
-      theme = paper_figure_title_theme()
-    ) &
+    plot_annotation() &
     paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
@@ -230,10 +226,7 @@ assemble_expr_bar_plots <- function(results, tissue, fl_filter_level, title,
     bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
   ) +
     paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.2, 1)) +
-    plot_annotation(
-      title = title,
-      theme = paper_figure_title_theme()
-    ) &
+    plot_annotation() &
     paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
@@ -320,16 +313,7 @@ assemble_bar_sirv_plots <- function(results, tissue, fl_filter_level, title, sub
       heights = c(1, 1, 0.1, 1),
       design = PAPER_MOUSE_10PANEL_DESIGN_IJKL
     ) +
-    plot_annotation(
-      title = title,
-      subtitle = subtitle,
-      theme = theme(
-        plot.title = element_text(
-          size = PAPER_FONTS$caption, face = "bold", hjust = 0.5
-        ),
-        plot.subtitle = element_text(size = PAPER_FONTS$caption, hjust = 0.5)
-      )
-    ) &
+    plot_annotation() &
     paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
@@ -365,10 +349,7 @@ assemble_upset_plots <- function(results, tissue, fl_filter_level, title, plot_n
     upset_3_1 + upset_3_2 + upset_3_3 + upset_3_4
   ) +
     paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.1, 1)) +
-    plot_annotation(
-      title = title,
-      theme = paper_figure_title_theme()
-    ) &
+    plot_annotation() &
     paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
@@ -441,10 +422,7 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
       axes = "collect_y",
       axis_titles = "keep"
     ) +
-    plot_annotation(
-      title = title,
-      theme = paper_figure_title_theme()
-    ) &
+    plot_annotation() &
     paper_figure_patchwork_theme()
 
   if (length(x_label) && nzchar(x_label)) {
@@ -536,10 +514,7 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
       heights = c(1, 1, 0.2, 1),
       design = PAPER_MOUSE_10PANEL_DESIGN_IJKL
     ) +
-    plot_annotation(
-      title = title,
-      theme = paper_figure_title_theme()
-    ) &
+    plot_annotation() &
     paper_figure_patchwork_theme()
   
   if (!is.null(y_label)) {
@@ -584,10 +559,7 @@ assemble_tama_st_upset_plots <- function(results, tissue, fl_filter_level, title
     upset_3_1 + upset_3_2 + upset_3_3 + upset_3_4
   ) +
     paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.1, 1)) +
-    plot_annotation(
-      title = title,
-      theme = paper_figure_title_theme()
-    ) &
+    plot_annotation() &
     paper_figure_patchwork_theme()
 
   paper_inset_tags_rows(
@@ -681,10 +653,7 @@ assemble_compare_plots <- function(results, tissue, fl_filter_level) {
       bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
     ) +
       paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.2, 1)) +
-      plot_annotation(
-        title = paste0(subplot_title, "; ", tissue),
-        theme = paper_figure_title_theme()
-      ) &
+      plot_annotation() &
       paper_figure_patchwork_theme()
     
     final_plots[[subplot_name]] <- paper_inset_tags_rows(

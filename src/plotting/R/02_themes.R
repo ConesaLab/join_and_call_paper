@@ -10,8 +10,15 @@ cat.palette <- c("FSM" = "#6BAED6", "ISM" = "#FC8D59", "NIC" = "#78C679", "NNC" 
   if (!exists("PAPER_FONTS", inherits = TRUE)) {
     stop("Source 00_figure_config.R before 02_themes.R.", call. = FALSE)
   }
-  PAPER_FONTS[[name]]
+  scale <- if (exists("PAPER_SCALE", inherits = TRUE)) PAPER_SCALE else 1
+  PAPER_FONTS[[name]] * scale
 }
+
+#' Publication font family. Nature requires Helvetica/Arial. Set here once so all
+#' paper themes and text geoms inherit it; register on the system if missing
+#' (e.g. systemfonts::register_font or ttf-mscorefonts-installer). Falls back to
+#' the Cairo default sans only if Arial is unavailable.
+PAPER_FONT_FAMILY <- "Arial"
 
 #' Panel and device background (replaces `theme_minimal()` gray panel fill).
 PAPER_BG_WHITE <- "white"
@@ -149,7 +156,7 @@ paper_axis_text_y <- function() {
 #' Base minimal theme with paper typography.
 paper_theme <- function(base_size = 13, facet_dense = FALSE) {
   f <- .paper_font
-  ggplot2::theme_minimal(base_size = base_size) +
+  ggplot2::theme_minimal(base_size = base_size, base_family = PAPER_FONT_FAMILY) +
     paper_white_background_theme() +
     paper_guideline_grid_theme() +
     ggplot2::theme(
@@ -168,7 +175,7 @@ paper_theme <- function(base_size = 13, facet_dense = FALSE) {
 #' Per-panel typography (no coord limits).
 paper_panel_theme <- function() {
   f <- .paper_font
-  ggplot2::theme_minimal() +
+  ggplot2::theme_minimal(base_family = PAPER_FONT_FAMILY) +
     paper_white_background_theme() +
     paper_guideline_grid_theme() +
     ggplot2::theme(
@@ -340,33 +347,23 @@ tpm_panel_theme <- function(
     )
 }
 
-#' Centered figure title and/or shared x-axis label (patchwork caption).
+#' Shared x-axis label as a patchwork caption.
+#' Figure-level titles are dropped for Nature Communications (the manuscript
+#' caption carries the title); the `title` argument is accepted but ignored so
+#' existing call sites need not change. Only the shared x-axis label is kept.
 paper_figure_annotation <- function(title = NULL, x_label = NULL) {
-  has_title <- length(title) && nzchar(title)
   has_x <- length(x_label) && nzchar(x_label)
-  if (!has_title && !has_x) {
+  if (!has_x) {
     return(NULL)
   }
-  args <- list()
-  if (has_title) {
-    args$title <- title
-  }
-  if (has_x) {
-    args$caption <- x_label
-  }
-  th <- paper_figure_title_theme()
-  if (has_x) {
-    th <- th +
-      ggplot2::theme(
-        plot.caption = ggplot2::element_text(
-          size = .paper_font("caption"),
-          hjust = 0.5,
-          margin = ggplot2::margin(t = 6)
-        )
-      )
-  }
-  args$theme <- th
-  do.call(patchwork::plot_annotation, args)
+  th <- ggplot2::theme(
+    plot.caption = ggplot2::element_text(
+      size = .paper_font("caption"),
+      hjust = 0.5,
+      margin = ggplot2::margin(t = 6)
+    )
+  )
+  patchwork::plot_annotation(caption = x_label, theme = th)
 }
 
 #' Patchwork design for mouse 10-panel figures (`all_plots.Rmd`).
@@ -423,7 +420,8 @@ paper_upset_modify_themes <- function(matrix_label_size = NULL, extra = list()) 
   matrix_text <- if (is.null(matrix_label_size)) {
     paper_axis_text_y()
   } else {
-    ggplot2::element_text(size = matrix_label_size)
+    # matrix_label_size is a reference-design pt; scale to print like other fonts.
+    ggplot2::element_text(size = matrix_label_size * PAPER_SCALE)
   }
   base <- list(
     intersections_matrix = ggplot2::theme(
@@ -489,36 +487,28 @@ compare_theme_noaxis <- function(plot, title) {
     )
 }
 
-#' NPC y-limit for panel content (leave room for patchwork figure title).
+#' NPC top for panel-tag placement. Figure-level titles are no longer drawn
+#' (dropped for Nature), so tags sit near the very top regardless of the legacy
+#' `has_figure_title` argument (kept for call-site compatibility).
 paper_tag_content_top <- function(has_figure_title = TRUE) {
-  if (isTRUE(has_figure_title)) 0.90 else 0.97
+  0.97
 }
 
-#' Theme for ggplot panel tags (a, b, …) at PAPER_FONTS$tag (14 pt), top-left.
-paper_plot_tag_theme <- function() {
-  ggplot2::theme(
-    plot.tag = ggplot2::element_text(
-      size = .paper_font("tag"),
-      face = "bold"
-    ),
-    plot.tag.position = c(0, 1),
-    plot.tag.hjust = 0,
-    plot.tag.vjust = 1,
-    plot.margin = ggplot2::margin(
-      t = 16,
-      r = 5.5,
-      b = 5.5,
-      l = 20,
-      unit = "pt"
-    )
-  )
-}
-
-#' Add a subsection tag to a ggplot panel (fixed size; aligns across side-by-side panels).
-paper_tag_panel <- function(plot, label) {
+#' Place a panel tag (a, b, …) at an arbitrary figure-relative position via inset.
+#' Single unified tag mechanism: generalizes `paper_inset_tag_at()` (row-based)
+#' to any (x, y) so side-by-side / rearranged panels can be tagged too. Replaces
+#' the former `labs(tag=)` mechanism. Size comes from `.paper_font("tag")` (scaled).
+paper_inset_tag <- function(plot, label, x = 0.0, y = 0.98,
+                            box_w = 0.06, box_h = 0.06) {
   plot +
-    ggplot2::labs(tag = label) +
-    paper_plot_tag_theme()
+    patchwork::inset_element(
+      paper_panel_tag_grob(label),
+      left = x,
+      bottom = y - box_h,
+      right = x + box_w,
+      top = y,
+      align_to = "full"
+    )
 }
 
 #' Panel tag grob for non-ggplot panels (ComplexUpset, etc.) via inset_element.
@@ -532,9 +522,10 @@ paper_panel_tag_grob <- function(label) {
       hjust = 0,
       vjust = 1,
       size = .paper_font("tag") / ggplot2::.pt,
-      fontface = "bold"
+      fontface = "bold",
+      family = PAPER_FONT_FAMILY
     ) +
-    ggplot2::theme_void()
+    ggplot2::theme_void(base_family = PAPER_FONT_FAMILY)
 }
 
 #' Place one inset tag in a small top-left box at `y_top` (NPC, 0 = bottom).

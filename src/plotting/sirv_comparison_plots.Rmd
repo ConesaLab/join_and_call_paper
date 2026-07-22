@@ -533,7 +533,7 @@ build_sirv_comparison_dumbbell <- function(comparison_df, platform_filter, metho
     geom_segment(
       data = metrics_wide,
       aes(x = concat, xend = tama, y = metric, yend = metric, color = dataset),
-      size = 1.2,
+      size = 1.2 * PAPER_SCALE,
       position = position_nudge(
         y = ifelse(metrics_wide$dataset == "with", 0.15, -0.15)
       )
@@ -541,7 +541,7 @@ build_sirv_comparison_dumbbell <- function(comparison_df, platform_filter, metho
     geom_point(
       data = points_df,
       aes(x = value, y = metric, shape = method, fill = dataset, color = dataset),
-      size = 3, stroke = 0.8,
+      size = 3 * PAPER_SCALE, stroke = 0.8 * PAPER_SCALE,
       position = position_nudge(
         y = ifelse(points_df$dataset == "with", 0.15, -0.15)
       )
@@ -702,4 +702,11 @@ export_df <- comparison_df %>%
 write_csv(export_df, file.path(out_dir, "sirv_comparison_metrics.csv"))
 
 cat(sprintf("Exported %d rows to %s\n", nrow(export_df), file.path(out_dir, "sirv_comparison_metrics.csv")))
+
+# Source Data (Supplementary Fig. 17): SIRV comparison metrics per pipeline.
+add_source_sheet(
+  sheet_name = "Supplementary Fig 17",
+  title = "Supplementary Fig. 17: SIRV detection metrics with vs without reference annotation, per pipeline and combination strategy.",
+  df = export_df
+)
 ```

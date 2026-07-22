@@ -189,11 +189,7 @@ assemble_cross_tool_figure <- function(isoseq_upset, ont_upset, title) {
     wrap_elements(full = isoseq_upset) /
     wrap_elements(full = ont_upset)
   ) +
-    plot_layout(heights = c(1.2, 1)) +
-    plot_annotation(
-      title = title,
-      theme = paper_figure_title_theme()
-    )
+    plot_layout(heights = c(1.2, 1))
 
   paper_inset_panel_tags(
     wrap_elements(full = combined),
@@ -224,11 +220,11 @@ assemble_cross_tool_bar_figure <- function(
     stop("Could not extract structural-category legend for cross-tool bar figure.", call. = FALSE)
   }
 
-  isoseq_panel <- paper_tag_panel(
+  isoseq_panel <- paper_inset_tag(
     strip_cross_tool_bar_panel(isoseq_bar, ylims),
     "a"
   )
-  ont_panel <- paper_tag_panel(
+  ont_panel <- paper_inset_tag(
     strip_cross_tool_bar_panel(ont_bar, ylims, strip_ylab = TRUE),
     "b"
   )

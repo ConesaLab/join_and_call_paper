@@ -690,7 +690,9 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
   upset_plots[["ujc_stack_data"]] <- stack_data
   upset_plots[["ujc_fl_stack_data"]] <- combos_fl
   upset_plots[["ujc_fl_stack_pct_data"]] <- combos_fl_pct
-  
+  # UJC presence/absence membership matrix (Source Data for the UpSet figures).
+  upset_plots[["membership_data"]] <- listUJC
+
   return(upset_plots)
 }
 

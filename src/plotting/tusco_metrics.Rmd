@@ -475,7 +475,7 @@ build_dumbbell_plot <- function(metrics_long,
       aes(x     = concat, xend = tama,
           y     = metric, yend = metric,
           color = dataset),
-      size     = 1.2,
+      size     = 1.2 * PAPER_SCALE,
       position = position_nudge(
         y = ifelse(metrics_wide$dataset == "sirv",  0.15, -0.15)
       )
@@ -488,8 +488,8 @@ build_dumbbell_plot <- function(metrics_long,
           shape = method,
           fill  = dataset,
           color = dataset),
-      size     = 3,
-      stroke   = 0.8,
+      size     = 3 * PAPER_SCALE,
+      stroke   = 0.8 * PAPER_SCALE,
       position = position_nudge(
         y = ifelse(points_df$dataset == "sirv",  0.15, -0.15)
       )

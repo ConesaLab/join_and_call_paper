@@ -914,12 +914,10 @@ assemble_ref_tusco_sirv_figure <- function(
     pacbio_plot,
     ont_plot,
     title) {
-  combined <- (length_plot / pacbio_plot / ont_plot) +
-    patchwork::plot_layout(heights = c(1, 1, 1)) +
-    patchwork::plot_annotation(
-      title = title,
-      theme = paper_figure_title_theme()
-    )
+  # Wider/shorter layout for 2-column (180 mm) fit: length panel on top,
+  # PacBio + ONT expression side-by-side below (was a tall 3-row stack).
+  combined <- (length_plot / (pacbio_plot | ont_plot)) +
+    patchwork::plot_layout(heights = c(1, 1))
 
   patchwork::wrap_elements(full = combined)
 }
@@ -964,24 +962,24 @@ build_ref_tusco_sirv_tissue_figure_from_class <- function(
     expr_df
   }
 
-  length_plot <- paper_tag_panel(
+  length_plot <- paper_inset_tag(
     plot_ref_tusco_sirv_violin(
       length_df,
       ylab = "Transcript length (nt)",
-      show_x_axis = FALSE
+      show_x_axis = TRUE
     ),
     "a"
   )
-  pacbio_plot <- paper_tag_panel(
+  pacbio_plot <- paper_inset_tag(
     plot_ref_tusco_sirv_violin(
       expr_zero_frac(class_lists$pacbio, "PacBio"),
       ylab = "Expression (log10)",
       log_y = TRUE,
-      show_x_axis = FALSE
+      show_x_axis = TRUE
     ),
     "b"
   )
-  ont_plot <- paper_tag_panel(
+  ont_plot <- paper_inset_tag(
     plot_ref_tusco_sirv_violin(
       expr_zero_frac(class_lists$ont, "ONT"),
       ylab = "Expression (log10)",
