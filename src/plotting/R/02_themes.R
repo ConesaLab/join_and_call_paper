@@ -366,6 +366,23 @@ paper_figure_annotation <- function(title = NULL, x_label = NULL) {
   patchwork::plot_annotation(caption = x_label, theme = th)
 }
 
+#' Single centered x-axis title shared across all columns (patchwork caption).
+#' Always returns a plot_annotation (so it can terminate a `... & theme` chain);
+#' draws no caption when `x_label` is NULL/empty. The per-row y-axis titles are
+#' kept on the panels themselves; this supplies the one shared x-axis title.
+paper_figure_x_caption <- function(x_label = NULL) {
+  patchwork::plot_annotation(
+    caption = x_label,
+    theme = ggplot2::theme(
+      plot.caption = ggplot2::element_text(
+        size = .paper_font("caption"),
+        hjust = 0.5,
+        margin = ggplot2::margin(t = 6)
+      )
+    )
+  )
+}
+
 #' Patchwork design for mouse 10-panel figures (`all_plots.Rmd`).
 PAPER_MOUSE_10PANEL_DESIGN_IJKM <- "
         ABCD

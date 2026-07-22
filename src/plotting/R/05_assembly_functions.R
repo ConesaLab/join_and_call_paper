@@ -29,7 +29,8 @@ mouse_comb_panel <- function(
 
 assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle,
                                pb_ylims = c(0, 325000), ont_ylims = c(0, 125000), 
-                               plot_name_suffix = "_plots", use_scientific = FALSE) {
+                               plot_name_suffix = "_plots", use_scientific = FALSE,
+                               x_label = NULL) {
   
   fl_filter_level = as.character(fl_filter_level)
   
@@ -120,7 +121,7 @@ assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle
     bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
   ) +
     paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.2, 1)) +
-    plot_annotation() &
+    paper_figure_x_caption(x_label) &
     paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
@@ -133,7 +134,8 @@ assemble_bar_plots <- function(results, tissue, fl_filter_level, title, subtitle
 
 assemble_expr_bar_plots <- function(results, tissue, fl_filter_level, title,
                                pb_ylims = c(0, 25000000), ont_ylims = c(0, 45000000), 
-                               plot_name_suffix = "_plots", use_scientific = FALSE) {
+                               plot_name_suffix = "_plots", use_scientific = FALSE,
+                               x_label = NULL) {
   
   fl_filter_level = as.character(fl_filter_level)
   
@@ -226,7 +228,7 @@ assemble_expr_bar_plots <- function(results, tissue, fl_filter_level, title,
     bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
   ) +
     paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.2, 1)) +
-    plot_annotation() &
+    paper_figure_x_caption(x_label) &
     paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
@@ -238,7 +240,7 @@ assemble_expr_bar_plots <- function(results, tissue, fl_filter_level, title,
 }
 
 
-assemble_bar_sirv_plots <- function(results, tissue, fl_filter_level, title, subtitle, pb_ylims, ont_ylims, pb_talon_ylims, pb_isoseq_ylims, ont_talon_ylims) {
+assemble_bar_sirv_plots <- function(results, tissue, fl_filter_level, title, subtitle, pb_ylims, ont_ylims, pb_talon_ylims, pb_isoseq_ylims, ont_talon_ylims, x_label = NULL) {
   
   fl_filter_level = as.character(fl_filter_level)
   
@@ -313,7 +315,7 @@ assemble_bar_sirv_plots <- function(results, tissue, fl_filter_level, title, sub
       heights = c(1, 1, 0.1, 1),
       design = PAPER_MOUSE_10PANEL_DESIGN_IJKL
     ) +
-    plot_annotation() &
+    paper_figure_x_caption(x_label) &
     paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
@@ -324,7 +326,7 @@ assemble_bar_sirv_plots <- function(results, tissue, fl_filter_level, title, sub
 }
 
 
-assemble_upset_plots <- function(results, tissue, fl_filter_level, title, plot_name_suffix = "_upset_plot") {
+assemble_upset_plots <- function(results, tissue, fl_filter_level, title, plot_name_suffix = "_upset_plot", x_label = NULL) {
   
   fl_filter_level <- as.character(fl_filter_level)
   plot_name <- paste(tissue, plot_name_suffix, sep = "")
@@ -349,7 +351,7 @@ assemble_upset_plots <- function(results, tissue, fl_filter_level, title, plot_n
     upset_3_1 + upset_3_2 + upset_3_3 + upset_3_4
   ) +
     paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.1, 1)) +
-    plot_annotation() &
+    paper_figure_x_caption(x_label) &
     paper_figure_patchwork_theme()
   
   paper_inset_tags_rows(
@@ -422,12 +424,8 @@ assemble_comb_plots <- function(results, tissue, fl_filter_level,
       axes = "collect_y",
       axis_titles = "keep"
     ) +
-    plot_annotation() &
+    paper_figure_x_caption(x_label) &
     paper_figure_patchwork_theme()
-
-  if (length(x_label) && nzchar(x_label)) {
-    comb_plot <- comb_plot & ggplot2::xlab(x_label)
-  }
 
   paper_inset_tags_rows(
     wrap_elements(full = comb_plot),
@@ -514,18 +512,14 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
       heights = c(1, 1, 0.2, 1),
       design = PAPER_MOUSE_10PANEL_DESIGN_IJKL
     ) +
-    plot_annotation() &
+    paper_figure_x_caption(x_label) &
     paper_figure_patchwork_theme()
   
   if (!is.null(y_label)) {
     comb_plot <- comb_plot &
       ylab(y_label)
   }
-  if(!is.null(x_label)) {
-    comb_plot <- comb_plot &
-      xlab(x_label)
-  }
-  
+
   paper_inset_tags_rows(
     wrap_elements(full = comb_plot),
     tag_by_row = c("1" = "a", "4" = "b"),
@@ -534,7 +528,7 @@ assemble_comb_stack_plots <- function(results, tissue, fl_filter_level,
 }
 
 
-assemble_tama_st_upset_plots <- function(results, tissue, fl_filter_level, title) {
+assemble_tama_st_upset_plots <- function(results, tissue, fl_filter_level, title, x_label = NULL) {
 
   fl_filter_level <- as.character(fl_filter_level)
   plot_name <- paste0(tissue, "_tama_st_upset")
@@ -559,7 +553,7 @@ assemble_tama_st_upset_plots <- function(results, tissue, fl_filter_level, title
     upset_3_1 + upset_3_2 + upset_3_3 + upset_3_4
   ) +
     paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.1, 1)) +
-    plot_annotation() &
+    paper_figure_x_caption(x_label) &
     paper_figure_patchwork_theme()
 
   paper_inset_tags_rows(
@@ -570,7 +564,7 @@ assemble_tama_st_upset_plots <- function(results, tissue, fl_filter_level, title
 }
 
 
-assemble_compare_plots <- function(results, tissue, fl_filter_level) {
+assemble_compare_plots <- function(results, tissue, fl_filter_level, x_label = NULL) {
   
   fl_filter_level = as.character(fl_filter_level)
   plot_base_name = paste0(tissue, "_compare_plots")
@@ -653,7 +647,7 @@ assemble_compare_plots <- function(results, tissue, fl_filter_level) {
       bar_3_1 + bar_3_2 + bar_3_3 + bar_3_4
     ) +
       paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.2, 1)) +
-      plot_annotation() &
+      paper_figure_x_caption(x_label) &
       paper_figure_patchwork_theme()
     
     final_plots[[subplot_name]] <- paper_inset_tags_rows(

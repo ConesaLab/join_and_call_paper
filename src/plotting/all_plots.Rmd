@@ -232,6 +232,20 @@ print(kidney_fl_summary)
   dplyr::count(df, sample, structural_category, name = "n_isoforms")
 }
 
+# Relabel the raw `sample` codes (B1..B7 / K1..K7) to the displayed strategy /
+# sample labels (J&C, C&J, B1..B5 / K1..K5), matching the figure x-axis.
+sd_sample_map_brain  <- setNames(sample_labels_Brain, sample_codes_brain)
+sd_sample_map_kidney <- setNames(sample_labels_Kidney, sample_codes_kidney)
+.sd_relabel_sample <- function(df, map) {
+  if (!is.null(df) && "sample" %in% names(df)) {
+    s <- as.character(df$sample)
+    hit <- s %in% names(map)
+    s[hit] <- unname(map[s[hit]])
+    df$sample <- s
+  }
+  df
+}
+
 # Aggregate the UJC membership matrix to plotted UpSet intersection sizes:
 # count of UJCs per presence pattern (across sets) and structural category.
 .sd_upset_counts <- function(df) {
@@ -243,17 +257,25 @@ print(kidney_fl_summary)
 
 add_source_sheet("Fig 2",
   "Figure 2: number of transcripts per SQANTI3 structural category, per sample and combination strategy (brain).",
-  .sd_bind(all_results, function(res) .sd_bar_counts(.sd_panel_data(res$brain_plots))))
+  .sd_relabel_sample(
+    .sd_bind(all_results, function(res) .sd_bar_counts(.sd_panel_data(res$brain_plots))),
+    sd_sample_map_brain))
 add_source_sheet("Supplementary Fig 2",
   "Supplementary Fig. 2: number of transcripts per SQANTI3 structural category (kidney).",
-  .sd_bind(all_results, function(res) .sd_bar_counts(.sd_panel_data(res$kidney_plots))))
+  .sd_relabel_sample(
+    .sd_bind(all_results, function(res) .sd_bar_counts(.sd_panel_data(res$kidney_plots))),
+    sd_sample_map_kidney))
 
 add_source_sheet("Supplementary Fig 3",
   "Supplementary Fig. 3: read (FL) counts per SQANTI3 structural category per sample, including unassigned reads (brain).",
-  .sd_bind(all_results, function(res) .sd_panel_data(res$brain_expression_plot)))
+  .sd_relabel_sample(
+    .sd_bind(all_results, function(res) .sd_panel_data(res$brain_expression_plot)),
+    sd_sample_map_brain))
 add_source_sheet("Supplementary Fig 5",
   "Supplementary Fig. 5: read (FL) counts per SQANTI3 structural category per sample, including unassigned reads (kidney).",
-  .sd_bind(all_results, function(res) .sd_panel_data(res$kidney_expression_plot)))
+  .sd_relabel_sample(
+    .sd_bind(all_results, function(res) .sd_panel_data(res$kidney_expression_plot)),
+    sd_sample_map_kidney))
 
 add_source_sheet("Fig 5",
   "Figure 5: UJC intersection sizes (number of unique junction chains per presence pattern across samples/strategies) by structural category (brain).",
@@ -290,7 +312,7 @@ ont_ylims = c(0, 80000)
 # pb20_ylims = c(0, 50000)
 # ont20_ylims = c(0, 30000)
 
-brain_plot_1 <- assemble_bar_plots(all_results, "brain", 1, title="Transcripts per structural category; brain", subtitle="Filter: >=1 read", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+brain_plot_1 <- assemble_bar_plots(all_results, "brain", 1, title="Transcripts per structural category; brain", subtitle="Filter: >=1 read", pb_ylims = pb_ylims, ont_ylims = ont_ylims, x_label = "Combination strategy / sample")
 paper_ggsave(file.path(out_dir, "brain_bar_filter1.pdf"), plot = brain_plot_1, size = "mouse_10panel")
 # brain_plot_3 <- assemble_bar_plots(all_results, "brain", 3, title="Transcripts per structural category; brain", subtitle="Filter: >=3 reads", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
 # paper_ggsave(file.path(out_dir, "brain_bar_filter3.pdf"), plot = brain_plot_3, size = "mouse_10panel")
@@ -321,7 +343,7 @@ ont_ylims = c(0, 70000)
 # pb20_ylims = c(0, 45000)
 # ont20_ylims = c(0, 20000)
 
-kidney_plot_1 <- assemble_bar_plots(all_results, "kidney", 1, title="Transcripts per structural category; kidney", subtitle="", pb_ylims = pb_ylims, ont_ylims = ont_ylims)
+kidney_plot_1 <- assemble_bar_plots(all_results, "kidney", 1, title="Transcripts per structural category; kidney", subtitle="", pb_ylims = pb_ylims, ont_ylims = ont_ylims, x_label = "Combination strategy / sample")
 paper_ggsave(file.path(out_dir, "kidney_bar_filter1.pdf"), plot = kidney_plot_1, size = "mouse_10panel")
 # kidney_plot_3 <- assemble_bar_plots(all_results, "kidney", 3, title="Transcripts per structural category; kidney", subtitle="Filter: >=3 reads", pb_ylims = pb5_ylims, ont_ylims = ont5_ylims)
 # paper_ggsave(file.path(out_dir, "kidney_bar_filter3.pdf"), plot = kidney_plot_3, size = "mouse_10panel")
@@ -368,7 +390,7 @@ ont_read_numbers
 pb_ylims = c(0, 20000000)
 ont_ylims = c(0, 45000000)
 
-brain_expr_plot_1 <- assemble_expr_bar_plots(all_results, "brain", 1, "Transcript expression per structural category; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix="_expression_plot", use_scientific = TRUE)
+brain_expr_plot_1 <- assemble_expr_bar_plots(all_results, "brain", 1, "Transcript expression per structural category; brain", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix="_expression_plot", use_scientific = TRUE, x_label = "Combination strategy / sample")
 
 paper_ggsave(file.path(out_dir, "brain_expr_bar_filter1.pdf"), plot = brain_expr_plot_1, size = "mouse_10panel")
 
@@ -381,7 +403,7 @@ brain_expr_plot_1
 pb_ylims = c(0, 25000000)
 ont_ylims = c(0, 35000000)
 
-kidney_expr_plot_1 <- assemble_expr_bar_plots(all_results, "kidney", 1, "Transcript expression per structural category; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix="_expression_plot", use_scientific = TRUE)
+kidney_expr_plot_1 <- assemble_expr_bar_plots(all_results, "kidney", 1, "Transcript expression per structural category; kidney", pb_ylims = pb_ylims, ont_ylims = ont_ylims, plot_name_suffix="_expression_plot", use_scientific = TRUE, x_label = "Combination strategy / sample")
 
 paper_ggsave(file.path(out_dir, "kidney_expr_bar_filter1.pdf"), plot = kidney_expr_plot_1, size = "mouse_10panel")
 
@@ -480,7 +502,8 @@ brain_perc_comb_bar_plot <- assemble_comb_plots(
   pb_ylims = c(0, 65),
   ont_ylims = c(0, 65),
   plot_name_suffix = "_perc_comb_bar_plot",
-  y_label = PAPER_UJC_YLAB$perc_comb_bar
+  y_label = PAPER_UJC_YLAB$perc_comb_bar,
+  x_label = "Number of samples present"
 )
 paper_ggsave(
   file.path(out_dir, "brain_perc_comb_bar.pdf"),
@@ -514,7 +537,8 @@ kidney_perc_comb_bar_plot <- assemble_comb_plots(
   pb_ylims = c(0, 65),
   ont_ylims = c(0, 65),
   plot_name_suffix = "_perc_comb_bar_plot",
-  y_label = PAPER_UJC_YLAB$perc_comb_bar
+  y_label = PAPER_UJC_YLAB$perc_comb_bar,
+  x_label = "Number of samples present"
 )
 paper_ggsave(
   file.path(out_dir, "kidney_perc_comb_bar.pdf"),
@@ -550,7 +574,8 @@ brain_perc_comb_fl_bar_plot <- assemble_comb_plots(
   pb_ylims = c(0, 100),
   ont_ylims = c(0, 100),
   plot_name_suffix = "_perc_comb_fl_bar_plot",
-  y_label = PAPER_UJC_YLAB$perc_comb_fl_bar
+  y_label = PAPER_UJC_YLAB$perc_comb_fl_bar,
+  x_label = "Number of samples present"
 )
 paper_ggsave(
   file.path(out_dir, "brain_perc_comb_fl_bar.pdf"),
@@ -583,7 +608,8 @@ kidney_perc_comb_fl_bar_plot <- assemble_comb_plots(
   pb_ylims = c(0, 100),
   ont_ylims = c(0, 100),
   plot_name_suffix = "_perc_comb_fl_bar_plot",
-  y_label = PAPER_UJC_YLAB$perc_comb_fl_bar
+  y_label = PAPER_UJC_YLAB$perc_comb_fl_bar,
+  x_label = "Number of samples present"
 )
 paper_ggsave(
   file.path(out_dir, "kidney_perc_comb_fl_bar.pdf"),
