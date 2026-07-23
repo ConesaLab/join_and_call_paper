@@ -234,7 +234,12 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
         segment = ggplot2::geom_segment(linewidth = PAPER_UPSET_SEGMENT_SIZE)
       ),
       n_intersections = n,
-      width_ratio=0.1,
+      # Shrink the intersection-size bar block while keeping the matrix tall:
+      # matrix gets PAPER_UPSET_HEIGHT_RATIO of the vertical space, bars the rest.
+      height_ratio = PAPER_UPSET_HEIGHT_RATIO,
+      # width_ratio is trimmed to a sliver: set_sizes=FALSE means no left sidebar
+      # is drawn, so this just removes reserved left-hand whitespace.
+      width_ratio = 0.02,
       set_sizes=FALSE,
       themes = paper_upset_modify_themes(matrix_label_size = upset_matrix_label_size)
     )

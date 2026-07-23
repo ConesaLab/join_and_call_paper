@@ -350,14 +350,15 @@ assemble_upset_plots <- function(results, tissue, fl_filter_level, title, plot_n
     plot_spacer() +
     upset_3_1 + upset_3_2 + upset_3_3 + upset_3_4
   ) +
-    paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.1, 1)) +
+    paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.04, 1)) +
     paper_figure_x_caption(x_label) &
-    paper_figure_patchwork_theme()
+    paper_figure_patchwork_theme() &
+    ggplot2::theme(plot.margin = ggplot2::margin(1, 1, 1, 1))
   
   paper_inset_tags_rows(
     wrap_elements(full = upset_plot),
     tag_by_row = c("1" = "a", "4" = "b"),
-    heights = c(1, 1, 0.1, 1)
+    heights = c(1, 1, 0.04, 1)
   )
 }
 
@@ -552,14 +553,15 @@ assemble_tama_st_upset_plots <- function(results, tissue, fl_filter_level, title
     plot_spacer() +
     upset_3_1 + upset_3_2 + upset_3_3 + upset_3_4
   ) +
-    paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.1, 1)) +
+    paper_mouse_10panel_plot_layout(heights = c(1, 1, 0.04, 1)) +
     paper_figure_x_caption(x_label) &
-    paper_figure_patchwork_theme()
+    paper_figure_patchwork_theme() &
+    ggplot2::theme(plot.margin = ggplot2::margin(1, 1, 1, 1))
 
   paper_inset_tags_rows(
     wrap_elements(full = upset_plot),
     tag_by_row = c("1" = "a", "4" = "b"),
-    heights = c(1, 1, 0.1, 1)
+    heights = c(1, 1, 0.04, 1)
   )
 }
 

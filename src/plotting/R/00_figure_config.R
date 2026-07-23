@@ -200,7 +200,7 @@ FIG_SIZE <- list(
   cross_tool_upset   = c(18, 16),
   #' Mouse UJC UpSet 10-panel: taller than the bar grid so each 7-set matrix
   #' has vertical room (dots/labels otherwise overlap).
-  mouse_upset        = c(18, 17),
+  mouse_upset        = c(18, 13.5),
   cross_tool_bar     = c(18, 10.3),
   st_upset           = c(18, 14),
   presentation_wide  = c(14, 6.5),
@@ -244,6 +244,13 @@ PAPER_MOUSE_UPSET_MATRIX_LABEL <- 13L
 #' PAPER_SCALE. Tune here if matrix dots merge or look too small.
 PAPER_UPSET_DOT_SIZE     <- 0.9
 PAPER_UPSET_SEGMENT_SIZE <- 0.35
+
+#' Fraction of each UpSet panel's height taken by the intersection MATRIX
+#' (dots), the rest going to the intersection-size BARS. ComplexUpset default
+#' is 0.5; raise it to shrink the bar block while keeping the matrix tall.
+#' Paired with the (reduced) mouse_upset canvas height so the matrix stays ~the
+#' same absolute size while the bars lose height.
+PAPER_UPSET_HEIGHT_RATIO <- 0.66
 
 #' Resolve FIG_SIZE name or numeric c(width, height) to *print* inches.
 #' Reference design sizes are multiplied by PAPER_SCALE so the exported PDF is
