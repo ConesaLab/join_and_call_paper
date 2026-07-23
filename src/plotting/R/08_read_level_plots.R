@@ -252,7 +252,10 @@ paper_plot_lengths_violin <- function(
     ggplot2::theme(legend.position = "none")
 
   if (isTRUE(show_technology_axis)) {
-    p <- p + ggplot2::scale_x_discrete(labels = technology_labels)
+    # Angle the PacBio/ONT labels so adjacent narrow-facet labels don't merge.
+    p <- p +
+      ggplot2::scale_x_discrete(labels = technology_labels) +
+      ggplot2::theme(axis.text.x = paper_axis_text_x(45))
   } else {
     p <- p +
       ggplot2::scale_x_discrete(labels = NULL) +

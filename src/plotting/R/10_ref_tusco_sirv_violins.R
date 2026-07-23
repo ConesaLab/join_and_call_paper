@@ -7,9 +7,15 @@ REF_TUSCO_SIRV_SET_LEVELS <- c("Reference", "TUSCO", "SIRVs")
 # Session cache: GTF gene-symbol index is tissue-independent (brain/kidney share it).
 .paper_mouse_annotation_cache <- new.env(parent = emptyenv())
 
-#' Conesa palette first color (green), used for all violins in these panels.
+#' Conesa palette first color (green), used for the length-panel violins.
 paper_ref_tusco_sirv_fill <- function() {
   RColorConesa::colorConesa(n = 2L, palette = "complete")[1L]
+}
+
+#' PacBio/ONT fill colors for the combined expression panel (orange / yellow).
+#' Tune the two hex values here to taste.
+paper_ref_tusco_sirv_tech_fill <- function() {
+  c(PacBio = "#EE7733", ONT = "#EECC66")
 }
 
 #' Resolve tissue-specific TUSCO transcript ID list (column 2 of TUSCO TSV).
@@ -837,7 +843,8 @@ plot_ref_tusco_sirv_violin <- function(
     df,
     ylab,
     log_y = FALSE,
-    show_x_axis = TRUE) {
+    show_x_axis = TRUE,
+    fill_group = NULL) {
   fill_col <- paper_ref_tusco_sirv_fill()
   plot_df <- df
   if (isTRUE(log_y)) {
@@ -848,38 +855,55 @@ plot_ref_tusco_sirv_violin <- function(
     )
   }
 
-  p <- ggplot2::ggplot(
-    plot_df,
-    ggplot2::aes(
-      x = .data$transcript_set,
-      y = .data$value,
-      fill = .data$transcript_set
-    )
-  ) +
-    ggplot2::geom_violin(
-      scale = "width",
-      trim = TRUE,
-      fill = fill_col,
-      color = NA
+  if (is.null(fill_group)) {
+    # Single-set panel (transcript length): one flat fill, no legend.
+    p <- ggplot2::ggplot(
+      plot_df,
+      ggplot2::aes(
+        x = .data$transcript_set,
+        y = .data$value,
+        fill = .data$transcript_set
+      )
     ) +
-    ggplot2::geom_boxplot(
-      width = 0.12,
-      outlier.shape = NA,
-      alpha = 0.6,
-      fill = fill_col,
-      color = "grey20"
+      ggplot2::geom_violin(scale = "width", trim = TRUE, fill = fill_col, color = NA) +
+      ggplot2::geom_boxplot(
+        width = 0.12, outlier.shape = NA, alpha = 0.6,
+        fill = fill_col, color = "grey20"
+      ) +
+      ggplot2::scale_fill_manual(
+        values = stats::setNames(
+          rep(fill_col, length(REF_TUSCO_SIRV_SET_LEVELS)),
+          REF_TUSCO_SIRV_SET_LEVELS
+        ),
+        guide = "none"
+      )
+  } else {
+    # Grouped panel (PacBio vs ONT expression): dodge two coloured violins per
+    # transcript set so both technologies share one panel.
+    dodge <- ggplot2::position_dodge(width = 0.9)
+    p <- ggplot2::ggplot(
+      plot_df,
+      ggplot2::aes(
+        x = .data$transcript_set,
+        y = .data$value,
+        fill = .data[[fill_group]]
+      )
     ) +
-    ggplot2::scale_fill_manual(
-      values = stats::setNames(
-        rep(fill_col, length(REF_TUSCO_SIRV_SET_LEVELS)),
-        REF_TUSCO_SIRV_SET_LEVELS
-      ),
-      guide = "none"
-    ) +
+      ggplot2::geom_violin(scale = "width", trim = TRUE, color = NA, position = dodge) +
+      ggplot2::geom_boxplot(
+        width = 0.12, outlier.shape = NA, alpha = 0.6,
+        color = "grey20", position = dodge
+      ) +
+      ggplot2::scale_fill_manual(values = paper_ref_tusco_sirv_tech_fill(), name = NULL)
+  }
+
+  p <- p +
     ggplot2::scale_x_discrete(limits = REF_TUSCO_SIRV_SET_LEVELS, drop = FALSE) +
     ggplot2::labs(x = NULL, y = ylab) +
     paper_panel_theme() +
-    ggplot2::theme(legend.position = "none")
+    ggplot2::theme(
+      legend.position = if (is.null(fill_group)) "none" else "top"
+    )
 
   if (isTRUE(log_y)) {
     p <- p +
@@ -911,12 +935,12 @@ plot_ref_tusco_sirv_violin <- function(
 
 assemble_ref_tusco_sirv_figure <- function(
     length_plot,
-    pacbio_plot,
-    ont_plot,
+    expression_plot,
     title) {
-  # Wider/shorter layout for 2-column (180 mm) fit: length panel on top,
-  # PacBio + ONT expression side-by-side below (was a tall 3-row stack).
-  combined <- (length_plot / (pacbio_plot | ont_plot)) +
+  # Two-panel stack for 2-column (180 mm) fit: transcript length on top,
+  # PacBio + ONT expression combined in one panel below (coloured by
+  # technology), replacing the former side-by-side b/c panels.
+  combined <- (length_plot / expression_plot) +
     patchwork::plot_layout(heights = c(1, 1))
 
   patchwork::wrap_elements(full = combined)
@@ -967,6 +991,17 @@ build_ref_tusco_sirv_tissue_figure_from_class <- function(
   pacbio_expr_df <- expr_zero_frac(class_lists$pacbio, "PacBio")
   ont_expr_df    <- expr_zero_frac(class_lists$ont, "ONT")
 
+  # Combine both technologies into one expression frame, tagged for the
+  # dodged fill (PacBio then ONT); factor order fixes legend / dodge order.
+  expression_df <- dplyr::bind_rows(
+    dplyr::mutate(pacbio_expr_df, technology = "PacBio"),
+    dplyr::mutate(ont_expr_df,    technology = "ONT")
+  )
+  expression_df$technology <- factor(
+    expression_df$technology,
+    levels = c("PacBio", "ONT")
+  )
+
   length_plot <- paper_inset_tag(
     plot_ref_tusco_sirv_violin(
       length_df,
@@ -975,29 +1010,20 @@ build_ref_tusco_sirv_tissue_figure_from_class <- function(
     ),
     "a"
   )
-  pacbio_plot <- paper_inset_tag(
+  expression_plot <- paper_inset_tag(
     plot_ref_tusco_sirv_violin(
-      pacbio_expr_df,
+      expression_df,
       ylab = "Expression (log10)",
       log_y = TRUE,
-      show_x_axis = TRUE
+      show_x_axis = TRUE,
+      fill_group = "technology"
     ),
     "b"
-  )
-  ont_plot <- paper_inset_tag(
-    plot_ref_tusco_sirv_violin(
-      ont_expr_df,
-      ylab = "Expression (log10)",
-      log_y = TRUE,
-      show_x_axis = TRUE
-    ),
-    "c"
   )
 
   fig <- assemble_ref_tusco_sirv_figure(
     length_plot,
-    pacbio_plot,
-    ont_plot,
+    expression_plot,
     title = tissue_label
   )
   # Attach the plotted frames for Source Data capture (ignored by rendering).

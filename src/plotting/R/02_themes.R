@@ -288,7 +288,11 @@ paper_plot_sqanti_faceted <- function(
     )
 
   if (isTRUE(show_technology_axis)) {
-    p <- p + ggplot2::scale_x_discrete(labels = technology_labels)
+    # Angle the PacBio/ONT labels: the facets are narrow (5 samples x 2 tech at
+    # 180 mm), so horizontal labels of adjacent categories run together.
+    p <- p +
+      ggplot2::scale_x_discrete(labels = technology_labels) +
+      ggplot2::theme(axis.text.x = paper_axis_text_x(45))
   } else {
     p <- p +
       ggplot2::scale_x_discrete(labels = NULL) +

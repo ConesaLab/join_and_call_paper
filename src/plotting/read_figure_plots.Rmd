@@ -584,14 +584,14 @@ add_source_sheet("Supplementary Fig 11a",
   "Supplementary Fig. 11a: transcript-length distribution by set (Reference/TUSCO/SIRV), brain; summary statistics (nt), Reference trimmed at its 99.5th percentile as in the figure.",
   .sd_rts_length(brain_ref_tusco_sirv_figure))
 add_source_sheet("Supplementary Fig 11b",
-  "Supplementary Fig. 11b/c: per-transcript expression (read counts) by set and technology (brain); catalog size, number of zero/positive transcripts, minimum positive, maximum, and total reads.",
+  "Supplementary Fig. 11b: per-transcript expression (read counts) by set and technology (brain); catalog size, number of zero/positive transcripts, minimum positive, maximum, and total reads.",
   .sd_rts_expression(brain_ref_tusco_sirv_figure))
 
 add_source_sheet("Supplementary Fig 12a",
   "Supplementary Fig. 12a: transcript-length distribution by set (Reference/TUSCO/SIRV), kidney; summary statistics (nt).",
   .sd_rts_length(kidney_ref_tusco_sirv_figure))
 add_source_sheet("Supplementary Fig 12b",
-  "Supplementary Fig. 12b/c: per-transcript expression (read counts) by set and technology (kidney).",
+  "Supplementary Fig. 12b: per-transcript expression (read counts) by set and technology (kidney).",
   .sd_rts_expression(kidney_ref_tusco_sirv_figure))
 ```
 
