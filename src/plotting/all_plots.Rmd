@@ -464,7 +464,7 @@ sirv_kidney_plot_1
 ```{r assemble-brain-upset}
 
 brain_upset_plot <- assemble_upset_plots(all_results, "brain", 1, "Unique Junction Chain overlap; brain")
-paper_ggsave(file.path(out_dir, "brain_upset_filter1.pdf"), plot = brain_upset_plot, size = "mouse_10panel")
+paper_ggsave(file.path(out_dir, "brain_upset_filter1.pdf"), plot = brain_upset_plot, size = "mouse_upset")
 
 brain_upset_plot
 
@@ -473,7 +473,7 @@ brain_upset_plot
 ```{r assemble-kidney-upset}
 
 kidney_upset_plot <- assemble_upset_plots(all_results, "kidney", 1, "Unique Junction Chain overlap; kidney")
-paper_ggsave(file.path(out_dir, "kidney_upset_filter1.pdf"), plot = kidney_upset_plot, size = "mouse_10panel")
+paper_ggsave(file.path(out_dir, "kidney_upset_filter1.pdf"), plot = kidney_upset_plot, size = "mouse_upset")
 
 kidney_upset_plot
 

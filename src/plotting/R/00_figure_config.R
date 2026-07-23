@@ -198,6 +198,9 @@ FIG_SIZE <- list(
   #' 3 violin panels rearranged to a wider/shorter layout (was portrait 8×14).
   ref_tusco_sirv     = c(18, 13),
   cross_tool_upset   = c(18, 16),
+  #' Mouse UJC UpSet 10-panel: taller than the bar grid so each 7-set matrix
+  #' has vertical room (dots/labels otherwise overlap).
+  mouse_upset        = c(18, 17),
   cross_tool_bar     = c(18, 10.3),
   st_upset           = c(18, 14),
   presentation_wide  = c(14, 6.5),
@@ -235,6 +238,12 @@ PAPER_FONTS <- list(
 
 #' UpSet matrix set labels (J&C, C&J, B1–B5) in mouse `all_plots` 10-panel grids only.
 PAPER_MOUSE_UPSET_MATRIX_LABEL <- 13L
+
+#' ComplexUpset matrix dot/segment sizes, in FINAL print units (mm-ish) — the
+#' UpSet is rendered directly at 180 mm, so these are NOT multiplied by
+#' PAPER_SCALE. Tune here if matrix dots merge or look too small.
+PAPER_UPSET_DOT_SIZE     <- 0.9
+PAPER_UPSET_SEGMENT_SIZE <- 0.35
 
 #' Resolve FIG_SIZE name or numeric c(width, height) to *print* inches.
 #' Reference design sizes are multiplied by PAPER_SCALE so the exported PDF is

@@ -226,11 +226,12 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       base_annotations = list(
         'Intersection size' = intersection_size_annotation
       ),
-      # ComplexUpset dot/segment sizes are absolute and do not follow PAPER_SCALE;
-      # scale them down so the matrix reads correctly at the 180 mm print size.
+      # ComplexUpset dot/segment sizes are absolute (final print units); tune via
+      # PAPER_UPSET_DOT_SIZE / PAPER_UPSET_SEGMENT_SIZE so the 7-set matrix reads
+      # correctly at 180 mm instead of merging into blobs.
       matrix = ComplexUpset::intersection_matrix(
-        geom = ggplot2::geom_point(size = 3 * PAPER_SCALE),
-        segment = ggplot2::geom_segment(linewidth = 0.6 * PAPER_SCALE)
+        geom = ggplot2::geom_point(size = PAPER_UPSET_DOT_SIZE),
+        segment = ggplot2::geom_segment(linewidth = PAPER_UPSET_SEGMENT_SIZE)
       ),
       n_intersections = n,
       width_ratio=0.1,
