@@ -244,6 +244,12 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
       themes = paper_upset_modify_themes(matrix_label_size = upset_matrix_label_size)
     )
   )
+  # Zero the outer margin here, before assembly wraps this composite via
+  # wrap_elements(full=...) — that freezes it to a grob, so a plot.margin
+  # applied afterwards (outside, via patchwork's "&") can no longer reach in.
+  # Uncontrolled default margins here are what show up as whitespace between
+  # adjacent grid cells (e.g. between two rows of the same platform section).
+  upset_plot <- upset_plot & ggplot2::theme(plot.margin = ggplot2::margin(1, 1, 1, 1))
   
   #####################################
   ######### COMBINATION PLOTs ######### 

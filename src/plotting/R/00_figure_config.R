@@ -250,7 +250,7 @@ PAPER_UPSET_SEGMENT_SIZE <- 0.35
 #' is 0.5; raise it to shrink the bar block while keeping the matrix tall.
 #' Paired with the (reduced) mouse_upset canvas height so the matrix stays ~the
 #' same absolute size while the bars lose height.
-PAPER_UPSET_HEIGHT_RATIO <- 0.66
+PAPER_UPSET_HEIGHT_RATIO <- 0.9
 
 #' Resolve FIG_SIZE name or numeric c(width, height) to *print* inches.
 #' Reference design sizes are multiplied by PAPER_SCALE so the exported PDF is

@@ -441,16 +441,21 @@ paper_upset_modify_themes <- function(matrix_label_size = NULL, extra = list()) 
     ggplot2::element_text(size = matrix_label_size * PAPER_SCALE)
   }
   base <- list(
+    # Zero the touching margins (bar bottom / matrix top) so the two stacked
+    # sub-panels sit flush — default ggplot plot.margin otherwise leaves a
+    # visible gap between the intersection-size bars and the matrix below.
     intersections_matrix = ggplot2::theme(
       axis.text.y = matrix_text,
       axis.title.x = ggplot2::element_blank(),
       axis.text.x = ggplot2::element_blank(),
-      axis.ticks.x = ggplot2::element_blank()
+      axis.ticks.x = ggplot2::element_blank(),
+      plot.margin = ggplot2::margin(t = 0, r = 1, b = 1, l = 1)
     ),
     `Intersection size` = ggplot2::theme(
       axis.title.x = ggplot2::element_blank(),
       axis.text.x = ggplot2::element_blank(),
-      axis.ticks.x = ggplot2::element_blank()
+      axis.ticks.x = ggplot2::element_blank(),
+      plot.margin = ggplot2::margin(t = 1, r = 1, b = 0, l = 1)
     )
   )
   if (length(extra)) {
