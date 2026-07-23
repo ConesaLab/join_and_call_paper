@@ -962,6 +962,11 @@ build_ref_tusco_sirv_tissue_figure_from_class <- function(
     expr_df
   }
 
+  # Hoist the expression frames into variables so they can be exposed for
+  # Source Data capture below (order preserved: PacBio then ONT).
+  pacbio_expr_df <- expr_zero_frac(class_lists$pacbio, "PacBio")
+  ont_expr_df    <- expr_zero_frac(class_lists$ont, "ONT")
+
   length_plot <- paper_inset_tag(
     plot_ref_tusco_sirv_violin(
       length_df,
@@ -972,7 +977,7 @@ build_ref_tusco_sirv_tissue_figure_from_class <- function(
   )
   pacbio_plot <- paper_inset_tag(
     plot_ref_tusco_sirv_violin(
-      expr_zero_frac(class_lists$pacbio, "PacBio"),
+      pacbio_expr_df,
       ylab = "Expression (log10)",
       log_y = TRUE,
       show_x_axis = TRUE
@@ -981,7 +986,7 @@ build_ref_tusco_sirv_tissue_figure_from_class <- function(
   )
   ont_plot <- paper_inset_tag(
     plot_ref_tusco_sirv_violin(
-      expr_zero_frac(class_lists$ont, "ONT"),
+      ont_expr_df,
       ylab = "Expression (log10)",
       log_y = TRUE,
       show_x_axis = TRUE
@@ -989,12 +994,21 @@ build_ref_tusco_sirv_tissue_figure_from_class <- function(
     "c"
   )
 
-  assemble_ref_tusco_sirv_figure(
+  fig <- assemble_ref_tusco_sirv_figure(
     length_plot,
     pacbio_plot,
     ont_plot,
     title = tissue_label
   )
+  # Attach the plotted frames for Source Data capture (ignored by rendering).
+  # length: columns transcript_set, value(= transcript length in nt);
+  # expression_*: columns transcript_set, value(= read count per catalog id).
+  attr(fig, "source_data") <- list(
+    length = length_df,
+    expression_pacbio = pacbio_expr_df,
+    expression_ont = ont_expr_df
+  )
+  fig
 }
 
 build_ref_tusco_sirv_tissue_figure <- function(
