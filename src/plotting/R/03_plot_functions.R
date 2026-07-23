@@ -234,6 +234,9 @@ create_upset_plot <- function(class_df_list, sample_labels, method, n = 10,
         segment = ggplot2::geom_segment(linewidth = PAPER_UPSET_SEGMENT_SIZE)
       ),
       n_intersections = n,
+      # Disable the default alternating row stripes: they render offset from
+      # the matrix dots at this size/margin combo, and are not needed.
+      stripes = 'white',
       # Shrink the intersection-size bar block while keeping the matrix tall:
       # matrix gets PAPER_UPSET_HEIGHT_RATIO of the vertical space, bars the rest.
       height_ratio = PAPER_UPSET_HEIGHT_RATIO,
