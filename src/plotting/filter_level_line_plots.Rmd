@@ -182,6 +182,42 @@ kidney_log_figure
 ```
 
 
+```{r source_data_capture, echo=FALSE, message=FALSE, warning=FALSE}
+# ---- Source Data capture: TPM survival curves (F4 brain / SF4 kidney) --------
+# The plotted `curve` is ephemeral (overwritten each loop iteration), so
+# re-derive it with compute_survival_curve() over all_tpm_data using the same
+# log_thresholds the figures use, binding the 10 per-(platform, tool) panels
+# into one long tidy sheet. These are the literal line-plot points (n
+# transcripts retained at each TPM threshold, per strategy and category).
+.sd_survival <- function(all_tpm_data, tissue, thresholds) {
+  rows <- list()
+  for (platform in names(all_tpm_data)) {
+    for (method in names(all_tpm_data[[platform]])) {
+      curve <- compute_survival_curve(
+        all_tpm_data[[platform]][[method]][[tissue]],
+        thresholds, simplify = TRUE
+      )
+      tool_display <- tool_titles[[method]]
+      if (is.null(tool_display) || is.na(tool_display)) tool_display <- method
+      curve$platform <- platform
+      curve$tool <- tool_display
+      rows[[paste(platform, method)]] <- curve
+    }
+  }
+  dplyr::bind_rows(rows) %>%
+    dplyr::relocate(platform, tool) %>%
+    as.data.frame()
+}
+
+add_source_sheet("Fig 4",
+  "Figure 4: number of transcripts retained at each TPM threshold (survival curves), per tool, platform, combination strategy (J&C/C&J) and structural category (brain, log-scale thresholds).",
+  .sd_survival(all_tpm_data, "brain", log_thresholds))
+add_source_sheet("Supplementary Fig 4",
+  "Supplementary Fig. 4: transcripts retained at each TPM threshold, per tool/platform/strategy/category (kidney, log-scale thresholds).",
+  .sd_survival(all_tpm_data, "kidney", log_thresholds))
+```
+
+
 ```{r brain-tpm-lines-linear, fig.width=18, fig.height=12}
 brain_lin_line_plots <- list()
 for (platform in names(all_tpm_data)) {

@@ -115,3 +115,32 @@ paper_ggsave(
 
 kidney_cross_tool_bar_figure
 ```
+
+
+```{r source_data_capture, echo=FALSE, message=FALSE, warning=FALSE}
+# ---- Source Data capture: cross-tool bar figures (SF9 brain / SF10 kidney) ---
+# Each bar figure has two platform panels (IsoSeq, ONT); each panel's bar_data
+# is already the plotted per-(n_tools, structural_category) UJC counts, reachable
+# as <panel>$data. Bind both platforms into one long tidy sheet per figure.
+.sd_cross_tool_bar <- function(isoseq_panel, ont_panel) {
+  dplyr::bind_rows(
+    IsoSeq = isoseq_panel$data,
+    ONT    = ont_panel$data,
+    .id = "platform"
+  ) %>%
+    dplyr::transmute(
+      platform,
+      n_tools = as.integer(as.character(.data$n_tools)),
+      structural_category = .data$structural_category,
+      n_ujc = .data$n_ujc
+    ) %>%
+    as.data.frame()
+}
+
+add_source_sheet("Supplementary Fig 9",
+  "Supplementary Fig. 9: number of UJCs detected by N tools, by structural category and platform (brain).",
+  .sd_cross_tool_bar(isoseq_brain_bar, ont_brain_bar))
+add_source_sheet("Supplementary Fig 10",
+  "Supplementary Fig. 10: number of UJCs detected by N tools, by structural category and platform (kidney).",
+  .sd_cross_tool_bar(isoseq_kidney_bar, ont_kidney_bar))
+```

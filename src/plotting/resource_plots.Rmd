@@ -136,3 +136,35 @@ paper_ggsave(
   size = "resource_ranking_2x2"
 )
 ```
+
+
+```{r source_data_capture, echo=FALSE, message=FALSE, warning=FALSE}
+# ---- Source Data capture: resource ranking grids (F10 brain / SF18 kidney) ---
+# Each figure is a 2x2 grid: platform (PacBio/ONT) x metric (CPU hours / max RAM
+# GB). Both metrics per tool come from resource_data (one row per tool x
+# strategy): CPU panel plots parse_time_to_hours(cpu_time), RAM panel plots
+# memory_GB. One tidy sheet per tissue with both metric columns.
+.sd_resource <- function(resource_data, ti) {
+  resource_data %>%
+    dplyr::filter(.data$tissue == ti) %>%
+    dplyr::mutate(
+      platform  = dplyr::recode(.data$data_type, IsoSeq = "PacBio"),
+      cpu_hours = vapply(.data$cpu_time, parse_time_to_hours, numeric(1L))
+    ) %>%
+    dplyr::transmute(
+      platform,
+      tool = .data$tool,
+      strategy = .data$strategy,
+      cpu_hours,
+      max_ram_GB = .data$memory_GB
+    ) %>%
+    as.data.frame()
+}
+
+add_source_sheet("Fig 10",
+  "Figure 10: computational resource usage per tool (brain); CPU time (hours) and maximum RAM (GB) per platform and combination strategy.",
+  .sd_resource(resource_data, "brain"))
+add_source_sheet("Supplementary Fig 18",
+  "Supplementary Fig. 18: computational resource usage per tool (kidney); CPU time (hours) and maximum RAM (GB) per platform and combination strategy.",
+  .sd_resource(resource_data, "kidney"))
+```
