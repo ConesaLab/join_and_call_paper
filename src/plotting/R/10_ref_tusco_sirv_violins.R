@@ -12,10 +12,11 @@ paper_ref_tusco_sirv_fill <- function() {
   RColorConesa::colorConesa(n = 2L, palette = "complete")[1L]
 }
 
-#' PacBio/ONT fill colors for the combined expression panel (orange / yellow).
-#' Tune the two hex values here to taste.
+#' PacBio/ONT fill colors for the combined expression panel: the RColorConesa
+#' "orange" (#F58A53) and "yellow" (#FDC659) swatches, matching the Conesa
+#' "complete" palette used across the rest of the figures.
 paper_ref_tusco_sirv_tech_fill <- function() {
-  c(PacBio = "#EE7733", ONT = "#EECC66")
+  c(PacBio = "#F58A53", ONT = "#FDC659")
 }
 
 #' Resolve tissue-specific TUSCO transcript ID list (column 2 of TUSCO TSV).
