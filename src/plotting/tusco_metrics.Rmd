@@ -626,6 +626,10 @@ tool_labels <- c(
   isoseq       = "IsoSeq + SQANTI3"
 )
 
+# Source Data accumulator: metrics_long is loop-local and overwritten each
+# iteration, so tag and stash a copy per (tusco_type, platform, tool, tissue).
+.sd_tusco_rows <- list()
+
 # - Top level: tusco_full and tusco-tissue
 for (tusco_type in c("tusco_full", "tusco_brain", "tusco_kidney")){
   tusco_list <- tusco_renamed[[tusco_type]]
@@ -666,6 +670,17 @@ for (tusco_type in c("tusco_full", "tusco_brain", "tusco_kidney")){
         
         # 2) preprocess and build plot
         metrics_long <- preprocess_metrics(concat_df, tama_df)
+
+        # Source Data: stash this panel's metric rows, tagged for later filtering.
+        .sd_tusco_rows[[length(.sd_tusco_rows) + 1L]] <- metrics_long %>%
+          tidyr::separate(method_dataset, c("method", "dataset"), sep = "_") %>%
+          dplyr::mutate(
+            tusco_type = tusco_type,
+            platform = datatype,
+            tool = pretty_tool,
+            tissue = tissue
+          )
+
         p            <- build_dumbbell_plot(metrics_long, pretty_tool)
         ps           <- build_indiv_dumbbell_plot(metrics_long, pretty_tool, "sirv")
         pt           <- build_indiv_dumbbell_plot(metrics_long, pretty_tool, "tusco")
@@ -858,9 +873,59 @@ kidney_tusco_tissue_plot
 paper_ggsave(file.path(out_dir, "kidney_tusco_tissue_plot.pdf"), plot = kidney_tusco_tissue_plot, size = "mouse_10panel")
 ```
 
-```{r}
 
+```{r source_data_capture, echo=FALSE, message=FALSE, warning=FALSE}
+# ---- Source Data capture: TUSCO/SIRV dumbbell metrics -----------------------
+# Each figure is 10 dumbbell panels (per tool x platform) of aggregated metric
+# values (%). The plotted frame (metrics_long) is loop-ephemeral, so we use the
+# per-panel rows accumulated in .sd_tusco_rows during the build loop above.
+# Figure -> (tusco_type, tissue code, dataset) mapping (resolved from the
+# submitted figure PDFs / manuscript captions):
+#   F8  brain SIRV        = tusco_full  / B100K0 / sirv
+#   F9  brain TUSCO(brain)= tusco_brain / B100K0 / tusco
+#   SF13 kidney SIRV      = tusco_full  / B0K100 / sirv
+#   SF14 kidney TUSCO(kid)= tusco_kidney/ B0K100 / tusco
+#   SF15 brain TUSCO(full)= tusco_full  / B100K0 / tusco
+#   SF16 kidney TUSCO(full)=tusco_full  / B0K100 / tusco
+.sd_tusco_all <- dplyr::bind_rows(.sd_tusco_rows)
 
+.sd_tusco_sheet <- function(all, tt, tissue_code, ds) {
+  all %>%
+    dplyr::filter(.data$tusco_type == tt,
+                  .data$tissue == tissue_code,
+                  .data$dataset == ds) %>%
+    dplyr::mutate(
+      platform = dplyr::recode(.data$platform, isoseq = "PacBio", ont = "ONT"),
+      strategy = dplyr::recode(.data$method, concat = "J&C", tama = "C&J")
+    ) %>%
+    dplyr::transmute(
+      platform,
+      tool = .data$tool,
+      strategy,
+      metric = .data$metric,
+      value_percent = .data$value
+    ) %>%
+    as.data.frame()
+}
+
+add_source_sheet("Fig 8",
+  "Figure 8: SIRV evaluation metrics (%) per tool, platform and combination strategy (brain).",
+  .sd_tusco_sheet(.sd_tusco_all, "tusco_full", "B100K0", "sirv"))
+add_source_sheet("Fig 9",
+  "Figure 9: TUSCO (mouse brain) evaluation metrics (%) per tool, platform and combination strategy (brain).",
+  .sd_tusco_sheet(.sd_tusco_all, "tusco_brain", "B100K0", "tusco"))
+add_source_sheet("Supplementary Fig 13",
+  "Supplementary Fig. 13: SIRV evaluation metrics (%) per tool, platform and combination strategy (kidney).",
+  .sd_tusco_sheet(.sd_tusco_all, "tusco_full", "B0K100", "sirv"))
+add_source_sheet("Supplementary Fig 14",
+  "Supplementary Fig. 14: TUSCO (mouse kidney) evaluation metrics (%) per tool, platform and combination strategy (kidney).",
+  .sd_tusco_sheet(.sd_tusco_all, "tusco_kidney", "B0K100", "tusco"))
+add_source_sheet("Supplementary Fig 15",
+  "Supplementary Fig. 15: TUSCO (mouse, full set) evaluation metrics (%) per tool, platform and combination strategy (brain).",
+  .sd_tusco_sheet(.sd_tusco_all, "tusco_full", "B100K0", "tusco"))
+add_source_sheet("Supplementary Fig 16",
+  "Supplementary Fig. 16: TUSCO (mouse, full set) evaluation metrics (%) per tool, platform and combination strategy (kidney).",
+  .sd_tusco_sheet(.sd_tusco_all, "tusco_full", "B0K100", "tusco"))
 ```
 
 
