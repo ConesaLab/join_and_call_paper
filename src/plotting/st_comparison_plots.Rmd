@@ -166,3 +166,42 @@ paper_ggsave(
 
 kidney_upset_1
 ```
+
+
+```{r source_data_capture, echo=FALSE, message=FALSE, warning=FALSE}
+# ---- Source Data capture: TAMA-vs-ST UJC upsets (SF19 brain / SF20 kidney) ---
+# Each figure binds 10 per-(platform, tool) UpSet panels. The membership matrix
+# (all_ujcs) is attached to each upset object via attr(., "source_data") in
+# create_tama_vs_st_upset(); aggregate each to plotted intersection sizes and
+# bind with platform/tool columns.
+.sd_st_bind <- function(all_results, accessor) {
+  rows <- list()
+  for (platform in names(all_results)) {
+    for (method in names(all_results[[platform]])) {
+      res <- all_results[[platform]][[method]][["1"]]
+      d <- tryCatch(accessor(res), error = function(e) NULL)
+      if (is.null(d) || !is.data.frame(d) || !nrow(d)) next
+      d <- as.data.frame(d)
+      d$platform <- platform
+      d$tool <- method
+      rows[[paste(platform, method)]] <- d
+    }
+  }
+  dplyr::bind_rows(rows)
+}
+
+.sd_st_upset_counts <- function(upset_obj) {
+  df <- attr(upset_obj, "source_data")
+  if (is.null(df) || !nrow(df)) return(NULL)
+  set_cols <- setdiff(names(df), c("UJC", "structural_category"))
+  dplyr::count(df, dplyr::across(dplyr::all_of(set_cols)), structural_category,
+               name = "n_UJC")
+}
+
+add_source_sheet("Supplementary Fig 19",
+  "Supplementary Fig. 19: C&J UJC overlap between TAMA-merge and StringTie-merge, by structural category, per platform and tool (brain).",
+  .sd_st_bind(all_results, function(res) .sd_st_upset_counts(res$brain_tama_st_upset)))
+add_source_sheet("Supplementary Fig 20",
+  "Supplementary Fig. 20: C&J UJC overlap between TAMA-merge and StringTie-merge, by structural category, per platform and tool (kidney).",
+  .sd_st_bind(all_results, function(res) .sd_st_upset_counts(res$kidney_tama_st_upset)))
+```

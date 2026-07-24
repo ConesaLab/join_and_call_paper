@@ -167,5 +167,8 @@ create_tama_vs_st_upset <- function(tama_df, st_df, method = "") {
     themes = paper_upset_modify_themes()
   )
 
+  # Expose the UJC membership matrix for Source Data capture (ignored by
+  # rendering). Columns: structural_category, UJC, `C&J (TAMA)`, `C&J (ST)`.
+  attr(upset_plot, "source_data") <- all_ujcs
   upset_plot
 }

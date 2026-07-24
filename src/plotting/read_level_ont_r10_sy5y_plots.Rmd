@@ -174,6 +174,40 @@ paper_ggsave(
 )
 ```
 
+```{r source_data_capture, echo=FALSE, message=FALSE, warning=FALSE}
+# ---- Source Data capture: SY5Y read-level figure (SF22, former SRF4) ---------
+# Two sub-sheets, mirroring mouse F3/SF1:
+#   a = stacked structural-category read counts (already aggregated).
+#   b = read-length distribution -> summary stats (n + five-number summary, nt)
+#       on the same 99.5th-percentile-trimmed reads the violin shows (raw per-
+#       read lengths are millions of rows).
+.sd_sy5y_length_summary <- function(lengths_df, trim_quantile = 0.995) {
+  lengths_df %>%
+    dplyr::group_by(.data$sample, .data$technology) %>%
+    dplyr::filter(
+      .data$length <= stats::quantile(.data$length, trim_quantile, na.rm = TRUE)
+    ) %>%
+    dplyr::summarise(
+      n_reads   = dplyr::n(),
+      min_nt    = min(.data$length),
+      q25_nt    = stats::quantile(.data$length, 0.25),
+      median_nt = stats::median(.data$length),
+      mean_nt   = mean(.data$length),
+      q75_nt    = stats::quantile(.data$length, 0.75),
+      max_nt    = max(.data$length),
+      .groups   = "drop"
+    ) %>%
+    as.data.frame()
+}
+
+add_source_sheet("Supplementary Fig 22a",
+  "Supplementary Fig. 22a: number of reads per SQANTI3 structural category, per replicate (SH-SY5Y, ONT R10); includes Unaligned and Unstranded read buckets.",
+  as.data.frame(category_counts_sy5y))
+add_source_sheet("Supplementary Fig 22b",
+  "Supplementary Fig. 22b: read-length distribution per replicate (SH-SY5Y, ONT R10); summary statistics (nt) of the 99.5th-percentile-trimmed reads shown as violin + box plots.",
+  .sd_sy5y_length_summary(lengths_df))
+```
+
 PDF written under `plot_creation_ont_r10/`:
 
 - `sy5y_sq_reads_plot.pdf`, `sy5y_lengths_violin.pdf`

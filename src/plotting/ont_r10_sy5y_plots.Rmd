@@ -345,3 +345,67 @@ Multi-tool PDFs under `plot_creation_ont_r10/`:
 TPM filter figures: knit [`filter_level_ont_r10_sy5y_plots.Rmd`](filter_level_ont_r10_sy5y_plots.Rmd).
 
 Read-level figures: [`read_level_ont_r10_sy5y_plots.Rmd`](read_level_ont_r10_sy5y_plots.Rmd).
+
+
+```{r source_data_capture, echo=FALSE, message=FALSE, warning=FALSE}
+# ---- Source Data capture: SY5Y figures built here (former SRF-> SF) ----------
+# SF21 = structural categories, SF24 = UJC UpSet, SF25 = UJC % across samples,
+# SF26 = UJC read-support % across samples. One long tidy sheet per figure,
+# binding the three tools (IsoQuant/FLAIR/Bambu; all ONT R10).
+
+# Bind a per-tool accessor into one long tidy frame with a `tool` column.
+.sd_sy5y_bind <- function(all_results, accessor) {
+  rows <- list()
+  for (tool in SY5Y_TOOL_ORDER) {
+    d <- tryCatch(accessor(all_results[[tool]]), error = function(e) NULL)
+    if (is.null(d) || !is.data.frame(d) || !nrow(d)) next
+    d <- as.data.frame(d)
+    d$tool <- tool
+    rows[[tool]] <- d
+  }
+  dplyr::bind_rows(rows)
+}
+
+# Positional relabel of the internal sample factor to the displayed labels
+# (J&C, C&J, 191, 198, 209, 210) exactly as the figure maps level -> label.
+.sd_sy5y_relabel <- function(df) {
+  labs <- sy5y_sample_labels()
+  if ("sample" %in% names(df)) {
+    lev <- levels(df$sample)
+    if (is.null(lev)) lev <- unique(as.character(df$sample))
+    n <- min(length(lev), length(labs))
+    map <- stats::setNames(labs[seq_len(n)], lev[seq_len(n)])
+    s <- as.character(df$sample)
+    hit <- s %in% names(map)
+    s[hit] <- unname(map[s[hit]])
+    df$sample <- s
+  }
+  df
+}
+
+# Aggregate a UJC membership matrix to plotted UpSet intersection sizes.
+.sd_sy5y_upset_counts <- function(df) {
+  if (is.null(df) || !nrow(df)) return(NULL)
+  set_cols <- setdiff(names(df), c("UJC", "structural_category"))
+  dplyr::count(df, dplyr::across(dplyr::all_of(set_cols)), structural_category,
+               name = "n_UJC")
+}
+
+add_source_sheet("Supplementary Fig 21",
+  "Supplementary Fig. 21: number of transcripts per SQANTI3 structural category, per sample/strategy and tool (SH-SY5Y, ONT R10, FL >= 1).",
+  .sd_sy5y_bind(all_results, function(tr)
+    .sd_sy5y_relabel(
+      dplyr::count(tr$structural$count$data, sample, structural_category, name = "n_isoforms"))))
+
+add_source_sheet("Supplementary Fig 24",
+  "Supplementary Fig. 24: UJC intersection sizes (UJCs per sample presence pattern) by structural category and tool (SH-SY5Y).",
+  .sd_sy5y_bind(all_results, function(tr) .sd_sy5y_upset_counts(tr$ujc$membership_data)))
+
+add_source_sheet("Supplementary Fig 25",
+  "Supplementary Fig. 25: UJC distribution across number of samples, by structural category and tool (SH-SY5Y); percent of UJCs.",
+  .sd_sy5y_bind(all_results, function(tr) tr$ujc$perc_comb_bar$data))
+
+add_source_sheet("Supplementary Fig 26",
+  "Supplementary Fig. 26: read (FL) distribution of UJCs across number of samples, by structural category and tool (SH-SY5Y); percent of reads.",
+  .sd_sy5y_bind(all_results, function(tr) tr$ujc$perc_comb_fl_bar$data))
+```

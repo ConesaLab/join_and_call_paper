@@ -102,6 +102,28 @@ paper_ggsave(
 log_fig
 ```
 
+```{r source_data_capture, echo=FALSE, message=FALSE, warning=FALSE}
+# ---- Source Data capture: SY5Y TPM survival curves (SF23, former SRF5) -------
+# Only the log-scale figure is submitted. The plotted `curve` is loop-ephemeral,
+# so re-derive it via compute_survival_curve() over all_tpm with the same
+# log_thresholds, binding the three tools. These are the literal line points.
+.sd_sy5y_survival <- function(all_tpm, thresholds) {
+  rows <- list()
+  for (tool in SY5Y_TOOL_ORDER) {
+    curve <- compute_survival_curve(all_tpm[[tool]], thresholds, simplify = TRUE)
+    curve$tool <- tool
+    rows[[tool]] <- curve
+  }
+  dplyr::bind_rows(rows) %>%
+    dplyr::relocate(tool) %>%
+    as.data.frame()
+}
+
+add_source_sheet("Supplementary Fig 23",
+  "Supplementary Fig. 23: number of transcripts retained at each TPM threshold (survival curves), per tool, combination strategy (J&C/C&J) and structural category (SH-SY5Y, ONT R10, log-scale thresholds).",
+  .sd_sy5y_survival(all_tpm, log_thresholds))
+```
+
 ```{r tpm-lines-linear}
 lin_line_plots <- list()
 for (tool in SY5Y_TOOL_ORDER) {
